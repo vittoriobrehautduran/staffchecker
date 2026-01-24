@@ -1,15 +1,7 @@
 import { useAuth, useUser, SignOutButton } from '@clerk/clerk-react'
 import { useNavigate } from 'react-router-dom'
 import { Button } from '@/components/ui/button'
-import {
-  DropdownMenu,
-  DropdownMenuContent,
-  DropdownMenuItem,
-  DropdownMenuLabel,
-  DropdownMenuSeparator,
-  DropdownMenuTrigger,
-} from '@/components/ui/dropdown-menu'
-import { User, LogOut, Calendar, Eye } from 'lucide-react'
+import { LogOut, Calendar, Eye } from 'lucide-react'
 
 export function Header() {
   const { isSignedIn } = useAuth()

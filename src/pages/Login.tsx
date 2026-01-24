@@ -12,7 +12,6 @@ export default function Login() {
   const [personnummer, setPersonnummer] = useState('')
   const [password, setPassword] = useState('')
   const [isLoading, setIsLoading] = useState(false)
-  const [isFocused, setIsFocused] = useState(false)
   const { signIn, setActive } = useSignIn()
   const navigate = useNavigate()
   const { toast } = useToast()
@@ -61,12 +60,31 @@ export default function Login() {
         return
       }
 
+      if (!signIn) {
+        toast({
+          title: 'Fel',
+          description: 'SignIn är inte tillgänglig. Försök igen.',
+          variant: 'destructive',
+        })
+        setIsLoading(false)
+        return
+      }
+
       const result = await signIn.create({
         identifier: userData.email,
         password,
       })
 
       if (result.status === 'complete') {
+        if (!setActive) {
+          toast({
+            title: 'Fel',
+            description: 'Kunde inte aktivera session. Försök igen.',
+            variant: 'destructive',
+          })
+          setIsLoading(false)
+          return
+        }
         await setActive({ session: result.createdSessionId })
         toast({
           title: 'Välkommen!',
@@ -79,7 +97,7 @@ export default function Login() {
           title: 'Tvåfaktorsautentisering krävs',
           description: 'Vänligen slutför tvåfaktorsautentisering',
         })
-      } else if (result.status === 'needs_email_verification') {
+      } else if (result.status === 'needs_first_factor') {
         // User needs to verify email
         toast({
           title: 'E-post måste verifieras',
@@ -155,8 +173,6 @@ export default function Login() {
                 inputMode="numeric"
                 value={displayValue}
                 onChange={handlePersonnummerChange}
-                onFocus={() => setIsFocused(true)}
-                onBlur={() => setIsFocused(false)}
                 placeholder="200404021234"
                 required
                 disabled={isLoading}

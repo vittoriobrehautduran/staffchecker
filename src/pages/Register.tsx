@@ -15,7 +15,7 @@ export default function Register() {
   const [personnummer, setPersonnummer] = useState('')
   const [password, setPassword] = useState('')
   const [isLoading, setIsLoading] = useState(false)
-  const { signUp, setActive } = useSignUp()
+  const { signUp } = useSignUp()
   const navigate = useNavigate()
   const { toast } = useToast()
 
@@ -41,6 +41,10 @@ export default function Register() {
         })
         setIsLoading(false)
         return
+      }
+
+      if (!signUp) {
+        throw new Error('SignUp är inte tillgänglig. Försök igen.')
       }
 
       await signUp.create({
@@ -76,6 +80,9 @@ export default function Register() {
       })
 
       // Prepare email verification
+      if (!signUp) {
+        throw new Error('SignUp är inte tillgänglig. Försök igen.')
+      }
       await signUp.prepareEmailAddressVerification({ strategy: 'email_code' })
 
       toast({

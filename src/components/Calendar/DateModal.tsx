@@ -9,6 +9,7 @@ import {
   DialogTitle,
 } from '@/components/ui/dialog'
 import { Button } from '@/components/ui/button'
+import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select'
 import { Textarea } from '@/components/ui/textarea'
@@ -438,7 +439,7 @@ export function DateModal({
                   id="annatSpec"
                   type="text"
                   value={annatSpec}
-                  onChange={(e) => setAnnatSpec(e.target.value)}
+                  onChange={(e: React.ChangeEvent<HTMLInputElement>) => setAnnatSpec(e.target.value)}
                   placeholder="Beskriv vad du arbetade med"
                   required
                   disabled={isSubmitting || reportStatus === 'submitted'}

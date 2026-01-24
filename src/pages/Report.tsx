@@ -2,7 +2,6 @@ import { useState, useRef, useEffect } from 'react'
 import { useAuth } from '@clerk/clerk-react'
 import { useNavigate } from 'react-router-dom'
 import { format, isSameMonth, startOfMonth, endOfMonth, eachDayOfInterval } from 'date-fns'
-import { sv } from 'date-fns/locale'
 import FullCalendar from '@fullcalendar/react'
 import dayGridPlugin from '@fullcalendar/daygrid'
 import interactionPlugin from '@fullcalendar/interaction'
@@ -43,7 +42,6 @@ export default function Report() {
   const [selectedDate, setSelectedDate] = useState<Date | undefined>(undefined)
   const [entries, setEntries] = useState<Entry[]>([])
   const [reportStatus, setReportStatus] = useState<'draft' | 'submitted'>('draft')
-  const [isLoading, setIsLoading] = useState(false)
   const [isModalOpen, setIsModalOpen] = useState(false)
   const [monthEntries, setMonthEntries] = useState<MonthEntries>({})
   const loadingRef = useRef(false)
@@ -67,7 +65,6 @@ export default function Report() {
     try {
       loadingRef.current = true
       lastLoadedMonthRef.current = monthKey
-      setIsLoading(true)
       const monthStart = startOfMonth(date)
       const monthEnd = endOfMonth(date)
       const days = eachDayOfInterval({ start: monthStart, end: monthEnd })
@@ -98,7 +95,6 @@ export default function Report() {
     } catch (error: any) {
       console.error('Error loading month entries:', error)
     } finally {
-      setIsLoading(false)
       loadingRef.current = false
     }
   }
@@ -234,7 +230,8 @@ export default function Report() {
       </div>
       <div className="flex-1 overflow-hidden p-4">
         <div className="h-full w-full">
-          <FullCalendar
+          <div className="h-full">
+            <FullCalendar
             ref={calendarRef}
             plugins={[dayGridPlugin, interactionPlugin]}
             initialView="dayGridMonth"
@@ -254,7 +251,6 @@ export default function Report() {
             select={handleDateSelect}
             datesSet={handleDatesSet}
             validRange={{
-              start: null,
               end: today,
             }}
             dayCellClassNames={(arg) => {
@@ -279,8 +275,8 @@ export default function Report() {
               }
             }}
             dayHeaderFormat={{ weekday: 'short' }}
-            className="h-full"
           />
+          </div>
         </div>
       </div>
 
