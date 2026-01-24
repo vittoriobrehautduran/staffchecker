@@ -20,7 +20,7 @@ export const handler: Handler = async (event) => {
     }
 
     const result = await sql`
-      SELECT email 
+      SELECT email, clerk_user_id
       FROM users 
       WHERE personnummer = ${personnummer}
       LIMIT 1
@@ -33,12 +33,16 @@ export const handler: Handler = async (event) => {
       }
     }
 
+    const email = result[0].email?.trim() || result[0].email
+
+    console.log('Found user email:', email, 'for personnummer:', personnummer)
+
     return {
       statusCode: 200,
       headers: {
         'Content-Type': 'application/json',
       },
-      body: JSON.stringify({ email: result[0].email }),
+      body: JSON.stringify({ email }),
     }
   } catch (error: any) {
     console.error('Error:', error)

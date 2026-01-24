@@ -60,6 +60,11 @@ export default function Login() {
         return
       }
 
+      // Normalize email (trim and lowercase to ensure exact match)
+      const normalizedEmail = userData.email.trim().toLowerCase()
+
+      console.log('Attempting login with email:', normalizedEmail)
+
       if (!signIn) {
         toast({
           title: 'Fel',
@@ -71,7 +76,7 @@ export default function Login() {
       }
 
       const result = await signIn.create({
-        identifier: userData.email,
+        identifier: normalizedEmail,
         password,
       })
 
@@ -101,7 +106,16 @@ export default function Login() {
         // User needs to verify email
         toast({
           title: 'E-post måste verifieras',
-          description: 'Kontrollera din e-post för verifieringslänk',
+          description: 'Kontrollera din e-post för verifieringskod och verifiera ditt konto först',
+          variant: 'destructive',
+        })
+        navigate('/verify-email')
+      } else {
+        // Other statuses
+        console.log('Sign in status:', result.status)
+        toast({
+          title: 'Inloggning misslyckades',
+          description: `Status: ${result.status}. Kontrollera att ditt konto är verifierat.`,
           variant: 'destructive',
         })
       }
@@ -110,16 +124,24 @@ export default function Login() {
       
       // If error suggests account doesn't exist or needs verification
       const errorMessage = error.message || error.errors?.[0]?.message || ''
+      
       if (errorMessage.includes("Couldn't find") || errorMessage.includes("not found")) {
         toast({
           title: 'Konto hittades inte',
           description: 'Kontrollera att din e-post är verifierad. Om du precis registrerade dig, kontrollera din e-post för verifieringskod.',
           variant: 'destructive',
         })
+      } else if (errorMessage.includes("Password is incorrect") || errorMessage.includes("password")) {
+        // Check if user might need to verify email first
+        toast({
+          title: 'Lösenordet är felaktigt',
+          description: 'Om du precis registrerade dig, kontrollera att du har verifierat din e-post först. Annars kontrollera att lösenordet är korrekt.',
+          variant: 'destructive',
+        })
       } else {
         toast({
           title: 'Inloggning misslyckades',
-          description: errorMessage || 'Felaktigt personnummer eller lösenord',
+          description: errorMessage || 'Felaktigt personnummer eller lösenord. Om du precis registrerade dig, verifiera din e-post först.',
           variant: 'destructive',
         })
       }
