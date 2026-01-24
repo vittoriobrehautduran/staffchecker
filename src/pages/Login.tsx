@@ -60,10 +60,10 @@ export default function Login() {
         return
       }
 
-      // Normalize email (trim and lowercase to ensure exact match)
-      const normalizedEmail = userData.email.trim().toLowerCase()
+      // Use email exactly as stored in database (Clerk may be case-sensitive)
+      const emailToUse = userData.email.trim()
 
-      console.log('Attempting login with email:', normalizedEmail)
+      console.log('Attempting login with email:', emailToUse, 'for personnummer:', fullPersonnummer)
 
       if (!signIn) {
         toast({
@@ -76,7 +76,7 @@ export default function Login() {
       }
 
       const result = await signIn.create({
-        identifier: normalizedEmail,
+        identifier: emailToUse,
         password,
       })
 
@@ -131,11 +131,11 @@ export default function Login() {
           description: 'Kontrollera att din e-post är verifierad. Om du precis registrerade dig, kontrollera din e-post för verifieringskod.',
           variant: 'destructive',
         })
-      } else if (errorMessage.includes("Password is incorrect") || errorMessage.includes("password")) {
-        // Check if user might need to verify email first
+      } else if (errorMessage.includes("Password is incorrect") || errorMessage.includes("password") || errorMessage.includes("incorrect")) {
+        // Password is wrong - provide helpful message
         toast({
           title: 'Lösenordet är felaktigt',
-          description: 'Om du precis registrerade dig, kontrollera att du har verifierat din e-post först. Annars kontrollera att lösenordet är korrekt.',
+          description: 'Kontrollera att lösenordet är korrekt. Om du glömt ditt lösenord, använd "Glömt lösenord" funktionen i Clerk.',
           variant: 'destructive',
         })
       } else {
@@ -216,15 +216,23 @@ export default function Login() {
               {isLoading ? 'Loggar in...' : 'Logga in'}
             </Button>
           </form>
-          <div className="mt-4 text-center text-sm">
-            <span className="text-muted-foreground">Har du inget konto? </span>
-            <button
-              type="button"
-              onClick={() => navigate('/register')}
-              className="text-primary hover:underline font-medium"
-            >
-              Registrera dig
-            </button>
+          <div className="mt-4 space-y-2 text-center text-sm">
+            <div>
+              <span className="text-muted-foreground">Har du inget konto? </span>
+              <button
+                type="button"
+                onClick={() => navigate('/register')}
+                className="text-primary hover:underline font-medium"
+              >
+                Registrera dig
+              </button>
+            </div>
+            <div>
+              <span className="text-muted-foreground">Glömt lösenord? </span>
+              <span className="text-sm text-muted-foreground">
+                Kontakta support eller använd Clerk Dashboard för att återställa lösenordet.
+              </span>
+            </div>
           </div>
         </CardContent>
       </Card>
