@@ -17,7 +17,7 @@ export function Header() {
       <div className="container mx-auto px-4 py-3">
         <div className="flex items-center justify-between">
           <div className="flex items-center gap-4">
-            <h1 className="text-xl font-bold text-primary">Tennis Club Timrapport</h1>
+            <h1 className="text-xl font-bold text-primary">Staff Checker</h1>
             <nav className="hidden md:flex gap-2">
               <Button
                 variant="ghost"

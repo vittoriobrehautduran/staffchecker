@@ -7,10 +7,12 @@ import { Label } from '@/components/ui/label'
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card'
 import { useToast } from '@/components/ui/use-toast'
 import { apiRequest } from '@/services/api'
+import { Eye, EyeOff } from 'lucide-react'
 
 export default function Login() {
   const [personnummer, setPersonnummer] = useState('')
   const [password, setPassword] = useState('')
+  const [showPassword, setShowPassword] = useState(false)
   const [isLoading, setIsLoading] = useState(false)
   const { signIn, setActive } = useSignIn()
   const navigate = useNavigate()
@@ -32,6 +34,8 @@ export default function Login() {
     e.preventDefault()
     setIsLoading(true)
 
+    let userData: { email: string } | null = null
+
     try {
       const fullPersonnummer = personnummer.replace(/\D/g, '')
       
@@ -45,7 +49,7 @@ export default function Login() {
         return
       }
 
-      const userData = await apiRequest<{ email: string }>('/get-user-by-personnummer', {
+      userData = await apiRequest<{ email: string }>('/get-user-by-personnummer', {
         method: 'POST',
         body: JSON.stringify({ personnummer: fullPersonnummer }),
       })
@@ -60,10 +64,12 @@ export default function Login() {
         return
       }
 
-      // Use email exactly as stored in database (Clerk may be case-sensitive)
-      const emailToUse = userData.email.trim()
+      // Normalize email - Clerk stores emails in lowercase
+      const emailFromDb = userData.email.trim()
+      const emailLowercase = emailFromDb.toLowerCase()
 
-      console.log('Attempting login with email:', emailToUse, 'for personnummer:', fullPersonnummer)
+      console.log('Email from database:', emailFromDb)
+      console.log('Attempting login with email (lowercase):', emailLowercase, 'for personnummer:', fullPersonnummer)
 
       if (!signIn) {
         toast({
@@ -75,8 +81,9 @@ export default function Login() {
         return
       }
 
+      // Clerk stores emails in lowercase, so always use lowercase
       const result = await signIn.create({
-        identifier: emailToUse,
+        identifier: emailLowercase,
         password,
       })
 
@@ -97,11 +104,13 @@ export default function Login() {
         })
         navigate('/dashboard')
       } else if (result.status === 'needs_second_factor') {
-        // Handle 2FA if needed
+        // 2FA is required but should be disabled in Clerk Dashboard
         toast({
           title: 'Tvåfaktorsautentisering krävs',
-          description: 'Vänligen slutför tvåfaktorsautentisering',
+          description: '2FA är aktiverat i Clerk. Gå till Clerk Dashboard och inaktivera 2FA under User & Authentication → Multi-factor',
+          variant: 'destructive',
         })
+        console.error('2FA is enabled in Clerk. Disable it in Dashboard: User & Authentication → Multi-factor')
       } else if (result.status === 'needs_first_factor') {
         // User needs to verify email
         toast({
@@ -136,6 +145,15 @@ export default function Login() {
         toast({
           title: 'Lösenordet är felaktigt',
           description: 'Kontrollera att lösenordet är korrekt. Om du glömt ditt lösenord, använd "Glömt lösenord" funktionen i Clerk.',
+          variant: 'destructive',
+        })
+      } else if (errorMessage.includes("Identifier is invalid") || errorMessage.includes("invalid") || errorMessage.includes("Identifier")) {
+        // Identifier (email) is not recognized by Clerk
+        const emailToShow = userData?.email || 'okänd'
+        console.error('Email mismatch - Database has:', emailToShow, 'but Clerk doesn\'t recognize it')
+        toast({
+          title: 'E-postadressen känns inte igen',
+          description: `E-postadressen "${emailToShow}" finns inte i Clerk. Kontrollera i Clerk Dashboard att användaren finns med rätt e-post. Om e-posten skiljer sig, registrera dig igen eller uppdatera i databasen.`,
           variant: 'destructive',
         })
       } else {
@@ -202,15 +220,31 @@ export default function Login() {
             </div>
             <div className="space-y-2">
               <Label htmlFor="password">Lösenord</Label>
-              <Input
-                id="password"
-                type="password"
-                value={password}
-                onChange={(e) => setPassword(e.target.value)}
-                placeholder="Ditt lösenord"
-                required
-                disabled={isLoading}
-              />
+              <div className="relative">
+                <Input
+                  id="password"
+                  type={showPassword ? 'text' : 'password'}
+                  value={password}
+                  onChange={(e) => setPassword(e.target.value)}
+                  placeholder="Ditt lösenord"
+                  required
+                  disabled={isLoading}
+                  className="pr-10"
+                />
+                <button
+                  type="button"
+                  onClick={() => setShowPassword(!showPassword)}
+                  className="absolute right-3 top-1/2 -translate-y-1/2 text-muted-foreground hover:text-foreground"
+                  disabled={isLoading}
+                  aria-label={showPassword ? 'Dölj lösenord' : 'Visa lösenord'}
+                >
+                  {showPassword ? (
+                    <EyeOff className="h-4 w-4" />
+                  ) : (
+                    <Eye className="h-4 w-4" />
+                  )}
+                </button>
+              </div>
             </div>
             <Button type="submit" className="w-full" disabled={isLoading}>
               {isLoading ? 'Loggar in...' : 'Logga in'}

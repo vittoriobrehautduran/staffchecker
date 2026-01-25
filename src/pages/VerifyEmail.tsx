@@ -1,4 +1,4 @@
-import { useState } from 'react'
+import { useState, useEffect } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { useSignUp } from '@clerk/clerk-react'
 import { Button } from '@/components/ui/button'
@@ -8,11 +8,70 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/com
 import { useToast } from '@/components/ui/use-toast'
 
 export default function VerifyEmail() {
-  const [code, setCode] = useState('')
   const [isLoading, setIsLoading] = useState(false)
+  const [verificationPrepared, setVerificationPrepared] = useState(false)
   const { signUp, setActive, isLoaded } = useSignUp()
   const navigate = useNavigate()
   const { toast } = useToast()
+
+  // Prepare email verification when component mounts - use email_link strategy
+  useEffect(() => {
+    if (signUp && isLoaded && !verificationPrepared) {
+      const prepareVerification = async () => {
+        try {
+          // Check if verification is already prepared
+          const unverifiedFields = signUp.unverifiedFields || []
+          if (unverifiedFields.includes('email_address')) {
+            // Use email_link strategy for verification links
+            const strategies = signUp.supportedFirstFactors || []
+            const emailStrategy = strategies.find((f: any) => 
+              f.strategy === 'email_link' || 
+              (f.emailAddressId && signUp.emailAddresses?.[0]?.id === f.emailAddressId)
+            )
+
+            if (emailStrategy && emailStrategy.strategy === 'email_link') {
+              await signUp.prepareEmailAddressVerification({
+                strategy: 'email_link',
+              })
+              setVerificationPrepared(true)
+            } else if (emailStrategy && emailStrategy.strategy) {
+              await signUp.prepareEmailAddressVerification({
+                strategy: emailStrategy.strategy as any,
+              })
+              setVerificationPrepared(true)
+            } else {
+              // Try email_link as default
+              try {
+                await signUp.prepareEmailAddressVerification({
+                  strategy: 'email_link',
+                })
+                setVerificationPrepared(true)
+              } catch {
+                // Fallback: try without explicit strategy
+                await signUp.prepareEmailAddressVerification()
+                setVerificationPrepared(true)
+              }
+            }
+          } else {
+            // Email already verified or not needed
+            setVerificationPrepared(true)
+          }
+        } catch (error: any) {
+          console.warn('Could not prepare email verification:', error)
+          // Check if it's a rate limit error
+          if (error.status === 429 || error.message?.includes('429') || error.message?.includes('Too Many Requests')) {
+            toast({
+              title: 'För många förfrågningar',
+              description: 'Vänta en stund innan du försöker igen. Development-nycklar har begränsningar.',
+              variant: 'destructive',
+            })
+          }
+          // Don't show other errors to user - they can use resend button
+        }
+      }
+      prepareVerification()
+    }
+  }, [signUp, isLoaded, verificationPrepared, toast])
 
   if (!isLoaded) {
     return <div>Laddar...</div>
@@ -23,48 +82,37 @@ export default function VerifyEmail() {
     return null
   }
 
-  const handleSubmit = async (e: React.FormEvent) => {
-    e.preventDefault()
+  const handleResend = async () => {
     setIsLoading(true)
-
     try {
-      const result = await signUp.attemptEmailAddressVerification({
-        code,
+      // Resend verification link using email_link strategy
+      await signUp.prepareEmailAddressVerification({
+        strategy: 'email_link',
       })
-
-      if (result.status === 'complete') {
-        await setActive({ session: result.createdSessionId })
-        toast({
-          title: 'E-post verifierad!',
-          description: 'Ditt konto är nu aktiverat',
-        })
-        navigate('/dashboard')
-      }
-    } catch (error: any) {
-      console.error('Verification error:', error)
+      setVerificationPrepared(true)
       toast({
-        title: 'Verifiering misslyckades',
-        description: error.errors?.[0]?.message || 'Ogiltig verifieringskod. Försök igen.',
-        variant: 'destructive',
+        title: 'Verifieringslänk skickad',
+        description: 'En ny verifieringslänk har skickats till din e-post',
       })
+    } catch (error: any) {
+      console.error('Resend error:', error)
+      
+      // Handle rate limit errors specifically
+      if (error.status === 429 || error.message?.includes('429') || error.message?.includes('Too Many Requests')) {
+        toast({
+          title: 'För många förfrågningar',
+          description: 'Du har skickat för många e-postmeddelanden. Vänta några minuter innan du försöker igen. Development-nycklar har begränsningar.',
+          variant: 'destructive',
+        })
+      } else {
+        toast({
+          title: 'Kunde inte skicka länk',
+          description: error.message || 'Ett fel uppstod. Försök igen om en stund.',
+          variant: 'destructive',
+        })
+      }
     } finally {
       setIsLoading(false)
-    }
-  }
-
-  const handleResend = async () => {
-    try {
-      await signUp.prepareEmailAddressVerification({ strategy: 'email_code' })
-      toast({
-        title: 'Kod skickad',
-        description: 'En ny verifieringskod har skickats till din e-post',
-      })
-    } catch (error: any) {
-      toast({
-        title: 'Kunde inte skicka kod',
-        description: error.message || 'Ett fel uppstod',
-        variant: 'destructive',
-      })
     }
   }
 
@@ -74,38 +122,35 @@ export default function VerifyEmail() {
         <CardHeader>
           <CardTitle>Verifiera din e-post</CardTitle>
           <CardDescription>
-            Vi har skickat en verifieringskod till din e-post. Ange koden nedan.
+            Vi har skickat en verifieringslänk till din e-post. Klicka på länken i e-postmeddelandet för att verifiera ditt konto.
           </CardDescription>
         </CardHeader>
         <CardContent>
-          <form onSubmit={handleSubmit} className="space-y-4">
-            <div className="space-y-2">
-              <Label htmlFor="code">Verifieringskod</Label>
-              <Input
-                id="code"
-                type="text"
-                value={code}
-                onChange={(e) => setCode(e.target.value.toUpperCase())}
-                placeholder="123456"
-                required
-                disabled={isLoading}
-                maxLength={6}
-                autoFocus
-              />
+          <div className="space-y-4">
+            <div className="rounded-lg border p-4 bg-muted/50">
+              <p className="text-sm text-muted-foreground mb-2">
+                <strong>Steg för att verifiera:</strong>
+              </p>
+              <ol className="text-sm text-muted-foreground space-y-1 list-decimal list-inside">
+                <li>Öppna din e-post</li>
+                <li>Hitta e-postmeddelandet från oss</li>
+                <li>Klicka på verifieringslänken i e-postmeddelandet</li>
+                <li>Du kommer automatiskt att loggas in</li>
+              </ol>
             </div>
-            <Button type="submit" className="w-full" disabled={isLoading}>
-              {isLoading ? 'Verifierar...' : 'Verifiera'}
-            </Button>
-          </form>
-          <div className="mt-4 text-center text-sm">
-            <button
-              type="button"
-              onClick={handleResend}
-              className="text-primary hover:underline font-medium"
-              disabled={isLoading}
-            >
-              Skicka ny kod
-            </button>
+            <div className="text-center text-sm">
+              <p className="text-muted-foreground mb-2">
+                Har du inte fått e-postmeddelandet?
+              </p>
+              <Button
+                type="button"
+                variant="outline"
+                onClick={handleResend}
+                disabled={isLoading}
+              >
+                {isLoading ? 'Skickar...' : 'Skicka ny verifieringslänk'}
+              </Button>
+            </div>
           </div>
         </CardContent>
       </Card>

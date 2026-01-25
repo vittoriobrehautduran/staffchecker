@@ -1,4 +1,4 @@
-# Tennis Club Timrapport
+# Staff Checker
 
 En applikation för att rapportera arbetade timmar för tennisklubbens anställda.
 

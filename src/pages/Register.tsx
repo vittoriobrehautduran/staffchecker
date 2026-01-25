@@ -47,8 +47,11 @@ export default function Register() {
         throw new Error('SignUp är inte tillgänglig. Försök igen.')
       }
 
+      // Normalize email to lowercase before creating in Clerk (Clerk stores emails in lowercase)
+      const normalizedEmail = email.trim().toLowerCase()
+      
       await signUp.create({
-        emailAddress: email,
+        emailAddress: normalizedEmail,
         password,
         firstName,
         lastName,
@@ -63,9 +66,13 @@ export default function Register() {
         throw new Error('Kunde inte hämta användar-ID från Clerk. Försök igen.')
       }
 
-      // Create user in database
+      // Get the actual email from Clerk (it might have been normalized)
+      const clerkEmail = signUp.emailAddress || normalizedEmail
+      console.log('Email stored in Clerk:', clerkEmail, 'Original email:', email)
+
+      // Create user in database - use the email from Clerk to ensure exact match
       const userData = {
-        email,
+        email: clerkEmail, // Use Clerk's normalized email
         firstName,
         lastName,
         personnummer: fullPersonnummer,
@@ -79,26 +86,37 @@ export default function Register() {
         body: JSON.stringify(userData),
       })
 
-      // Prepare email verification
-      if (!signUp) {
-        throw new Error('SignUp är inte tillgänglig. Försök igen.')
-      }
-      await signUp.prepareEmailAddressVerification({ strategy: 'email_code' })
+      // Don't prepare email verification here - let VerifyEmail page handle it
+      // This avoids the strategy parameter issue in Clerk v5
+      // The verify page will prepare verification when the user arrives
 
       toast({
         title: 'Registrering lyckades',
-        description: 'Kontrollera din e-post för verifieringskod',
+        description: 'Du kommer att få en verifieringslänk via e-post',
       })
 
       // Navigate to email verification page
       navigate('/verify-email')
     } catch (error: any) {
       console.error('Registration error:', error)
-      toast({
-        title: 'Registrering misslyckades',
-        description: error.message || 'Ett fel uppstod vid registrering',
-        variant: 'destructive',
-      })
+      
+      // Handle specific error codes from API
+      const errorMessage = error.message || ''
+      const errorCode = error.code || ''
+      
+      if (errorCode === 'PERSONNUMMER_EXISTS' || errorMessage.includes('personnummer') || errorMessage.includes('redan registrerat')) {
+        toast({
+          title: 'Personnummer redan registrerat',
+          description: 'Detta personnummer är redan kopplat till ett konto. Logga in istället eller kontakta support.',
+          variant: 'destructive',
+        })
+      } else {
+        toast({
+          title: 'Registrering misslyckades',
+          description: errorMessage || 'Ett fel uppstod vid registrering',
+          variant: 'destructive',
+        })
+      }
     } finally {
       setIsLoading(false)
     }
