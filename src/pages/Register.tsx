@@ -1,12 +1,11 @@
 import { useState } from 'react'
 import { useNavigate } from 'react-router-dom'
-import { useSignUp } from '@clerk/clerk-react'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card'
 import { useToast } from '@/components/ui/use-toast'
-import { apiRequest } from '@/services/api'
+import { useAuth } from '@/contexts/AuthContext'
 
 export default function Register() {
   const [email, setEmail] = useState('')
@@ -15,7 +14,7 @@ export default function Register() {
   const [personnummer, setPersonnummer] = useState('')
   const [password, setPassword] = useState('')
   const [isLoading, setIsLoading] = useState(false)
-  const { signUp } = useSignUp()
+  const { signUp } = useAuth()
   const navigate = useNavigate()
   const { toast } = useToast()
 
@@ -43,64 +42,27 @@ export default function Register() {
         return
       }
 
-      if (!signUp) {
-        throw new Error('SignUp är inte tillgänglig. Försök igen.')
-      }
-
-      // Normalize email to lowercase before creating in Clerk (Clerk stores emails in lowercase)
-      const normalizedEmail = email.trim().toLowerCase()
-      
-      await signUp.create({
-        emailAddress: normalizedEmail,
-        password,
-        firstName,
-        lastName,
-      })
-
-      // Get the user ID from Clerk signUp object
-      // In Clerk v5, the signUp object has an 'id' property after creation
-      const clerkUserId = signUp.id
-      
-      if (!clerkUserId) {
-        console.error('Clerk signUp object:', signUp)
-        throw new Error('Kunde inte hämta användar-ID från Clerk. Försök igen.')
-      }
-
-      // Get the actual email from Clerk (it might have been normalized)
-      const clerkEmail = signUp.emailAddress || normalizedEmail
-      console.log('Email stored in Clerk:', clerkEmail, 'Original email:', email)
-
-      // Create user in database - use the email from Clerk to ensure exact match
-      const userData = {
-        email: clerkEmail, // Use Clerk's normalized email
+      await signUp({
+        email: email.trim(),
         firstName,
         lastName,
         personnummer: fullPersonnummer,
-        clerkUserId,
-      }
-
-      console.log('Sending user data:', { ...userData, personnummer: '***' }) // Log without sensitive data
-
-      await apiRequest('/create-user', {
-        method: 'POST',
-        body: JSON.stringify(userData),
+        password,
       })
-
-      // Don't prepare email verification here - let VerifyEmail page handle it
-      // This avoids the strategy parameter issue in Clerk v5
-      // The verify page will prepare verification when the user arrives
 
       toast({
         title: 'Registrering lyckades',
-        description: 'Du kommer att få en verifieringslänk via e-post',
+        description: 'Du kommer att få en verifieringskod via e-post',
       })
 
+      // Store email for verification page
+      localStorage.setItem('pending_verification_email', email.trim().toLowerCase())
+      
       // Navigate to email verification page
       navigate('/verify-email')
     } catch (error: any) {
       console.error('Registration error:', error)
       
-      // Handle specific error codes from API
       const errorMessage = error.message || ''
       const errorCode = error.code || ''
       
@@ -108,6 +70,12 @@ export default function Register() {
         toast({
           title: 'Personnummer redan registrerat',
           description: 'Detta personnummer är redan kopplat till ett konto. Logga in istället eller kontakta support.',
+          variant: 'destructive',
+        })
+      } else if (errorCode === 'EMAIL_EXISTS' || errorMessage.includes('e-post') || errorMessage.includes('email')) {
+        toast({
+          title: 'E-postadressen är redan registrerad',
+          description: 'Denna e-postadress är redan kopplad till ett konto. Logga in istället.',
           variant: 'destructive',
         })
       } else {
@@ -127,24 +95,10 @@ export default function Register() {
       <Card className="w-full max-w-md">
         <CardHeader>
           <CardTitle>Registrera dig</CardTitle>
-          <CardDescription>
-            Skapa ett konto för att börja rapportera timmar
-          </CardDescription>
+          <CardDescription>Skapa ditt konto för att börja rapportera timmar</CardDescription>
         </CardHeader>
         <CardContent>
           <form onSubmit={handleSubmit} className="space-y-4">
-            <div className="space-y-2">
-              <Label htmlFor="email">E-post</Label>
-              <Input
-                id="email"
-                type="email"
-                value={email}
-                onChange={(e) => setEmail(e.target.value)}
-                placeholder="din@epost.se"
-                required
-                disabled={isLoading}
-              />
-            </div>
             <div className="space-y-2">
               <Label htmlFor="firstName">Förnamn</Label>
               <Input
@@ -152,7 +106,7 @@ export default function Register() {
                 type="text"
                 value={firstName}
                 onChange={(e) => setFirstName(e.target.value)}
-                placeholder="Förnamn"
+                placeholder="Ditt förnamn"
                 required
                 disabled={isLoading}
               />
@@ -164,7 +118,19 @@ export default function Register() {
                 type="text"
                 value={lastName}
                 onChange={(e) => setLastName(e.target.value)}
-                placeholder="Efternamn"
+                placeholder="Ditt efternamn"
+                required
+                disabled={isLoading}
+              />
+            </div>
+            <div className="space-y-2">
+              <Label htmlFor="email">E-post</Label>
+              <Input
+                id="email"
+                type="email"
+                value={email}
+                onChange={(e) => setEmail(e.target.value)}
+                placeholder="din.epost@exempel.com"
                 required
                 disabled={isLoading}
               />
@@ -203,4 +169,3 @@ export default function Register() {
     </div>
   )
 }
-

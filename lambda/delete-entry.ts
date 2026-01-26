@@ -1,11 +1,19 @@
-import { Handler } from '@netlify/functions'
+import { APIGatewayProxyEvent, APIGatewayProxyResult } from 'aws-lambda'
 import { sql } from './utils/database'
 import { getUserIdFromBetterAuthSession } from './utils/auth'
 
-export const handler: Handler = async (event) => {
-  if (event.httpMethod !== 'PUT') {
+export const handler = async (
+  event: APIGatewayProxyEvent
+): Promise<APIGatewayProxyResult> => {
+  const httpMethod = event.httpMethod || event.requestContext?.http?.method || 'DELETE'
+  
+  if (httpMethod !== 'DELETE') {
     return {
       statusCode: 405,
+      headers: {
+        'Content-Type': 'application/json',
+        'Access-Control-Allow-Origin': '*',
+      },
       body: JSON.stringify({ message: 'Method not allowed' }),
     }
   }
@@ -17,17 +25,25 @@ export const handler: Handler = async (event) => {
     if (!userId) {
       return {
         statusCode: 401,
+        headers: {
+          'Content-Type': 'application/json',
+          'Access-Control-Allow-Origin': '*',
+        },
         body: JSON.stringify({ message: 'Not authenticated' }),
       }
     }
 
     const body = JSON.parse(event.body || '{}')
-    const { entryId, time_from, time_to, work_type, annat_specification, comment } = body
+    const { entryId } = body
 
-    if (!entryId || !time_from || !time_to || !work_type) {
+    if (!entryId) {
       return {
         statusCode: 400,
-        body: JSON.stringify({ message: 'All required fields must be provided' }),
+        headers: {
+          'Content-Type': 'application/json',
+          'Access-Control-Allow-Origin': '*',
+        },
+        body: JSON.stringify({ message: 'Entry ID is required' }),
       }
     }
 
@@ -43,6 +59,10 @@ export const handler: Handler = async (event) => {
     if (entryCheck.length === 0) {
       return {
         statusCode: 403,
+        headers: {
+          'Content-Type': 'application/json',
+          'Access-Control-Allow-Origin': '*',
+        },
         body: JSON.stringify({ message: 'Entry not found or access denied' }),
       }
     }
@@ -50,35 +70,37 @@ export const handler: Handler = async (event) => {
     if (entryCheck[0].status === 'submitted') {
       return {
         statusCode: 400,
-        body: JSON.stringify({ message: 'Cannot edit entries in a submitted report' }),
+        headers: {
+          'Content-Type': 'application/json',
+          'Access-Control-Allow-Origin': '*',
+        },
+        body: JSON.stringify({ message: 'Cannot delete entries in a submitted report' }),
       }
     }
 
-    // Update entry
-    const result = await sql`
-      UPDATE entries
-      SET time_from = ${time_from}::time,
-          time_to = ${time_to}::time,
-          work_type = ${work_type},
-          annat_specification = ${annat_specification || null},
-          comment = ${comment || null},
-          updated_at = CURRENT_TIMESTAMP
-      WHERE id = ${entryId}
-      RETURNING id, date, time_from, time_to, work_type, annat_specification, comment
+    // Delete entry
+    await sql`
+      DELETE FROM entries WHERE id = ${entryId}
     `
 
     return {
       statusCode: 200,
       headers: {
         'Content-Type': 'application/json',
+        'Access-Control-Allow-Origin': '*',
       },
-      body: JSON.stringify(result[0]),
+      body: JSON.stringify({ message: 'Entry deleted successfully' }),
     }
   } catch (error: any) {
     console.error('Error:', error)
     return {
       statusCode: 500,
+      headers: {
+        'Content-Type': 'application/json',
+        'Access-Control-Allow-Origin': '*',
+      },
       body: JSON.stringify({ message: error.message || 'Internal server error' }),
     }
   }
 }
+

@@ -165,7 +165,11 @@ Workers must enter:
   - Accent: Red and Black (for some elements)
 
 ### 8. Backend & Database
-- **Backend**: Netlify Functions (API routes)
+- **Backend**: AWS Lambda functions (migrated from Netlify Functions)
+  - Serverless functions hosted on AWS Lambda
+  - Accessed via API Gateway HTTP endpoints
+  - Pay-as-you-go pricing (much cheaper than Netlify for high usage)
+  - Functions located in `lambda/` directory
 - **Database**: **Neon** - PostgreSQL database for storing:
   - User profiles (name, last_name, personnummer, email) - entered once during registration
   - Monthly reports (with submission status and date)
@@ -270,7 +274,19 @@ When a report is submitted (manually or automatically), the following data is se
 - **Email service**: AWS SES
 
 ### 11. Deployment
-- **Netlify** - Hosting platform
+- **AWS Amplify** - Frontend hosting platform (replaces Netlify)
+  - Automatic deployments from GitHub
+  - Branch preview URLs for every branch (like Netlify Deploy Previews)
+  - Production URL for main branch
+  - Free tier: 1,000 build minutes/month
+- **AWS Lambda** - Serverless functions (replaces Netlify Functions)
+  - Pay-as-you-go pricing: $0.20 per 1M requests
+  - Free tier: 1M requests/month + 400K GB-seconds
+  - Scales automatically
+  - Much cheaper than Netlify for multiple projects
+- **API Gateway** - HTTP endpoints for Lambda functions
+  - Routes API requests to Lambda functions
+  - Handles CORS, authentication, rate limiting
 
 ---
 
@@ -297,10 +313,11 @@ When a report is submitted (manually or automatically), the following data is se
 
 ### HTTP Client & API
 - **Native fetch API** - For API calls
-- **API Routes** - Netlify Functions for backend API endpoints
+- **API Routes** - AWS Lambda functions for backend API endpoints
   - Database operations
   - Email sending via AWS SES
   - Authentication helpers
+  - Accessed via API Gateway URLs (e.g., `https://api.yourapp.com/get-report`)
 
 ### Database Access
 - **Neon Serverless Driver** - Direct SQL queries using `@neondatabase/serverless`
@@ -325,10 +342,10 @@ When a report is submitted (manually or automatically), the following data is se
 - **Responsive design**: Mobile-first approach, works on both mobile and desktop
 
 ### Email & Background Jobs
-- **Netlify Functions** - Serverless functions for:
+- **AWS Lambda Functions** - Serverless functions for:
   - API endpoints
   - Email sending via AWS SES
-- **Netlify Scheduled Functions** - Cron jobs for automatic report submission on 2nd of each month
+- **AWS EventBridge (CloudWatch Events)** - Scheduled Lambda functions for automatic report submission on 2nd of each month
 - **AWS SES** - Email service for sending reports to boss
 
 ### Code Quality & Tools
@@ -352,15 +369,19 @@ When a report is submitted (manually or automatically), the following data is se
 
 ### Environment Variables
 - **Development**: `.env.local` file
-- **Production**: Netlify environment variables
+- **Production**: 
+  - **AWS Amplify**: Environment variables in Amplify Console (for frontend)
+  - **AWS Lambda**: Environment variables in Lambda function configuration (for backend)
 - Variables needed:
-  - `VITE_CLERK_PUBLISHABLE_KEY` (public, frontend)
-  - `CLERK_SECRET_KEY` (server-side only, Netlify Functions)
-  - `DATABASE_URL` (Neon connection string, server-side only)
-  - `AWS_SES_REGION`
-  - `AWS_SES_ACCESS_KEY_ID`
-  - `AWS_SES_SECRET_ACCESS_KEY`
-  - `BOSS_EMAIL_ADDRESS` (environment variable, can be changed later)
+  - `VITE_CLERK_PUBLISHABLE_KEY` (public, frontend - Amplify)
+  - `CLERK_SECRET_KEY` (server-side only, Lambda functions)
+  - `DATABASE_URL` (Neon connection string, server-side only - Lambda)
+  - `BETTER_AUTH_SECRET` (Better Auth secret - Lambda)
+  - `BETTER_AUTH_URL` (Better Auth base URL - Lambda)
+  - `AWS_SES_REGION` (Lambda)
+  - `AWS_SES_ACCESS_KEY_ID` (Lambda)
+  - `AWS_SES_SECRET_ACCESS_KEY` (Lambda)
+  - `BOSS_EMAIL_ADDRESS` (Lambda)
 
 ### Project Structure (Updated)
 ```
@@ -410,17 +431,27 @@ timrapport/
 │   │   └── globals.css
 │   ├── App.tsx
 │   └── main.tsx
-├── netlify/
-│   └── functions/           # Netlify Functions (API routes)
-│       ├── submit-report.ts
-│       ├── send-email.ts
-│       └── auto-submit.ts   # Scheduled function
+├── lambda/                  # AWS Lambda functions (API routes)
+│   ├── get-report.ts
+│   ├── get-entries.ts
+│   ├── create-entry.ts
+│   ├── update-entry.ts
+│   ├── delete-entry.ts
+│   ├── submit-report.ts
+│   ├── auth.ts
+│   ├── auth-personnummer-login.ts
+│   └── utils/
+│       ├── database.ts
+│       └── auth.ts
+├── netlify/                 # Legacy Netlify Functions (kept for reference)
+│   └── functions/
 ├── .env.local
 ├── package.json
 ├── tailwind.config.js
 ├── tsconfig.json
 ├── vite.config.ts
-└── netlify.toml
+├── amplify.yml              # AWS Amplify build configuration
+└── netlify.toml             # Legacy Netlify config (kept for reference)
 ```
 
 ---
@@ -595,36 +626,90 @@ timrapport/
 17. Build preview/förhandsvisning page (month, dates, entries with time ranges, work types, totals)
 
 ### Phase 4: API & Email
-18. Set up Netlify Functions structure
-19. Create API routes (Netlify Functions):
+18. Set up AWS Lambda functions structure
+19. Create API routes (AWS Lambda functions):
     - Submit report endpoint
     - Get entries endpoint
     - Get reports endpoint
-20. Set up AWS SES integration
-21. Create email sending function (Netlify Function)
-22. Implement report formatting for boss (worker info + date list with time ranges and totals)
+    - Auth endpoints (Better Auth proxy)
+20. Set up API Gateway to route requests to Lambda functions
+21. Set up AWS SES integration
+22. Create email sending function (Lambda function)
+23. Implement report formatting for boss (worker info + date list with time ranges and totals)
 
 ### Phase 5: Submission & Automation
-23. Implement report submission:
+24. Implement report submission:
     - Manual: Submit button (calls API → sends email via AWS SES immediately, stores in database)
-    - Automatic: Netlify Scheduled Function (runs on 2nd of each month, sends email if not manually submitted)
-24. Add read-only restrictions for past months (after 2nd or after manual submission)
-25. Add validation (minimum one entry, React Hook Form validation)
+    - Automatic: AWS EventBridge scheduled Lambda function (runs on 2nd of each month, sends email if not manually submitted)
+25. Add read-only restrictions for past months (after 2nd or after manual submission)
+26. Add validation (minimum one entry, React Hook Form validation)
 
 ### Phase 6: Polish & Deploy
-26. Style with Tailwind (white/blue/red/black theme, mobile-first responsive)
-27. Add error handling:
+27. Style with Tailwind (white/blue/red/black theme, mobile-first responsive)
+28. Add error handling:
     - Toast notifications for user feedback
     - Console logs for debugging
     - Error boundaries
-28. Add loading states:
+29. Add loading states:
     - Spinners during API calls
     - Loading indicators for data fetching
-29. Ensure all text is in Swedish
-30. Test complete workflow (mobile and desktop)
-31. Configure Netlify deployment
-32. Set up environment variables in Netlify
-33. Deploy to Netlify
+30. Ensure all text is in Swedish
+31. Test complete workflow (mobile and desktop)
+32. Configure AWS Amplify deployment:
+    - Connect GitHub repository
+    - Configure build settings (amplify.yml)
+    - Set up branch previews
+33. Set up AWS Lambda functions:
+    - Create Lambda functions for each API endpoint
+    - Configure API Gateway routes
+    - Set environment variables
+34. Set up environment variables in AWS Amplify and Lambda
+35. Deploy to AWS Amplify and Lambda
+
+---
+
+## Migration to AWS Amplify + Lambda
+
+### Why Migrate?
+- **Cost**: Pay-as-you-go pricing (~$0.10-0.50/month vs $19/month on Netlify Pro)
+- **Multiple Projects**: Consolidated billing across all projects
+- **Scalability**: Handles spikes without hitting limits
+- **Branch Previews**: AWS Amplify provides preview URLs for every branch (like Netlify)
+
+### Migration Status
+- ✅ **Amplify Configuration**: `amplify.yml` created
+- ✅ **Lambda Structure**: `lambda/` directory created with sample function
+- ✅ **Function Conversion**: Netlify Functions → Lambda format (example: `get-report.ts`)
+- ⏳ **Remaining**: Convert all functions, set up API Gateway, configure Amplify
+
+### Migration Steps
+1. **Frontend (Amplify)**:
+   - Connect GitHub repo to AWS Amplify
+   - Configure build settings (already in `amplify.yml`)
+   - Get automatic branch preview URLs
+   - Set environment variables in Amplify Console
+
+2. **Backend (Lambda)**:
+   - Convert all Netlify Functions to Lambda format
+   - Create Lambda functions in AWS Console
+   - Set up API Gateway routes
+   - Configure environment variables
+   - Update frontend API URLs
+
+3. **Better Auth**:
+   - Update `baseURL` and `basePath` for Lambda endpoints
+   - Configure CORS in API Gateway
+   - Test authentication flow
+
+### Cost Comparison
+| Usage | Netlify Free | Netlify Pro | AWS Lambda |
+|-------|--------------|-------------|------------|
+| 30K/month | ✅ Free | $19 | ~$0.006 |
+| 100K/month | ❌ Exceeded | $19 | ~$0.02 |
+| 500K/month | ❌ Exceeded | $19 | ~$0.10 |
+| 1M/month | ❌ Exceeded | $19 | ~$0.20 |
+
+**Recommendation**: AWS Lambda is significantly cheaper for multiple projects with variable usage.
 
 ---
 
@@ -648,12 +733,14 @@ All planning is complete! Here's what we have:
 - **State**: React Context API
 - **Forms**: React Hook Form
 - **Dates**: date-fns
-- **Backend**: Netlify Functions (API routes)
+- **Backend**: AWS Lambda functions (API routes)
 - **Database**: Neon PostgreSQL (direct SQL)
-- **Auth**: Clerk (custom login with full personnummer, last 4 digits masked)
-- **Email**: AWS SES via Netlify Functions
-- **Scheduling**: Netlify Scheduled Functions
-- **Deployment**: Netlify
+- **Auth**: Better Auth (email/personnummer login with email verification)
+- **Email**: AWS SES via Lambda functions
+- **Scheduling**: AWS EventBridge (CloudWatch Events) for scheduled Lambda functions
+- **Deployment**: 
+  - **Frontend**: AWS Amplify (with branch previews)
+  - **Backend**: AWS Lambda + API Gateway
 
 ### ✅ User Experience
 - Mobile-first responsive design

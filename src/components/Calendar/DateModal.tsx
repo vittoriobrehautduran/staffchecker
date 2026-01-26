@@ -60,7 +60,6 @@ interface DateModalProps {
   entries: Entry[]
   onEntrySaved: () => void
   onEntryDeleted: () => void
-  userId: string | null | undefined
   reportStatus: 'draft' | 'submitted'
 }
 
@@ -71,7 +70,6 @@ export function DateModal({
   entries,
   onEntrySaved,
   onEntryDeleted,
-  userId,
   reportStatus,
 }: DateModalProps) {
   const [timeFrom, setTimeFrom] = useState('')
@@ -132,19 +130,10 @@ export function DateModal({
       return
     }
 
-    if (!userId) {
-      toast({
-        title: 'Fel',
-        description: 'Du måste vara inloggad',
-        variant: 'destructive',
-      })
-      return
-    }
-
     try {
       await apiRequest(`/delete-entry`, {
         method: 'DELETE',
-        body: JSON.stringify({ entryId, userId }),
+        body: JSON.stringify({ entryId }),
       })
       toast({
         title: 'Post borttagen',
@@ -214,16 +203,6 @@ export function DateModal({
         return
       }
 
-      if (!userId) {
-        toast({
-          title: 'Fel',
-          description: 'Du måste vara inloggad',
-          variant: 'destructive',
-        })
-        setIsSubmitting(false)
-        return
-      }
-
       const entryData = {
         date: format(date, 'yyyy-MM-dd'),
         time_from: timeFrom,
@@ -231,7 +210,6 @@ export function DateModal({
         work_type: workType,
         annat_specification: workType === 'annat' ? annatSpec : null,
         comment: comment || null,
-        userId,
       }
 
       if (editingEntry) {

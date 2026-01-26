@@ -1,0 +1,89 @@
+import { sql } from './database'
+import { auth } from '../../../src/lib/auth'
+
+// Get Better Auth user ID from request
+export async function getBetterAuthUserIdFromRequest(event: any): Promise<string | null> {
+  try {
+    // Use Better Auth's API directly instead of HTTP handler
+    if (auth.api && typeof (auth.api as any).getSession === 'function') {
+      const headers: Record<string, string> = {}
+      
+      // Copy all headers from the original request
+      if (event.headers.cookie) {
+        headers['cookie'] = event.headers.cookie
+      }
+      if (event.headers.authorization) {
+        headers['authorization'] = event.headers.authorization
+      }
+      if (event.headers.host) {
+        headers['host'] = event.headers.host
+      }
+      
+      const sessionResult = await (auth.api as any).getSession({
+        headers,
+      })
+      
+      // Better Auth API returns {user: {...}} or {data: {user: {...}}}
+      const user = sessionResult?.user || sessionResult?.data?.user
+      
+      if (user?.id) {
+        return user.id
+      }
+    }
+    
+    // Fallback: use Better Auth handler directly with a Request object
+    const protocol = event.headers['x-forwarded-proto'] || (event.headers.host?.includes('localhost') ? 'http' : 'https')
+    const host = event.headers.host || 'localhost:8888'
+    const url = `${protocol}://${host}/.netlify/functions/auth/session`
+    
+    const request = new Request(url, {
+      method: 'GET',
+      headers: {
+        'cookie': event.headers.cookie || '',
+        'host': host,
+      },
+    })
+
+    const response = await auth.handler(request)
+
+    if (response && response.status === 200) {
+    const sessionData = await response.json()
+      const user = sessionData?.user || sessionData?.data?.user
+      if (user?.id) {
+        return user.id
+      }
+    }
+    
+      return null
+  } catch (error) {
+    // Only log errors, not normal flow
+    console.error('Error getting Better Auth user ID:', error)
+    return null
+  }
+}
+
+// Get numeric user ID from Better Auth session
+export async function getUserIdFromBetterAuthSession(event: any): Promise<number | null> {
+  const betterAuthUserId = await getBetterAuthUserIdFromRequest(event)
+  if (!betterAuthUserId) {
+    return null
+  }
+
+  // Look up our numeric user ID from Better Auth user ID
+  try {
+    const result = await sql`
+      SELECT id FROM users 
+      WHERE better_auth_user_id = ${betterAuthUserId}
+      LIMIT 1
+    `
+
+    if (result.length === 0) {
+      return null
+    }
+
+    return result[0].id
+  } catch (error) {
+    console.error('Error getting user ID:', error)
+    return null
+  }
+}

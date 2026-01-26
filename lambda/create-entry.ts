@@ -1,11 +1,19 @@
-import { Handler } from '@netlify/functions'
+import { APIGatewayProxyEvent, APIGatewayProxyResult } from 'aws-lambda'
 import { sql } from './utils/database'
 import { getUserIdFromBetterAuthSession } from './utils/auth'
 
-export const handler: Handler = async (event) => {
-  if (event.httpMethod !== 'POST') {
+export const handler = async (
+  event: APIGatewayProxyEvent
+): Promise<APIGatewayProxyResult> => {
+  const httpMethod = event.httpMethod || event.requestContext?.http?.method || 'POST'
+  
+  if (httpMethod !== 'POST') {
     return {
       statusCode: 405,
+      headers: {
+        'Content-Type': 'application/json',
+        'Access-Control-Allow-Origin': '*',
+      },
       body: JSON.stringify({ message: 'Method not allowed' }),
     }
   }
@@ -17,6 +25,10 @@ export const handler: Handler = async (event) => {
     if (!userId) {
       return {
         statusCode: 401,
+        headers: {
+          'Content-Type': 'application/json',
+          'Access-Control-Allow-Origin': '*',
+        },
         body: JSON.stringify({ message: 'Not authenticated' }),
       }
     }
@@ -27,6 +39,10 @@ export const handler: Handler = async (event) => {
     if (!date || !time_from || !time_to || !work_type) {
       return {
         statusCode: 400,
+        headers: {
+          'Content-Type': 'application/json',
+          'Access-Control-Allow-Origin': '*',
+        },
         body: JSON.stringify({ message: 'All required fields must be provided' }),
       }
     }
@@ -56,6 +72,10 @@ export const handler: Handler = async (event) => {
       if (reportResult[0].status === 'submitted') {
         return {
           statusCode: 400,
+          headers: {
+            'Content-Type': 'application/json',
+            'Access-Control-Allow-Origin': '*',
+          },
           body: JSON.stringify({ message: 'Cannot add entries to a submitted report' }),
         }
       }
@@ -72,6 +92,7 @@ export const handler: Handler = async (event) => {
       statusCode: 200,
       headers: {
         'Content-Type': 'application/json',
+        'Access-Control-Allow-Origin': '*',
       },
       body: JSON.stringify(result[0]),
     }
@@ -79,7 +100,12 @@ export const handler: Handler = async (event) => {
     console.error('Error:', error)
     return {
       statusCode: 500,
+      headers: {
+        'Content-Type': 'application/json',
+        'Access-Control-Allow-Origin': '*',
+      },
       body: JSON.stringify({ message: error.message || 'Internal server error' }),
     }
   }
 }
+

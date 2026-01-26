@@ -1,4 +1,4 @@
-import { Handler } from '@netlify/functions'
+import { APIGatewayProxyEvent, APIGatewayProxyResult } from 'aws-lambda'
 import { sql } from './utils/database'
 import { getUserIdFromBetterAuthSession } from './utils/auth'
 import { SESClient, SendEmailCommand } from '@aws-sdk/client-ses'
@@ -11,10 +11,18 @@ const sesClient = new SESClient({
   },
 })
 
-export const handler: Handler = async (event) => {
-  if (event.httpMethod !== 'POST') {
+export const handler = async (
+  event: APIGatewayProxyEvent
+): Promise<APIGatewayProxyResult> => {
+  const httpMethod = event.httpMethod || event.requestContext?.http?.method || 'POST'
+  
+  if (httpMethod !== 'POST') {
     return {
       statusCode: 405,
+      headers: {
+        'Content-Type': 'application/json',
+        'Access-Control-Allow-Origin': '*',
+      },
       body: JSON.stringify({ message: 'Method not allowed' }),
     }
   }
@@ -26,6 +34,10 @@ export const handler: Handler = async (event) => {
     if (!userId) {
       return {
         statusCode: 401,
+        headers: {
+          'Content-Type': 'application/json',
+          'Access-Control-Allow-Origin': '*',
+        },
         body: JSON.stringify({ message: 'Not authenticated' }),
       }
     }
@@ -36,6 +48,10 @@ export const handler: Handler = async (event) => {
     if (!month || !year) {
       return {
         statusCode: 400,
+        headers: {
+          'Content-Type': 'application/json',
+          'Access-Control-Allow-Origin': '*',
+        },
         body: JSON.stringify({ message: 'Month and year are required' }),
       }
     }
@@ -48,6 +64,10 @@ export const handler: Handler = async (event) => {
     if (userResult.length === 0) {
       return {
         statusCode: 404,
+        headers: {
+          'Content-Type': 'application/json',
+          'Access-Control-Allow-Origin': '*',
+        },
         body: JSON.stringify({ message: 'User not found' }),
       }
     }
@@ -64,6 +84,10 @@ export const handler: Handler = async (event) => {
     if (reportResult.length === 0) {
       return {
         statusCode: 404,
+        headers: {
+          'Content-Type': 'application/json',
+          'Access-Control-Allow-Origin': '*',
+        },
         body: JSON.stringify({ message: 'Report not found' }),
       }
     }
@@ -73,6 +97,10 @@ export const handler: Handler = async (event) => {
     if (report.status === 'submitted') {
       return {
         statusCode: 400,
+        headers: {
+          'Content-Type': 'application/json',
+          'Access-Control-Allow-Origin': '*',
+        },
         body: JSON.stringify({ message: 'Report already submitted' }),
       }
     }
@@ -88,6 +116,10 @@ export const handler: Handler = async (event) => {
     if (entries.length === 0) {
       return {
         statusCode: 400,
+        headers: {
+          'Content-Type': 'application/json',
+          'Access-Control-Allow-Origin': '*',
+        },
         body: JSON.stringify({ message: 'Cannot submit empty report' }),
       }
     }
@@ -210,6 +242,7 @@ export const handler: Handler = async (event) => {
       statusCode: 200,
       headers: {
         'Content-Type': 'application/json',
+        'Access-Control-Allow-Origin': '*',
       },
       body: JSON.stringify({ 
         message: 'Report submitted successfully',
@@ -220,7 +253,12 @@ export const handler: Handler = async (event) => {
     console.error('Error:', error)
     return {
       statusCode: 500,
+      headers: {
+        'Content-Type': 'application/json',
+        'Access-Control-Allow-Origin': '*',
+      },
       body: JSON.stringify({ message: error.message || 'Internal server error' }),
     }
   }
 }
+

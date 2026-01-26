@@ -14,6 +14,7 @@ export async function apiRequest<T>(
         'Content-Type': 'application/json',
         ...options.headers,
       },
+      credentials: 'include', // Include cookies (Better Auth uses cookies)
     })
 
     if (!response.ok) {

@@ -1,7 +1,7 @@
 -- Users table
 CREATE TABLE IF NOT EXISTS users (
   id SERIAL PRIMARY KEY,
-  clerk_user_id VARCHAR(255) UNIQUE NOT NULL,
+  better_auth_user_id VARCHAR(255) UNIQUE,
   name VARCHAR(255) NOT NULL,
   last_name VARCHAR(255) NOT NULL,
   personnummer VARCHAR(12) UNIQUE NOT NULL,
@@ -39,7 +39,7 @@ CREATE TABLE IF NOT EXISTS entries (
 
 -- Indexes for better query performance
 CREATE INDEX IF NOT EXISTS idx_users_personnummer ON users(personnummer);
-CREATE INDEX IF NOT EXISTS idx_users_clerk_user_id ON users(clerk_user_id);
+CREATE INDEX IF NOT EXISTS idx_users_better_auth_user_id ON users(better_auth_user_id);
 CREATE INDEX IF NOT EXISTS idx_reports_user_month_year ON reports(user_id, month, year);
 CREATE INDEX IF NOT EXISTS idx_entries_report_id ON entries(report_id);
 CREATE INDEX IF NOT EXISTS idx_entries_date ON entries(date);

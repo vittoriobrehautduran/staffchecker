@@ -1,7 +1,6 @@
 import { Routes, Route, Navigate } from 'react-router-dom'
-import { useAuth } from '@clerk/clerk-react'
+import { useAuth } from '@/contexts/AuthContext'
 import { Toaster } from '@/components/ui/toaster'
-import { SetupMessage } from '@/components/SetupMessage'
 import { Header } from '@/components/Layout/Header'
 import Login from '@/pages/Login'
 import Register from '@/pages/Register'
@@ -11,9 +10,9 @@ import Report from '@/pages/Report'
 import Preview from '@/pages/Preview'
 
 function ProtectedRoute({ children }: { children: React.ReactNode }) {
-  const { isSignedIn, isLoaded } = useAuth()
+  const { isSignedIn, isLoading } = useAuth()
 
-  if (!isLoaded) {
+  if (isLoading) {
     return <div>Laddar...</div>
   }
 
@@ -25,17 +24,6 @@ function ProtectedRoute({ children }: { children: React.ReactNode }) {
 }
 
 function App() {
-  const clerkKey = import.meta.env.VITE_CLERK_PUBLISHABLE_KEY
-
-  if (!clerkKey || clerkKey === 'pk_test_placeholder') {
-    return (
-      <div className="min-h-screen bg-background">
-        <SetupMessage />
-        <Toaster />
-      </div>
-    )
-  }
-
   return (
     <div className="min-h-screen bg-background">
       <Header />

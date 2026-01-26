@@ -1,32 +1,50 @@
-import { useState } from 'react'
+import { useState, useEffect } from 'react'
 import { useNavigate } from 'react-router-dom'
-import { useSignIn } from '@clerk/clerk-react'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card'
 import { useToast } from '@/components/ui/use-toast'
-import { apiRequest } from '@/services/api'
-import { Eye, EyeOff } from 'lucide-react'
+import { useAuth } from '@/contexts/AuthContext'
+import { Eye, EyeOff, Fingerprint } from 'lucide-react'
 
 export default function Login() {
-  const [personnummer, setPersonnummer] = useState('')
+  const [identifier, setIdentifier] = useState('') // Can be personnummer or email
   const [password, setPassword] = useState('')
   const [showPassword, setShowPassword] = useState(false)
   const [isLoading, setIsLoading] = useState(false)
-  const { signIn, setActive } = useSignIn()
+  const [hasPasskeys, setHasPasskeys] = useState(false)
+  const { signIn, signInWithPasskey } = useAuth()
   const navigate = useNavigate()
   const { toast } = useToast()
 
-  const handlePersonnummerChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+  // Check if user has registered passkeys
+  // Note: Disabled until Better Auth passkey plugin is available
+  useEffect(() => {
+    // Passkeys not available in current Better Auth version
+    setHasPasskeys(false)
+  }, [])
+
+  // Detect if input is email or personnummer
+  const isEmail = (value: string): boolean => {
+    return value.includes('@') && value.includes('.')
+  }
+
+  const handleIdentifierChange = (e: React.ChangeEvent<HTMLInputElement>) => {
     const inputValue = e.target.value
     
-    // Simply extract all digits from input (ignoring stars and other characters)
+    // If it looks like an email, allow it as-is
+    if (isEmail(inputValue)) {
+      setIdentifier(inputValue)
+      return
+    }
+    
+    // Otherwise, treat as personnummer - extract digits only
     const cleaned = inputValue.replace(/\D/g, '')
     
     // Allow up to 12 digits (for YYYYMMDDNNNN format)
     if (cleaned.length <= 12) {
-      setPersonnummer(cleaned)
+      setIdentifier(cleaned)
     }
   }
 
@@ -34,11 +52,22 @@ export default function Login() {
     e.preventDefault()
     setIsLoading(true)
 
-    let userData: { email: string } | null = null
-
     try {
-      const fullPersonnummer = personnummer.replace(/\D/g, '')
-      
+      // Validate input
+      if (isEmail(identifier)) {
+        // Email validation
+        if (!identifier.includes('@') || !identifier.includes('.')) {
+          toast({
+            title: 'Fel',
+            description: 'Ange en giltig e-postadress',
+            variant: 'destructive',
+          })
+          setIsLoading(false)
+          return
+        }
+      } else {
+        // Personnummer validation
+        const fullPersonnummer = identifier.replace(/\D/g, '')
       if (fullPersonnummer.length < 10) {
         toast({
           title: 'Fel',
@@ -47,119 +76,38 @@ export default function Login() {
         })
         setIsLoading(false)
         return
-      }
-
-      userData = await apiRequest<{ email: string }>('/get-user-by-personnummer', {
-        method: 'POST',
-        body: JSON.stringify({ personnummer: fullPersonnummer }),
-      })
-
-      if (!userData.email) {
-        toast({
-          title: 'Fel',
-          description: 'Användare hittades inte',
-          variant: 'destructive',
-        })
-        setIsLoading(false)
-        return
-      }
-
-      // Normalize email - Clerk stores emails in lowercase
-      const emailFromDb = userData.email.trim()
-      const emailLowercase = emailFromDb.toLowerCase()
-
-      console.log('Email from database:', emailFromDb)
-      console.log('Attempting login with email (lowercase):', emailLowercase, 'for personnummer:', fullPersonnummer)
-
-      if (!signIn) {
-        toast({
-          title: 'Fel',
-          description: 'SignIn är inte tillgänglig. Försök igen.',
-          variant: 'destructive',
-        })
-        setIsLoading(false)
-        return
-      }
-
-      // Clerk stores emails in lowercase, so always use lowercase
-      const result = await signIn.create({
-        identifier: emailLowercase,
-        password,
-      })
-
-      if (result.status === 'complete') {
-        if (!setActive) {
-          toast({
-            title: 'Fel',
-            description: 'Kunde inte aktivera session. Försök igen.',
-            variant: 'destructive',
-          })
-          setIsLoading(false)
-          return
         }
-        await setActive({ session: result.createdSessionId })
-        toast({
-          title: 'Välkommen!',
-          description: 'Du är nu inloggad',
-        })
-        navigate('/dashboard')
-      } else if (result.status === 'needs_second_factor') {
-        // 2FA is required but should be disabled in Clerk Dashboard
-        toast({
-          title: 'Tvåfaktorsautentisering krävs',
-          description: '2FA är aktiverat i Clerk. Gå till Clerk Dashboard och inaktivera 2FA under User & Authentication → Multi-factor',
-          variant: 'destructive',
-        })
-        console.error('2FA is enabled in Clerk. Disable it in Dashboard: User & Authentication → Multi-factor')
-      } else if (result.status === 'needs_first_factor') {
-        // User needs to verify email
-        toast({
-          title: 'E-post måste verifieras',
-          description: 'Kontrollera din e-post för verifieringskod och verifiera ditt konto först',
-          variant: 'destructive',
-        })
-        navigate('/verify-email')
-      } else {
-        // Other statuses
-        console.log('Sign in status:', result.status)
-        toast({
-          title: 'Inloggning misslyckades',
-          description: `Status: ${result.status}. Kontrollera att ditt konto är verifierat.`,
-          variant: 'destructive',
-        })
       }
+
+      await signIn(identifier, password)
+      
+      toast({
+        title: 'Välkommen!',
+        description: 'Du är nu inloggad',
+      })
+      navigate('/dashboard')
     } catch (error: any) {
       console.error('Login error:', error)
       
-      // If error suggests account doesn't exist or needs verification
-      const errorMessage = error.message || error.errors?.[0]?.message || ''
+      const errorMessage = error.message || ''
       
-      if (errorMessage.includes("Couldn't find") || errorMessage.includes("not found")) {
+      if (errorMessage.includes('EMAIL_NOT_VERIFIED') || errorMessage.includes('E-post måste verifieras')) {
         toast({
-          title: 'Konto hittades inte',
-          description: 'Kontrollera att din e-post är verifierad. Om du precis registrerade dig, kontrollera din e-post för verifieringskod.',
+          title: 'E-post måste verifieras',
+          description: 'Verifiera din e-post först innan du kan logga in',
           variant: 'destructive',
         })
-      } else if (errorMessage.includes("Password is incorrect") || errorMessage.includes("password") || errorMessage.includes("incorrect")) {
-        // Password is wrong - provide helpful message
+        navigate('/verify-email')
+      } else if (errorMessage.includes('Felaktigt') || errorMessage.includes('incorrect')) {
         toast({
-          title: 'Lösenordet är felaktigt',
-          description: 'Kontrollera att lösenordet är korrekt. Om du glömt ditt lösenord, använd "Glömt lösenord" funktionen i Clerk.',
-          variant: 'destructive',
-        })
-      } else if (errorMessage.includes("Identifier is invalid") || errorMessage.includes("invalid") || errorMessage.includes("Identifier")) {
-        // Identifier (email) is not recognized by Clerk
-        const emailToShow = userData?.email || 'okänd'
-        console.error('Email mismatch - Database has:', emailToShow, 'but Clerk doesn\'t recognize it')
-        toast({
-          title: 'E-postadressen känns inte igen',
-          description: `E-postadressen "${emailToShow}" finns inte i Clerk. Kontrollera i Clerk Dashboard att användaren finns med rätt e-post. Om e-posten skiljer sig, registrera dig igen eller uppdatera i databasen.`,
+          title: 'Inloggning misslyckades',
+          description: 'Felaktigt personnummer/e-post eller lösenord',
           variant: 'destructive',
         })
       } else {
         toast({
           title: 'Inloggning misslyckades',
-          description: errorMessage || 'Felaktigt personnummer eller lösenord. Om du precis registrerade dig, verifiera din e-post först.',
+          description: errorMessage || 'Ett fel uppstod vid inloggning',
           variant: 'destructive',
         })
       }
@@ -168,22 +116,22 @@ export default function Login() {
     }
   }
 
-  // Display: progressive masking - show first 8 digits, then show typed digits after 8, mask remaining
-  // Example: 
-  // - "20040402" (8 digits) -> "20040402"
-  // - "200404021" (9 digits) -> "200404021***" (show 1 digit after 8, mask 3)
-  // - "2004040212" (10 digits) -> "2004040212**" (show 2 digits, mask 2)
-  // - "20040402123" (11 digits) -> "20040402123*" (show 3 digits, mask 1)
-  // - "200404021234" (12 digits) -> "20040402****" (all 4 masked when complete)
+  // Display: progressive masking for personnummer only
   const getDisplayValue = () => {
-    if (personnummer.length <= 8) {
-      return personnummer
+    // If it's an email, show as-is
+    if (isEmail(identifier)) {
+      return identifier
     }
-    const first8 = personnummer.slice(0, 8)
-    const after8 = personnummer.slice(8)
+    
+    // For personnummer, apply progressive masking
+    if (identifier.length <= 8) {
+      return identifier
+    }
+    const first8 = identifier.slice(0, 8)
+    const after8 = identifier.slice(8)
     
     // If we have all 12 digits, mask the last 4
-    if (personnummer.length === 12) {
+    if (identifier.length === 12) {
       return first8 + '****'
     }
     
@@ -200,20 +148,20 @@ export default function Login() {
         <CardHeader>
           <CardTitle>Logga in</CardTitle>
           <CardDescription>
-            Ange ditt personnummer och lösenord
+            Ange ditt personnummer eller e-post och lösenord
           </CardDescription>
         </CardHeader>
         <CardContent>
           <form onSubmit={handleSubmit} className="space-y-4">
             <div className="space-y-2">
-              <Label htmlFor="personnummer">Personnummer</Label>
+              <Label htmlFor="identifier">Personnummer eller e-post</Label>
               <Input
-                id="personnummer"
+                id="identifier"
                 type="text"
-                inputMode="numeric"
+                inputMode={isEmail(identifier) ? 'email' : 'numeric'}
                 value={displayValue}
-                onChange={handlePersonnummerChange}
-                placeholder="200404021234"
+                onChange={handleIdentifierChange}
+                placeholder="200404021234 eller din@epost.se"
                 required
                 disabled={isLoading}
               />
@@ -231,24 +179,68 @@ export default function Login() {
                   disabled={isLoading}
                   className="pr-10"
                 />
-                <button
+                <Button
                   type="button"
-                  onClick={() => setShowPassword(!showPassword)}
-                  className="absolute right-3 top-1/2 -translate-y-1/2 text-muted-foreground hover:text-foreground"
+                  variant="ghost"
+                  size="sm"
+                  className="absolute right-0 top-0 h-full px-3 py-2 hover:bg-transparent"
+                  onClick={() => setShowPassword((prev) => !prev)}
                   disabled={isLoading}
-                  aria-label={showPassword ? 'Dölj lösenord' : 'Visa lösenord'}
                 >
                   {showPassword ? (
-                    <EyeOff className="h-4 w-4" />
+                    <EyeOff className="h-4 w-4 text-muted-foreground" />
                   ) : (
-                    <Eye className="h-4 w-4" />
+                    <Eye className="h-4 w-4 text-muted-foreground" />
                   )}
-                </button>
+                </Button>
               </div>
             </div>
             <Button type="submit" className="w-full" disabled={isLoading}>
               {isLoading ? 'Loggar in...' : 'Logga in'}
             </Button>
+            
+            {/* Biometric login option */}
+            {hasPasskeys && (
+              <div className="relative">
+                <div className="absolute inset-0 flex items-center">
+                  <span className="w-full border-t" />
+                </div>
+                <div className="relative flex justify-center text-xs uppercase">
+                  <span className="bg-background px-2 text-muted-foreground">eller</span>
+                </div>
+              </div>
+            )}
+            
+            {hasPasskeys && (
+              <Button
+                type="button"
+                variant="outline"
+                className="w-full"
+                disabled={isLoading}
+                onClick={async () => {
+                  try {
+                    setIsLoading(true)
+                    await signInWithPasskey()
+                    toast({
+                      title: 'Välkommen!',
+                      description: 'Du är nu inloggad med biometrisk autentisering',
+                    })
+                    navigate('/dashboard')
+                  } catch (error: any) {
+                    toast({
+                      title: 'Biometrisk inloggning misslyckades',
+                      description: error.message || 'Ett fel uppstod',
+                      variant: 'destructive',
+                    })
+                  } finally {
+                    setIsLoading(false)
+                  }
+                }}
+              >
+                <Fingerprint className="mr-2 h-4 w-4" />
+                Logga in med fingeravtryck/ansikte
+              </Button>
+            )}
           </form>
           <div className="mt-4 space-y-2 text-center text-sm">
             <div>
@@ -261,16 +253,9 @@ export default function Login() {
                 Registrera dig
               </button>
             </div>
-            <div>
-              <span className="text-muted-foreground">Glömt lösenord? </span>
-              <span className="text-sm text-muted-foreground">
-                Kontakta support eller använd Clerk Dashboard för att återställa lösenordet.
-              </span>
-            </div>
           </div>
         </CardContent>
       </Card>
     </div>
   )
 }
-

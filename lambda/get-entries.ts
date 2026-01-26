@@ -1,11 +1,19 @@
-import { Handler } from '@netlify/functions'
+import { APIGatewayProxyEvent, APIGatewayProxyResult } from 'aws-lambda'
 import { sql } from './utils/database'
 import { getUserIdFromBetterAuthSession } from './utils/auth'
 
-export const handler: Handler = async (event) => {
-  if (event.httpMethod !== 'GET') {
+export const handler = async (
+  event: APIGatewayProxyEvent
+): Promise<APIGatewayProxyResult> => {
+  const httpMethod = event.httpMethod || event.requestContext?.http?.method || 'GET'
+  
+  if (httpMethod !== 'GET') {
     return {
       statusCode: 405,
+      headers: {
+        'Content-Type': 'application/json',
+        'Access-Control-Allow-Origin': '*',
+      },
       body: JSON.stringify({ message: 'Method not allowed' }),
     }
   }
@@ -17,15 +25,24 @@ export const handler: Handler = async (event) => {
     if (!userId) {
       return {
         statusCode: 401,
+        headers: {
+          'Content-Type': 'application/json',
+          'Access-Control-Allow-Origin': '*',
+        },
         body: JSON.stringify({ message: 'Not authenticated' }),
       }
     }
 
-    const date = event.queryStringParameters?.date
+    const queryParams = event.queryStringParameters || {}
+    const date = queryParams.date
 
     if (!date) {
       return {
         statusCode: 400,
+        headers: {
+          'Content-Type': 'application/json',
+          'Access-Control-Allow-Origin': '*',
+        },
         body: JSON.stringify({ message: 'Date parameter is required' }),
       }
     }
@@ -46,12 +63,12 @@ export const handler: Handler = async (event) => {
     if (reportResult.length === 0) {
       // Try to create new report, but handle duplicate key errors from race conditions
       try {
-      const newReport = await sql`
-        INSERT INTO reports (user_id, month, year, status)
-        VALUES (${userId}, ${month}, ${year}, 'draft')
-        RETURNING id
-      `
-      reportId = newReport[0].id
+        const newReport = await sql`
+          INSERT INTO reports (user_id, month, year, status)
+          VALUES (${userId}, ${month}, ${year}, 'draft')
+          RETURNING id
+        `
+        reportId = newReport[0].id
       } catch (error: any) {
         // If duplicate key error (race condition), fetch the existing report
         if (error.code === '23505' && error.constraint === 'reports_user_id_month_year_key') {
@@ -91,6 +108,7 @@ export const handler: Handler = async (event) => {
       statusCode: 200,
       headers: {
         'Content-Type': 'application/json',
+        'Access-Control-Allow-Origin': '*',
       },
       body: JSON.stringify({ entries, reportStatus }),
     }
@@ -98,7 +116,12 @@ export const handler: Handler = async (event) => {
     console.error('Error:', error)
     return {
       statusCode: 500,
+      headers: {
+        'Content-Type': 'application/json',
+        'Access-Control-Allow-Origin': '*',
+      },
       body: JSON.stringify({ message: error.message || 'Internal server error' }),
     }
   }
 }
+

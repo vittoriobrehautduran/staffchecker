@@ -1,5 +1,6 @@
 import { Handler } from '@netlify/functions'
 import { sql } from './utils/database'
+import { getUserIdFromBetterAuthSession } from './utils/auth'
 
 export const handler: Handler = async (event) => {
   if (event.httpMethod !== 'DELETE') {
@@ -10,36 +11,32 @@ export const handler: Handler = async (event) => {
   }
 
   try {
-    const body = JSON.parse(event.body || '{}')
-    const { entryId, userId } = body
+    // Get user ID from Better Auth session
+    const userId = await getUserIdFromBetterAuthSession(event)
+    
+    if (!userId) {
+      return {
+        statusCode: 401,
+        body: JSON.stringify({ message: 'Not authenticated' }),
+      }
+    }
 
-    if (!entryId || !userId) {
+    const body = JSON.parse(event.body || '{}')
+    const { entryId } = body
+
+    if (!entryId) {
       return {
         statusCode: 400,
-        body: JSON.stringify({ message: 'Entry ID and User ID are required' }),
+        body: JSON.stringify({ message: 'Entry ID is required' }),
       }
     }
-
-    // Verify user owns this entry
-    const userResult = await sql`
-      SELECT id FROM users WHERE clerk_user_id = ${userId} LIMIT 1
-    `
-
-    if (userResult.length === 0) {
-      return {
-        statusCode: 404,
-        body: JSON.stringify({ message: 'User not found' }),
-      }
-    }
-
-    const user = userResult[0]
 
     // Verify entry belongs to user's report and check if report is submitted
     const entryCheck = await sql`
       SELECT e.id, r.status
       FROM entries e
       JOIN reports r ON e.report_id = r.id
-      WHERE e.id = ${entryId} AND r.user_id = ${user.id}
+      WHERE e.id = ${entryId} AND r.user_id = ${userId}
       LIMIT 1
     `
 
@@ -77,4 +74,3 @@ export const handler: Handler = async (event) => {
     }
   }
 }
-

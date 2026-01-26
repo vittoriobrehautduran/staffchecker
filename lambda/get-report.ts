@@ -1,11 +1,23 @@
-import { Handler } from '@netlify/functions'
+import { APIGatewayProxyEvent, APIGatewayProxyResult } from 'aws-lambda'
 import { sql } from './utils/database'
 import { getUserIdFromBetterAuthSession } from './utils/auth'
 
-export const handler: Handler = async (event) => {
-  if (event.httpMethod !== 'GET') {
+// Lambda handler format (converted from Netlify Functions)
+export const handler = async (
+  event: APIGatewayProxyEvent
+): Promise<APIGatewayProxyResult> => {
+  // Convert API Gateway event to Netlify-like format for compatibility
+  const httpMethod = event.httpMethod || event.requestContext?.http?.method || 'GET'
+  
+  if (httpMethod !== 'GET') {
     return {
       statusCode: 405,
+      headers: {
+        'Content-Type': 'application/json',
+        'Access-Control-Allow-Origin': '*',
+        'Access-Control-Allow-Headers': 'Content-Type',
+        'Access-Control-Allow-Methods': 'GET',
+      },
       body: JSON.stringify({ message: 'Method not allowed' }),
     }
   }
@@ -17,16 +29,26 @@ export const handler: Handler = async (event) => {
     if (!userId) {
       return {
         statusCode: 401,
+        headers: {
+          'Content-Type': 'application/json',
+          'Access-Control-Allow-Origin': '*',
+        },
         body: JSON.stringify({ message: 'Not authenticated' }),
       }
     }
 
-    const month = parseInt(event.queryStringParameters?.month || '0')
-    const year = parseInt(event.queryStringParameters?.year || '0')
+    // Extract query parameters from API Gateway event
+    const queryParams = event.queryStringParameters || {}
+    const month = parseInt(queryParams.month || '0')
+    const year = parseInt(queryParams.year || '0')
 
     if (!month || !year) {
       return {
         statusCode: 400,
+        headers: {
+          'Content-Type': 'application/json',
+          'Access-Control-Allow-Origin': '*',
+        },
         body: JSON.stringify({ message: 'Month and year are required' }),
       }
     }
@@ -67,9 +89,8 @@ export const handler: Handler = async (event) => {
       statusCode: 200,
       headers: {
         'Content-Type': 'application/json',
-        // Cache for 30 seconds to reduce function calls for repeated requests
-        // Users can still see updates quickly, but reduces load on high-traffic pages
         'Cache-Control': 'private, max-age=30',
+        'Access-Control-Allow-Origin': '*',
       },
       body: JSON.stringify({
         month,
@@ -82,7 +103,12 @@ export const handler: Handler = async (event) => {
     console.error('Error:', error)
     return {
       statusCode: 500,
+      headers: {
+        'Content-Type': 'application/json',
+        'Access-Control-Allow-Origin': '*',
+      },
       body: JSON.stringify({ message: error.message || 'Internal server error' }),
     }
   }
 }
+

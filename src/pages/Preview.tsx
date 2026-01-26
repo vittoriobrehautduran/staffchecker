@@ -1,5 +1,5 @@
 import { useState, useEffect } from 'react'
-import { useAuth } from '@clerk/clerk-react'
+import { useAuth } from '@/contexts/AuthContext'
 import { useNavigate } from 'react-router-dom'
 import { format } from 'date-fns'
 import { sv } from 'date-fns/locale'
@@ -28,7 +28,7 @@ interface ReportData {
 }
 
 export default function Preview() {
-  const { isSignedIn, userId } = useAuth()
+  const { isSignedIn } = useAuth()
   const navigate = useNavigate()
   const { toast } = useToast()
   const [reportData, setReportData] = useState<ReportData | null>(null)
@@ -41,10 +41,10 @@ export default function Preview() {
       return
     }
     loadReportData()
-  }, [isSignedIn, userId])
+  }, [isSignedIn])
 
   const loadReportData = async () => {
-    if (!userId) return
+    if (!isSignedIn) return
 
     try {
       setIsLoading(true)
@@ -52,7 +52,7 @@ export default function Preview() {
       const month = today.getMonth() + 1
       const year = today.getFullYear()
 
-      const data = await apiRequest<ReportData>(`/get-report?month=${month}&year=${year}&userId=${userId}`, {
+      const data = await apiRequest<ReportData>(`/get-report?month=${month}&year=${year}`, {
         method: 'GET',
       })
       setReportData(data)
@@ -69,7 +69,7 @@ export default function Preview() {
   }
 
   const handleSubmit = async () => {
-    if (!userId || !reportData) return
+    if (!reportData) return
 
     if (reportData.entries.length === 0) {
       toast({
@@ -88,7 +88,6 @@ export default function Preview() {
         body: JSON.stringify({
           month: reportData.month,
           year: reportData.year,
-          userId,
         }),
       })
 

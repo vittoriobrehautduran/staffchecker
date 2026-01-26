@@ -1,15 +1,19 @@
-import { useAuth, useUser, SignOutButton } from '@clerk/clerk-react'
+import { useAuth } from '@/contexts/AuthContext'
 import { useNavigate } from 'react-router-dom'
 import { Button } from '@/components/ui/button'
 import { LogOut, Calendar, Eye } from 'lucide-react'
 
 export function Header() {
-  const { isSignedIn } = useAuth()
-  const { user } = useUser()
+  const { isSignedIn, user, signOut } = useAuth()
   const navigate = useNavigate()
 
   if (!isSignedIn) {
     return null
+  }
+
+  const handleSignOut = async () => {
+    await signOut()
+    navigate('/login')
   }
 
   return (
@@ -46,18 +50,15 @@ export function Header() {
           </div>
           <div className="flex items-center gap-4">
             <span className="hidden sm:inline text-sm text-muted-foreground">
-              {user?.firstName} {user?.lastName}
+              {user?.name || 'Användare'}
             </span>
-            <SignOutButton>
-              <Button variant="ghost" size="sm">
-                <LogOut className="h-4 w-4 mr-2" />
-                Logga ut
-              </Button>
-            </SignOutButton>
+            <Button variant="ghost" size="sm" onClick={handleSignOut}>
+              <LogOut className="h-4 w-4 mr-2" />
+              Logga ut
+            </Button>
           </div>
         </div>
       </div>
     </header>
   )
 }
-
