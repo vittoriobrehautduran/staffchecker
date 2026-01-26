@@ -3,7 +3,8 @@ frontend:
   phases:
     preBuild:
       commands:
-        - npm install --no-optional
+        - rm -rf node_modules package-lock.json
+        - npm install
     build:
       commands:
         - npm run build
