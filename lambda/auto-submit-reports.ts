@@ -71,7 +71,7 @@ export const handler = async (
           entriesByDate[entry.date].push(entry)
         })
 
-        const workTypeLabels = {
+        const workTypeLabels: Record<string, string> = {
           cafe: 'Cafe',
           coaching: 'Coaching',
           administration: 'Administration',

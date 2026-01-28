@@ -49,7 +49,7 @@ export async function getBetterAuthUserIdFromRequest(event: APIGatewayProxyEvent
     const response = await auth.handler(request)
     
     if (response && response.status === 200) {
-      const sessionData = await response.json()
+      const sessionData: any = await response.json()
       const user = sessionData?.user || sessionData?.data?.user
       if (user?.id) {
         return user.id

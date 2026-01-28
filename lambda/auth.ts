@@ -1,5 +1,15 @@
 import { APIGatewayProxyEvent, APIGatewayProxyResult } from 'aws-lambda'
-import { auth } from '../../src/lib/auth'
+import { auth } from '../src/lib/auth'
+
+// Helper function to get CORS origin from request
+function getCorsOrigin(event: APIGatewayProxyEvent): string {
+  const requestOrigin = event.headers?.Origin || event.headers?.origin || '*'
+  const allowedOrigins = [
+    'http://localhost:5173',
+    'https://main.d3jub8c52hgrc6.amplifyapp.com',
+  ]
+  return allowedOrigins.includes(requestOrigin) ? requestOrigin : allowedOrigins[0]
+}
 
 export const handler = async (
   event: APIGatewayProxyEvent
@@ -7,11 +17,14 @@ export const handler = async (
   // Check if Better Auth secret is set
   if (!process.env.BETTER_AUTH_SECRET && !process.env.SECRET) {
     console.error('BETTER_AUTH_SECRET is not set! Better Auth requires a secret.')
+    const origin = getCorsOrigin(event)
+    
     return {
       statusCode: 500,
       headers: { 
         'Content-Type': 'application/json',
-        'Access-Control-Allow-Origin': '*',
+        'Access-Control-Allow-Origin': origin,
+        'Access-Control-Allow-Credentials': 'true',
       },
       body: JSON.stringify({ 
         message: 'Server configuration error: BETTER_AUTH_SECRET is not set',
@@ -57,11 +70,14 @@ export const handler = async (
         host,
         protocol 
       })
+      const origin = getCorsOrigin(event)
+      
       return {
         statusCode: 500,
         headers: { 
           'Content-Type': 'application/json',
-          'Access-Control-Allow-Origin': '*',
+          'Access-Control-Allow-Origin': origin,
+          'Access-Control-Allow-Credentials': 'true',
         },
         body: JSON.stringify({ message: 'Invalid URL construction', error: String(error) }),
       }
@@ -116,11 +132,14 @@ export const handler = async (
     try {
       if (typeof auth.handler !== 'function') {
         console.error('Better Auth handler is not a function!', { authType: typeof auth, authKeys: Object.keys(auth) })
+        const origin = getCorsOrigin(event)
+        
         return {
           statusCode: 500,
           headers: { 
             'Content-Type': 'application/json',
-            'Access-Control-Allow-Origin': '*',
+            'Access-Control-Allow-Origin': origin,
+            'Access-Control-Allow-Credentials': 'true',
           },
           body: JSON.stringify({ message: 'Better Auth handler not initialized correctly' }),
         }
@@ -133,11 +152,14 @@ export const handler = async (
             headers: Object.fromEntries(request.headers.entries()),
           })
           
+          const origin = getCorsOrigin(event)
+          
           return {
             statusCode: 200,
             headers: { 
               'Content-Type': 'application/json',
-              'Access-Control-Allow-Origin': '*',
+              'Access-Control-Allow-Origin': origin,
+              'Access-Control-Allow-Credentials': 'true',
             },
             body: JSON.stringify(sessionResult),
           }
@@ -159,7 +181,7 @@ export const handler = async (
           const responseBodyParsed = JSON.parse(responseBody)
           
           if (!responseBodyParsed.error && requestEmail) {
-            const { updateEmailVerified } = await import('../../src/lib/auth')
+            const { updateEmailVerified } = await import('../src/lib/auth')
             await updateEmailVerified(requestEmail, true)
           }
         } catch (e) {
@@ -173,7 +195,7 @@ export const handler = async (
           response.status === 200 &&
           requestEmail) {
         try {
-          const { getOTPCode } = await import('../../src/lib/auth')
+          const { getOTPCode } = await import('../src/lib/auth')
           const otpCode = getOTPCode(requestEmail)
           
           if (otpCode) {
@@ -198,7 +220,7 @@ export const handler = async (
           relativePath === 'sign-up/email' &&
           response.status === 200) {
         try {
-          const { db } = await import('../../src/lib/auth')
+          const { db } = await import('../src/lib/auth')
           const verificationRecords = await db.query.verification.findMany({
             orderBy: (verification, { desc }) => [desc(verification.createdAt)],
             limit: 1,
@@ -236,12 +258,23 @@ export const handler = async (
       }
       
       // Convert Response to API Gateway format
+      // Get origin from request to allow credentials - MUST use specific origin, not *
+      const origin = getCorsOrigin(event)
+      
       const responseHeaders: Record<string, string> = {
-        'Access-Control-Allow-Origin': '*',
+        'Access-Control-Allow-Origin': origin,
+        'Access-Control-Allow-Credentials': 'true',
+        'Access-Control-Allow-Methods': 'GET,POST,PUT,DELETE,OPTIONS',
+        'Access-Control-Allow-Headers': 'Content-Type,Authorization,Cookie',
       }
       
+      // Copy other headers from Better Auth response, but NEVER copy CORS headers
       response.headers.forEach((value, key) => {
-        responseHeaders[key] = value
+        const lowerKey = key.toLowerCase()
+        // Explicitly exclude ALL CORS-related headers from Better Auth response
+        if (!lowerKey.startsWith('access-control-')) {
+          responseHeaders[key] = value
+        }
       })
 
       return {
@@ -249,27 +282,34 @@ export const handler = async (
         headers: responseHeaders,
         body: responseBody,
       }
-    } catch (error: any) {
+    } catch (error: unknown) {
       console.error('Better Auth handler error:', error)
+      const errorMessage = error instanceof Error ? error.message : String(error)
+      const origin = getCorsOrigin(event)
+      
       return {
         statusCode: 500,
         headers: { 
           'Content-Type': 'application/json',
-          'Access-Control-Allow-Origin': '*',
+          'Access-Control-Allow-Origin': origin,
+          'Access-Control-Allow-Credentials': 'true',
         },
         body: JSON.stringify({ 
           message: 'Better Auth handler error',
-          error: error?.message || String(error),
+          error: errorMessage,
         }),
       }
     }
   } catch (error: any) {
     console.error('Auth handler error:', error)
+    const origin = getCorsOrigin(event)
+    
     return {
       statusCode: 500,
       headers: { 
         'Content-Type': 'application/json',
-        'Access-Control-Allow-Origin': '*',
+        'Access-Control-Allow-Origin': origin,
+        'Access-Control-Allow-Credentials': 'true',
       },
       body: JSON.stringify({ 
         message: 'Internal server error',

@@ -1,48 +1,50 @@
+/// <reference types="vite/client" />
 import { createAuthClient } from 'better-auth/react'
 
-// Better Auth requires an absolute URL
-// In development with Netlify Dev, use localhost:8888
-// In production, use the actual domain
-function getBaseURL(): string {
-  // Check if we have an explicit API base URL
-  if (import.meta.env.VITE_API_BASE_URL) {
-    return import.meta.env.VITE_API_BASE_URL
-  }
-
-  // In development, Netlify Dev runs on port 8888
-  if (import.meta.env.DEV) {
-    return 'http://localhost:8888/.netlify/functions'
-  }
-
-  // In production, use the current origin
-  if (typeof window !== 'undefined') {
-    return `${window.location.origin}/.netlify/functions`
-  }
-
-  // Fallback (shouldn't happen in browser)
-  return '/.netlify/functions'
-}
-
-// Better Auth client configuration
-// The baseURL should be the full URL to the auth endpoint
-// Server uses: baseURL: http://localhost:8888, basePath: /.netlify/functions/auth
-// Client should use the full path: http://localhost:8888/.netlify/functions/auth
-// Better Auth client will append routes like /sign-up/email to this baseURL
+// Better Auth requires an absolute URL to the auth endpoint
+// This should point to your API Gateway URL with /auth path
+// Example: https://xxxxx.execute-api.region.amazonaws.com/prod/auth
+// Or custom domain: https://api.yourapp.com/auth
 function getAuthBaseURL(): string {
-  const base = getBaseURL() // http://localhost:8888/.netlify/functions
-  // Remove trailing slash if present, then add /auth
-  // Ensure no double slashes anywhere
-  const cleanBase = base.replace(/\/+$/, '') // Remove one or more trailing slashes
-  const authPath = '/auth'
-  // If base already ends with /auth, don't add it again
-  if (cleanBase.endsWith(authPath)) {
-    return cleanBase
+  // Check if we have an explicit API base URL
+  const apiBaseUrl = import.meta.env.VITE_API_BASE_URL
+  
+  if (apiBaseUrl) {
+    const base = apiBaseUrl.trim()
+    // Remove trailing slash if present
+    const cleanBase = base.replace(/\/+$/, '')
+    // Add /auth path if not already present
+    if (cleanBase.endsWith('/auth')) {
+      return cleanBase
+    }
+    return `${cleanBase}/auth`
   }
-  return `${cleanBase}${authPath}`
+
+  // If VITE_API_BASE_URL is not set, log a warning and show helpful error
+  console.error('❌ VITE_API_BASE_URL is not set!')
+  console.error('This should be your API Gateway URL, e.g.:')
+  console.error('  https://xxxxx.execute-api.region.amazonaws.com/prod')
+  console.error('Or custom domain:')
+  console.error('  https://api.yourapp.com')
+  console.error('')
+  console.error('Set this in:')
+  console.error('  - Local: .env.local file')
+  console.error('  - Amplify: Environment variables in Amplify Console')
+  
+  // Don't use fallback - throw error to make it obvious
+  throw new Error(
+    'VITE_API_BASE_URL måste vara satt för Better Auth att fungera. ' +
+    'Sätt denna miljövariabel till din API Gateway URL (t.ex. https://xxxxx.execute-api.region.amazonaws.com/prod)'
+  )
 }
+
+// Get the auth base URL and log it for debugging
+const authBaseURL = getAuthBaseURL()
+console.log('🔐 Better Auth baseURL:', authBaseURL)
+console.log('🔐 VITE_API_BASE_URL env var:', import.meta.env.VITE_API_BASE_URL)
 
 export const authClient = createAuthClient({
-  baseURL: getAuthBaseURL(), // http://localhost:8888/.netlify/functions/auth
+  baseURL: authBaseURL,
   // Email OTP plugin methods are automatically available when the plugin is configured on the server
   // Note: Passkeys client plugin not available in current Better Auth version
 })

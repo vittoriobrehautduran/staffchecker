@@ -5,7 +5,7 @@ import { getUserIdFromBetterAuthSession } from './utils/auth'
 export const handler = async (
   event: APIGatewayProxyEvent
 ): Promise<APIGatewayProxyResult> => {
-  const httpMethod = event.httpMethod || event.requestContext?.http?.method || 'PUT'
+  const httpMethod = event.httpMethod || 'PUT'
   
   if (httpMethod !== 'PUT') {
     return {

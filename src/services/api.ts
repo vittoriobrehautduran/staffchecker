@@ -1,11 +1,21 @@
-const API_BASE_URL = import.meta.env.VITE_API_BASE_URL || '/.netlify/functions'
-const IS_DEV = import.meta.env.DEV
+// API Gateway base URL - set via VITE_API_BASE_URL environment variable
+// Example: https://xxxxx.execute-api.region.amazonaws.com/prod
+// Or custom domain: https://api.yourapp.com
+const API_BASE_URL = import.meta.env.VITE_API_BASE_URL || ''
 
 export async function apiRequest<T>(
   endpoint: string,
   options: RequestInit = {}
 ): Promise<T> {
-  const url = `${API_BASE_URL}${endpoint}`
+  if (!API_BASE_URL) {
+    throw new Error(
+      'VITE_API_BASE_URL är inte konfigurerad. Sätt denna miljövariabel till din API Gateway URL.'
+    )
+  }
+
+  // Remove leading slash from endpoint if present, API_BASE_URL should include trailing slash or not
+  const cleanEndpoint = endpoint.startsWith('/') ? endpoint.slice(1) : endpoint
+  const url = `${API_BASE_URL.replace(/\/$/, '')}/${cleanEndpoint}`
   
   try {
     const response = await fetch(url, {
@@ -18,13 +28,6 @@ export async function apiRequest<T>(
     })
 
     if (!response.ok) {
-      // If 404 in development, provide helpful error message
-      if (response.status === 404 && IS_DEV) {
-        throw new Error(
-          'Netlify Functions är inte tillgängliga. För lokal utveckling, kör "npm run dev:netlify" istället för "npm run dev".'
-        )
-      }
-      
       const error = await response.json().catch(() => ({ 
         message: 'Ett fel uppstod' 
       }))
@@ -43,12 +46,6 @@ export async function apiRequest<T>(
 
     return response.json()
   } catch (error: any) {
-    // If network error in development, provide helpful message
-    if (IS_DEV && (error.message.includes('Failed to fetch') || error.message.includes('404'))) {
-      throw new Error(
-        'Netlify Functions är inte tillgängliga. För lokal utveckling, kör "npm run dev:netlify" istället för "npm run dev".'
-      )
-    }
     throw error
   }
 }

@@ -5,7 +5,7 @@ import { getUserIdFromBetterAuthSession } from './utils/auth'
 export const handler = async (
   event: APIGatewayProxyEvent
 ): Promise<APIGatewayProxyResult> => {
-  const httpMethod = event.httpMethod || event.requestContext?.http?.method || 'DELETE'
+  const httpMethod = event.httpMethod || 'DELETE'
   
   if (httpMethod !== 'DELETE') {
     return {

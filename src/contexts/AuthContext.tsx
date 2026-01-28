@@ -76,7 +76,12 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   const signIn = async (identifier: string, password: string) => {
     // Identifier can be personnummer or email
     // Look up email by personnummer or use email directly, then sign in with Better Auth
-    const loginResponse = await fetch('/.netlify/functions/auth-personnummer-login', {
+    const API_BASE_URL = import.meta.env.VITE_API_BASE_URL || ''
+    if (!API_BASE_URL) {
+      throw new Error('VITE_API_BASE_URL är inte konfigurerad')
+    }
+
+    const loginResponse = await fetch(`${API_BASE_URL.replace(/\/$/, '')}/auth-personnummer-login`, {
       method: 'POST',
       headers: {
         'Content-Type': 'application/json',
@@ -125,7 +130,12 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     }
 
     // Then, create user record in our users table with personnummer
-    await fetch('/.netlify/functions/create-user-better-auth', {
+    const API_BASE_URL = import.meta.env.VITE_API_BASE_URL || ''
+    if (!API_BASE_URL) {
+      throw new Error('VITE_API_BASE_URL är inte konfigurerad')
+    }
+
+    const createUserResponse = await fetch(`${API_BASE_URL.replace(/\/$/, '')}/create-user-better-auth`, {
       method: 'POST',
       headers: {
         'Content-Type': 'application/json',
@@ -137,7 +147,13 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         personnummer: data.personnummer,
         betterAuthUserId: result.data.user.id,
       }),
+      credentials: 'include',
     })
+
+    if (!createUserResponse.ok) {
+      const error = await createUserResponse.json()
+      throw new Error(error.message || 'Kunde inte skapa användare')
+    }
   }
 
   const signOut = async () => {

@@ -7,6 +7,9 @@
     "dev": "vite",
     "dev:netlify": "netlify dev",
     "build": "tsc -b && vite build",
+    "build:lambda": "node scripts/bundle-lambda.js",
+    "deploy:lambda": "node scripts/deploy-lambda.js",
+    "set-lambda-env": "node scripts/set-lambda-env.js",
     "lint": "eslint .",
     "preview": "vite preview"
   },
@@ -41,8 +44,12 @@
     "tailwind-merge": "^3.4.0"
   },
   "devDependencies": {
+    "@aws-sdk/client-lambda": "^3.975.0",
+    "@aws-sdk/client-ses": "^3.975.0",
     "@eslint/js": "^9.39.1",
+    "archiver": "^7.0.1",
     "@netlify/functions": "^5.1.2",
+    "@types/aws-lambda": "^8.10.160",
     "@types/inflection": "^1.13.2",
     "@types/node": "^24.10.9",
     "@types/react": "^19.2.5",
@@ -50,6 +57,7 @@
     "@vitejs/plugin-react": "^5.1.1",
     "autoprefixer": "^10.4.23",
     "drizzle-kit": "^0.31.8",
+    "esbuild": "^0.27.2",
     "eslint": "^9.39.1",
     "eslint-plugin-react-hooks": "^7.0.1",
     "eslint-plugin-react-refresh": "^0.4.24",

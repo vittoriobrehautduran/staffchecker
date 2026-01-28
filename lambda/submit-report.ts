@@ -14,7 +14,7 @@ const sesClient = new SESClient({
 export const handler = async (
   event: APIGatewayProxyEvent
 ): Promise<APIGatewayProxyResult> => {
-  const httpMethod = event.httpMethod || event.requestContext?.http?.method || 'POST'
+  const httpMethod = event.httpMethod || 'POST'
   
   if (httpMethod !== 'POST') {
     return {
@@ -149,7 +149,7 @@ export const handler = async (
       entriesByDate[entry.date].push(entry)
     })
 
-    const workTypeLabels = {
+    const workTypeLabels: Record<string, string> = {
       cafe: 'Cafe',
       coaching: 'Coaching',
       administration: 'Administration',

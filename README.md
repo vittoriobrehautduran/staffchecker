@@ -2,6 +2,14 @@
 
 En applikation för att rapportera arbetade timmar för tennisklubbens anställda.
 
+## Arkitektur
+
+Appen använder:
+- **Frontend**: AWS Amplify (React + Vite)
+- **Backend**: AWS Lambda functions via API Gateway
+- **Databas**: Neon PostgreSQL
+- **Autentisering**: Better Auth
+
 ## Utveckling
 
 ### Första gången
@@ -13,13 +21,20 @@ npm install
 
 2. Skapa `.env.local` fil med dina miljövariabler:
 ```env
-VITE_CLERK_PUBLISHABLE_KEY=pk_test_...
-CLERK_SECRET_KEY=sk_test_...
+# API Gateway URL (för lokal utveckling, använd din API Gateway URL)
+VITE_API_BASE_URL=https://xxxxx.execute-api.region.amazonaws.com/prod
+
+# Databas
 DATABASE_URL=postgresql://user:password@host/database?sslmode=require
+
+# AWS SES för e-post
 AWS_SES_REGION=eu-north-1
 AWS_SES_ACCESS_KEY_ID=...
 AWS_SES_SECRET_ACCESS_KEY=...
 BOSS_EMAIL_ADDRESS=boss@example.com
+
+# Better Auth secret (generera med: openssl rand -base64 32)
+BETTER_AUTH_SECRET=...
 ```
 
 **Viktigt för DATABASE_URL:**
@@ -27,21 +42,12 @@ BOSS_EMAIL_ADDRESS=boss@example.com
 - Format: `postgresql://user:password@host/database?sslmode=require`
 - Exempel: `postgresql://neondb_owner:password@ep-xxx.aws.neon.tech/neondb?sslmode=require`
 
-3. För lokal utveckling med API-funktioner, använd:
-```bash
-npm run dev:netlify
-```
-
-Detta startar både Vite dev server och Netlify Functions lokalt.
-
-### Alternativ: Endast frontend (utan API)
-
-Om du bara vill testa frontend utan API-funktioner:
+3. För lokal utveckling (endast frontend):
 ```bash
 npm run dev
 ```
 
-**OBS:** Registrering och inloggning kräver Netlify Functions, så använd `npm run dev:netlify` för full funktionalitet.
+**OBS:** För full funktionalitet behöver du köra Lambda-funktionerna lokalt eller använda din API Gateway URL i `VITE_API_BASE_URL`.
 
 ## Bygga för produktion
 
@@ -51,7 +57,31 @@ npm run build
 
 ## Deployment
 
-Appen är konfigurerad för Netlify. Efter push till GitHub, deployas automatiskt.
+### Frontend (AWS Amplify)
+
+1. Gå till [AWS Amplify Console](https://console.aws.amazon.com/amplify)
+2. Klicka "New app" → "Host web app"
+3. Anslut ditt GitHub repository
+4. Build-inställningar är redan konfigurerade i `amplify.yml`
+5. Sätt miljövariabler:
+   - `VITE_API_BASE_URL`: Din API Gateway URL
+6. Deploy
+
+### Backend (AWS Lambda)
+
+Alla Lambda-funktioner finns i `lambda/` mappen. Se `AWS_MIGRATION.md` för detaljerade instruktioner om hur du:
+- Skapar Lambda-funktioner
+- Konfigurerar API Gateway
+- Sätter miljövariabler i Lambda
+
+**Viktiga miljövariabler för Lambda:**
+- `DATABASE_URL`
+- `BETTER_AUTH_SECRET`
+- `BETTER_AUTH_URL` (din Amplify frontend URL)
+- `AWS_SES_REGION`
+- `AWS_SES_ACCESS_KEY_ID`
+- `AWS_SES_SECRET_ACCESS_KEY`
+- `BOSS_EMAIL_ADDRESS`
 
 ## Databas
 

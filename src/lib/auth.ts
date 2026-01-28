@@ -31,45 +31,32 @@ const client = postgres(databaseUrl, { max: 1 }) // Limit connections for server
 export const db = drizzle(client, { schema })
 
 // Get base URL from environment or infer from context
-// baseURL should be just the origin (protocol + host), not including the path
+// baseURL should be just the origin (protocol + host) of the frontend
 // Better Auth uses this to construct callback URLs and other absolute URLs
+// basePath should be the API Gateway path to the auth endpoint (e.g., /auth)
 function getBaseURL(): string {
   // Check environment variable first (most reliable)
+  // This should be your Amplify frontend URL (e.g., https://yourapp.amplifyapp.com)
   if (process.env.BETTER_AUTH_URL) {
     const url = process.env.BETTER_AUTH_URL.trim()
     // Ensure it doesn't have a trailing slash
     return url.replace(/\/$/, '')
   }
 
-  // In development with Netlify Dev, use localhost:8888
-  if (process.env.NETLIFY_DEV) {
-    return 'http://localhost:8888'
-  }
-
-  // In production, use the site URL from Netlify
-  // Netlify provides URL as the full site URL (e.g., https://example.netlify.app)
-  if (process.env.URL) {
-    const url = process.env.URL.trim()
-    // Extract just the origin (protocol + host)
-    try {
-      const urlObj = new URL(url)
-      return `${urlObj.protocol}//${urlObj.host}`
-    } catch {
-      // If URL parsing fails, return as-is (shouldn't happen)
-      return url.replace(/\/$/, '')
-    }
-  }
-
-  // Fallback (shouldn't happen in production)
-  return 'http://localhost:8888'
+  // In Lambda, we might not have access to the frontend URL directly
+  // Fallback: try to infer from API Gateway event headers
+  // This will be set when the Lambda is invoked via API Gateway
+  // For now, we'll require BETTER_AUTH_URL to be set in Lambda environment variables
+  console.warn('BETTER_AUTH_URL not set. This should be your Amplify frontend URL.')
+  return 'https://yourapp.amplifyapp.com' // This should be overridden via env var
 }
 
 const baseURL = getBaseURL()
-const basePath = '/.netlify/functions/auth'
-console.log('Better Auth baseURL (origin):', baseURL)
-console.log('Better Auth basePath:', basePath)
-console.log('NETLIFY_DEV:', process.env.NETLIFY_DEV)
-console.log('URL env var:', process.env.URL)
+// API Gateway path to the auth Lambda function
+// This should match your API Gateway route (e.g., /auth)
+const basePath = '/auth'
+console.log('Better Auth baseURL (frontend origin):', baseURL)
+console.log('Better Auth basePath (API Gateway path):', basePath)
 console.log('BETTER_AUTH_URL env var:', process.env.BETTER_AUTH_URL)
 
 // In-memory store for OTP codes in development
@@ -133,7 +120,7 @@ const emailOTPPlugin = emailOTP({
           throw new Error(`Failed to send email: ${resendResponse.status}`)
         }
 
-        const result = await resendResponse.json()
+        const result = await resendResponse.json() as { id?: string }
         console.log('Email sent via Resend:', result.id)
         return Promise.resolve()
       } catch (error) {
@@ -184,11 +171,11 @@ export async function updateEmailVerified(email: string, verified: boolean) {
 }
 
 // Better Auth configuration
-// Use baseURL as origin only, and basePath separately
+// Use baseURL as origin only (frontend URL), and basePath separately (API Gateway path)
 // This is the recommended approach for serverless environments
 export const auth = betterAuth({
-  baseURL: baseURL, // Origin only: http://localhost:8888
-  basePath: basePath, // Path: /.netlify/functions/auth
+  baseURL: baseURL, // Frontend origin: https://yourapp.amplifyapp.com
+  basePath: basePath, // API Gateway path: /auth
   secret: process.env.BETTER_AUTH_SECRET || process.env.SECRET, // Required for encryption and hashing
   database: drizzleAdapter(db, {
     provider: 'pg', // PostgreSQL provider

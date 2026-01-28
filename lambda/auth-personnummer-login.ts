@@ -1,12 +1,12 @@
 import { APIGatewayProxyEvent, APIGatewayProxyResult } from 'aws-lambda'
 import { sql } from './utils/database'
-import { auth } from '../../src/lib/auth'
+import { auth } from '../src/lib/auth'
 
 // Custom login handler that looks up email by personnummer, then uses Better Auth
 export const handler = async (
   event: APIGatewayProxyEvent
 ): Promise<APIGatewayProxyResult> => {
-  const httpMethod = event.httpMethod || event.requestContext?.http?.method || 'POST'
+  const httpMethod = event.httpMethod || 'POST'
   
   if (httpMethod !== 'POST') {
     return {
@@ -112,7 +112,7 @@ export const handler = async (
     const authResponse = await auth.handler(signInRequest)
 
     if (!authResponse || authResponse.status !== 200) {
-      const error = await authResponse?.json().catch(() => ({ message: 'Felaktigt personnummer eller lösenord' }))
+      const error: { message?: string } = await authResponse?.json().catch(() => ({ message: 'Felaktigt personnummer eller lösenord' })) || { message: 'Felaktigt personnummer eller lösenord' }
       return {
         statusCode: 401,
         headers: {
