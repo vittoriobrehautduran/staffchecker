@@ -125,6 +125,12 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       name: `${data.firstName} ${data.lastName}`,
     })
 
+    // Check for errors from Better Auth
+    if (result.error) {
+      const errorMessage = result.error.message || result.error.code || 'Kunde inte skapa användare i Better Auth'
+      throw new Error(errorMessage)
+    }
+
     if (!result.data?.user?.id) {
       throw new Error('Kunde inte skapa användare i Better Auth')
     }

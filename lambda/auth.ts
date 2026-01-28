@@ -1,5 +1,4 @@
 import { APIGatewayProxyEvent, APIGatewayProxyResult } from 'aws-lambda'
-import { auth } from '../src/lib/auth'
 
 // Helper function to get CORS origin from request
 function getCorsOrigin(event: APIGatewayProxyEvent): string {
@@ -9,6 +8,24 @@ function getCorsOrigin(event: APIGatewayProxyEvent): string {
     'https://main.d3jub8c52hgrc6.amplifyapp.com',
   ]
   return allowedOrigins.includes(requestOrigin) ? requestOrigin : allowedOrigins[0]
+}
+
+// Lazy load auth to catch initialization errors
+let authInstance: any = null
+async function getAuth() {
+  if (!authInstance) {
+    try {
+      const authModule = await import('../src/lib/auth')
+      authInstance = authModule.auth
+      if (!authInstance) {
+        throw new Error('auth export not found in auth module')
+      }
+    } catch (error) {
+      console.error('Failed to import auth module:', error)
+      throw error
+    }
+  }
+  return authInstance
 }
 
 export const handler = async (
@@ -33,6 +50,22 @@ export const handler = async (
     }
   }
   
+  // Handle OPTIONS preflight requests
+  if (event.httpMethod === 'OPTIONS') {
+    const origin = getCorsOrigin(event)
+    return {
+      statusCode: 200,
+      headers: {
+        'Access-Control-Allow-Origin': origin,
+        'Access-Control-Allow-Credentials': 'true',
+        'Access-Control-Allow-Methods': 'GET,POST,PUT,DELETE,OPTIONS',
+        'Access-Control-Allow-Headers': 'Content-Type,Authorization,Cookie',
+        'Access-Control-Max-Age': '86400', // 24 hours
+      },
+      body: '',
+    }
+  }
+  
   try {
     // Extract path from API Gateway event
     // API Gateway path: /auth/session or /auth/sign-up/email
@@ -51,10 +84,12 @@ export const handler = async (
     }
     
     // Build the full URL for Better Auth
+    // Better Auth needs the actual API Gateway URL (where the request is coming from)
     const protocol = event.headers?.['X-Forwarded-Proto'] || event.headers?.['x-forwarded-proto'] || 'https'
     const host = event.headers?.Host || event.headers?.host || 'localhost'
-    const apiBaseUrl = process.env.BETTER_AUTH_URL || `${protocol}://${host}`
-    const fullUrl = `${apiBaseUrl}${basePath}/${relativePath}`
+    // Use API Gateway host for the request URL (not frontend URL)
+    const apiGatewayUrl = `${protocol}://${host}`
+    const fullUrl = `${apiGatewayUrl}${basePath}/${relativePath}`
     
     // Add query parameters if present
     let url: URL
@@ -62,7 +97,7 @@ export const handler = async (
       url = new URL(fullUrl)
     } catch (error) {
       console.error('Invalid URL construction:', { 
-        apiBaseUrl,
+        apiGatewayUrl,
         basePath,
         relativePath,
         path: event.path,
@@ -94,15 +129,22 @@ export const handler = async (
     // Create headers object for Better Auth
     const headers = new Headers()
     
+    // Get the frontend origin (Better Auth expects this, not API Gateway origin)
+    const frontendOrigin = event.headers?.Origin || event.headers?.origin || process.env.BETTER_AUTH_URL || `${protocol}://${host}`
+    
     // Set critical headers
     headers.set('host', host)
-    headers.set('origin', `${protocol}://${host}`)
+    // Better Auth validates origin against baseURL for CSRF protection
+    // Use the actual frontend origin, not the API Gateway origin
+    headers.set('origin', frontendOrigin)
     
     // Copy all headers from API Gateway event
     Object.entries(event.headers || {}).forEach(([key, value]) => {
       if (value && typeof value === 'string') {
         const lowerKey = key.toLowerCase()
-        if (lowerKey !== 'host' && lowerKey !== 'origin') {
+        // Don't override origin - we set it correctly above
+        // Don't override host - we need API Gateway host for Better Auth
+        if (lowerKey !== 'origin') {
           headers.set(lowerKey, value)
         }
       }
@@ -130,6 +172,32 @@ export const handler = async (
 
     // Call Better Auth handler
     try {
+      // Lazy load auth to catch initialization errors
+      const startTime = Date.now()
+      let auth
+      try {
+        console.log('Starting auth module import...')
+        auth = await getAuth()
+        console.log(`Auth module imported in ${Date.now() - startTime}ms`)
+      } catch (authInitError: any) {
+        console.error('Failed to initialize Better Auth:', authInitError)
+        console.error('Error stack:', authInitError?.stack)
+        const origin = getCorsOrigin(event)
+        return {
+          statusCode: 500,
+          headers: { 
+            'Content-Type': 'application/json',
+            'Access-Control-Allow-Origin': origin,
+            'Access-Control-Allow-Credentials': 'true',
+          },
+          body: JSON.stringify({ 
+            message: 'Failed to initialize authentication service',
+            error: authInitError?.message || String(authInitError),
+            hint: 'Check Lambda environment variables (DATABASE_URL, BETTER_AUTH_SECRET, BETTER_AUTH_URL)'
+          }),
+        }
+      }
+      
       if (typeof auth.handler !== 'function') {
         console.error('Better Auth handler is not a function!', { authType: typeof auth, authKeys: Object.keys(auth) })
         const origin = getCorsOrigin(event)
@@ -156,7 +224,7 @@ export const handler = async (
           
           return {
             statusCode: 200,
-            headers: { 
+            headers: {
               'Content-Type': 'application/json',
               'Access-Control-Allow-Origin': origin,
               'Access-Control-Allow-Credentials': 'true',
@@ -170,10 +238,25 @@ export const handler = async (
       }
       
       // For other routes, use the handler
+      console.log('Calling Better Auth handler:', {
+        method: request.method,
+        url: url.toString(),
+        path: relativePath,
+        hasBody: !!event.body,
+        bodyPreview: event.body ? event.body.substring(0, 200) : undefined,
+      })
+      
       const response = await auth.handler(request)
       
       // Read response body once
       let responseBody = await response.text()
+      
+      // Log response details for debugging
+      console.log('Better Auth response:', {
+        status: response.status,
+        statusText: response.statusText,
+        bodyPreview: responseBody.substring(0, 500),
+      })
       
       // After successful Email OTP verification, update emailVerified in database
       if (relativePath === 'email-otp/check-verification-otp' && response.status === 200) {
@@ -249,10 +332,21 @@ export const handler = async (
           parsedBody = responseBody
         }
         
-        if (process.env.NODE_ENV !== 'production' || response.status >= 500) {
+        // Always log 422 errors (validation errors) with full details
+        if (response.status === 422 || process.env.NODE_ENV !== 'production' || response.status >= 500) {
           console.error(`Better Auth ${response.status} error:`, {
             path: relativePath,
-            message: parsedBody?.message || parsedBody?.error || 'Unknown error',
+            method: request.method,
+            url: url.toString(),
+            error: parsedBody?.error || parsedBody?.message || 'Unknown error',
+            fullResponse: parsedBody,
+            requestBody: event.body ? (() => {
+              try {
+                return JSON.parse(event.body)
+              } catch {
+                return event.body
+              }
+            })() : null,
           })
         }
       }
@@ -269,7 +363,7 @@ export const handler = async (
       }
       
       // Copy other headers from Better Auth response, but NEVER copy CORS headers
-      response.headers.forEach((value, key) => {
+      response.headers.forEach((value: string, key: string) => {
         const lowerKey = key.toLowerCase()
         // Explicitly exclude ALL CORS-related headers from Better Auth response
         if (!lowerKey.startsWith('access-control-')) {

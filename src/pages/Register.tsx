@@ -66,7 +66,16 @@ export default function Register() {
       const errorMessage = error.message || ''
       const errorCode = error.code || ''
       
-      if (errorCode === 'PERSONNUMMER_EXISTS' || errorMessage.includes('personnummer') || errorMessage.includes('redan registrerat')) {
+      // Check for Better Auth error codes
+      if (errorCode === 'USER_ALREADY_EXISTS_USE_ANOTHER_EMAIL' || 
+          errorMessage.includes('already exists') || 
+          errorMessage.includes('User already exists')) {
+        toast({
+          title: 'E-postadressen är redan registrerad',
+          description: 'Denna e-postadress är redan kopplad till ett konto. Logga in istället eller använd en annan e-postadress.',
+          variant: 'destructive',
+        })
+      } else if (errorCode === 'PERSONNUMMER_EXISTS' || errorMessage.includes('personnummer') || errorMessage.includes('redan registrerat')) {
         toast({
           title: 'Personnummer redan registrerat',
           description: 'Detta personnummer är redan kopplat till ett konto. Logga in istället eller kontakta support.',
