@@ -11,42 +11,21 @@ export default function Register() {
   const [email, setEmail] = useState('')
   const [firstName, setFirstName] = useState('')
   const [lastName, setLastName] = useState('')
-  const [personnummer, setPersonnummer] = useState('')
   const [password, setPassword] = useState('')
   const [isLoading, setIsLoading] = useState(false)
   const { signUp } = useAuth()
   const navigate = useNavigate()
   const { toast } = useToast()
 
-  const handlePersonnummerChange = (e: React.ChangeEvent<HTMLInputElement>) => {
-    const value = e.target.value.replace(/\D/g, '')
-    if (value.length <= 12) {
-      setPersonnummer(value)
-    }
-  }
-
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault()
     setIsLoading(true)
 
     try {
-      const fullPersonnummer = personnummer.replace(/\D/g, '')
-      
-      if (fullPersonnummer.length < 10) {
-        toast({
-          title: 'Fel',
-          description: 'Personnummer måste vara minst 10 siffror',
-          variant: 'destructive',
-        })
-        setIsLoading(false)
-        return
-      }
-
       await signUp({
         email: email.trim(),
         firstName,
         lastName,
-        personnummer: fullPersonnummer,
         password,
       })
 
@@ -73,12 +52,6 @@ export default function Register() {
         toast({
           title: 'E-postadressen är redan registrerad',
           description: 'Denna e-postadress är redan kopplad till ett konto. Logga in istället eller använd en annan e-postadress.',
-          variant: 'destructive',
-        })
-      } else if (errorCode === 'PERSONNUMMER_EXISTS' || errorMessage.includes('personnummer') || errorMessage.includes('redan registrerat')) {
-        toast({
-          title: 'Personnummer redan registrerat',
-          description: 'Detta personnummer är redan kopplat till ett konto. Logga in istället eller kontakta support.',
           variant: 'destructive',
         })
       } else if (errorCode === 'EMAIL_EXISTS' || errorMessage.includes('e-post') || errorMessage.includes('email')) {
@@ -140,19 +113,6 @@ export default function Register() {
                 value={email}
                 onChange={(e) => setEmail(e.target.value)}
                 placeholder="din.epost@exempel.com"
-                required
-                disabled={isLoading}
-              />
-            </div>
-            <div className="space-y-2">
-              <Label htmlFor="personnummer">Personnummer</Label>
-              <Input
-                id="personnummer"
-                type="text"
-                inputMode="numeric"
-                value={personnummer}
-                onChange={handlePersonnummerChange}
-                placeholder="199001011234"
                 required
                 disabled={isLoading}
               />

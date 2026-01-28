@@ -9,7 +9,7 @@ import { useAuth } from '@/contexts/AuthContext'
 import { Eye, EyeOff, Fingerprint } from 'lucide-react'
 
 export default function Login() {
-  const [identifier, setIdentifier] = useState('') // Can be personnummer or email
+  const [email, setEmail] = useState('')
   const [password, setPassword] = useState('')
   const [showPassword, setShowPassword] = useState(false)
   const [isLoading, setIsLoading] = useState(false)
@@ -25,61 +25,23 @@ export default function Login() {
     setHasPasskeys(false)
   }, [])
 
-  // Detect if input is email or personnummer
-  const isEmail = (value: string): boolean => {
-    return value.includes('@') && value.includes('.')
-  }
-
-  const handleIdentifierChange = (e: React.ChangeEvent<HTMLInputElement>) => {
-    const inputValue = e.target.value
-    
-    // If it looks like an email, allow it as-is
-    if (isEmail(inputValue)) {
-      setIdentifier(inputValue)
-      return
-    }
-    
-    // Otherwise, treat as personnummer - extract digits only
-    const cleaned = inputValue.replace(/\D/g, '')
-    
-    // Allow up to 12 digits (for YYYYMMDDNNNN format)
-    if (cleaned.length <= 12) {
-      setIdentifier(cleaned)
-    }
-  }
-
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault()
     setIsLoading(true)
 
     try {
-      // Validate input
-      if (isEmail(identifier)) {
-        // Email validation
-        if (!identifier.includes('@') || !identifier.includes('.')) {
-          toast({
-            title: 'Fel',
-            description: 'Ange en giltig e-postadress',
-            variant: 'destructive',
-          })
-          setIsLoading(false)
-          return
-        }
-      } else {
-        // Personnummer validation
-        const fullPersonnummer = identifier.replace(/\D/g, '')
-      if (fullPersonnummer.length < 10) {
+      // Validate email
+      if (!email.includes('@') || !email.includes('.')) {
         toast({
           title: 'Fel',
-          description: 'Personnummer måste vara minst 10 siffror',
+          description: 'Ange en giltig e-postadress',
           variant: 'destructive',
         })
         setIsLoading(false)
         return
-        }
       }
 
-      await signIn(identifier, password)
+      await signIn(email.trim(), password)
       
       toast({
         title: 'Välkommen!',
@@ -101,7 +63,7 @@ export default function Login() {
       } else if (errorMessage.includes('Felaktigt') || errorMessage.includes('incorrect')) {
         toast({
           title: 'Inloggning misslyckades',
-          description: 'Felaktigt personnummer/e-post eller lösenord',
+          description: 'Felaktigt e-post eller lösenord',
           variant: 'destructive',
         })
       } else {
@@ -116,52 +78,25 @@ export default function Login() {
     }
   }
 
-  // Display: progressive masking for personnummer only
-  const getDisplayValue = () => {
-    // If it's an email, show as-is
-    if (isEmail(identifier)) {
-      return identifier
-    }
-    
-    // For personnummer, apply progressive masking
-    if (identifier.length <= 8) {
-      return identifier
-    }
-    const first8 = identifier.slice(0, 8)
-    const after8 = identifier.slice(8)
-    
-    // If we have all 12 digits, mask the last 4
-    if (identifier.length === 12) {
-      return first8 + '****'
-    }
-    
-    // Otherwise show progressive: typed digits + mask remaining
-    const remaining = 4 - after8.length
-    return first8 + after8 + '*'.repeat(remaining)
-  }
-  
-  const displayValue = getDisplayValue()
-
   return (
     <div className="min-h-screen flex items-center justify-center bg-background p-4">
       <Card className="w-full max-w-md">
         <CardHeader>
           <CardTitle>Logga in</CardTitle>
           <CardDescription>
-            Ange ditt personnummer eller e-post och lösenord
+            Ange din e-post och lösenord
           </CardDescription>
         </CardHeader>
         <CardContent>
           <form onSubmit={handleSubmit} className="space-y-4">
             <div className="space-y-2">
-              <Label htmlFor="identifier">Personnummer eller e-post</Label>
+              <Label htmlFor="email">E-post</Label>
               <Input
-                id="identifier"
-                type="text"
-                inputMode={isEmail(identifier) ? 'email' : 'numeric'}
-                value={displayValue}
-                onChange={handleIdentifierChange}
-                placeholder="200404021234 eller din@epost.se"
+                id="email"
+                type="email"
+                value={email}
+                onChange={(e) => setEmail(e.target.value)}
+                placeholder="din@epost.se"
                 required
                 disabled={isLoading}
               />

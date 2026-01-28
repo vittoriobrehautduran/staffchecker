@@ -82,7 +82,10 @@ export const handler = async (
         let emailBody = `Timrapport för ${monthName} ${lastMonthYear}\n\n`
         emailBody += `Anställd: ${report.name} ${report.last_name}\n`
         emailBody += `E-post: ${report.email}\n`
-        emailBody += `Personnummer: ${report.personnummer}\n\n`
+        if (report.personnummer) {
+          emailBody += `Personnummer: ${report.personnummer}\n`
+        }
+        emailBody += '\n'
         emailBody += `Timmar:\n`
         emailBody += `${'='.repeat(50)}\n\n`
 

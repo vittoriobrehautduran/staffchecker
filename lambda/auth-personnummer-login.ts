@@ -2,18 +2,46 @@ import { APIGatewayProxyEvent, APIGatewayProxyResult } from 'aws-lambda'
 import { sql } from './utils/database'
 import { auth } from '../src/lib/auth'
 
+// Helper function to get CORS origin from request
+function getCorsOrigin(event: APIGatewayProxyEvent): string {
+  const requestOrigin = event.headers?.Origin || event.headers?.origin || '*'
+  const allowedOrigins = [
+    'http://localhost:5173',
+    'https://main.d3jub8c52hgrc6.amplifyapp.com',
+  ]
+  return allowedOrigins.includes(requestOrigin) ? requestOrigin : allowedOrigins[0]
+}
+
 // Custom login handler that looks up email by personnummer, then uses Better Auth
 export const handler = async (
   event: APIGatewayProxyEvent
 ): Promise<APIGatewayProxyResult> => {
+  // Handle OPTIONS preflight requests
+  if (event.httpMethod === 'OPTIONS') {
+    const origin = getCorsOrigin(event)
+    return {
+      statusCode: 200,
+      headers: {
+        'Access-Control-Allow-Origin': origin,
+        'Access-Control-Allow-Credentials': 'true',
+        'Access-Control-Allow-Methods': 'POST,OPTIONS',
+        'Access-Control-Allow-Headers': 'Content-Type,Authorization,Cookie',
+        'Access-Control-Max-Age': '86400', // 24 hours
+      },
+      body: '',
+    }
+  }
+
   const httpMethod = event.httpMethod || 'POST'
   
   if (httpMethod !== 'POST') {
+    const origin = getCorsOrigin(event)
     return {
       statusCode: 405,
       headers: {
         'Content-Type': 'application/json',
-        'Access-Control-Allow-Origin': '*',
+        'Access-Control-Allow-Origin': origin,
+        'Access-Control-Allow-Credentials': 'true',
       },
       body: JSON.stringify({ message: 'Method not allowed' }),
     }
@@ -21,74 +49,22 @@ export const handler = async (
 
   try {
     const body = JSON.parse(event.body || '{}')
-    const { identifier, password } = body
+    const { email, password } = body
 
-    if (!identifier || !password) {
+    if (!email || !password) {
+      const origin = getCorsOrigin(event)
       return {
         statusCode: 400,
         headers: {
           'Content-Type': 'application/json',
-          'Access-Control-Allow-Origin': '*',
+          'Access-Control-Allow-Origin': origin,
+          'Access-Control-Allow-Credentials': 'true',
         },
-        body: JSON.stringify({ message: 'Personnummer/e-post och lösenord krävs' }),
+        body: JSON.stringify({ message: 'E-post och lösenord krävs' }),
       }
     }
 
-    // Check if identifier is email or personnummer
-    const isEmail = identifier.includes('@') && identifier.includes('.')
-    let userEmail: string | null = null
-
-    if (isEmail) {
-      userEmail = identifier.toLowerCase().trim()
-    } else {
-      // Personnummer login - look up email by personnummer
-      const cleanPersonnummer = identifier.replace(/\D/g, '')
-
-      // Find user by personnummer
-      const users = await sql`
-        SELECT email, better_auth_user_id
-        FROM users 
-        WHERE personnummer = ${cleanPersonnummer}
-        LIMIT 1
-      `
-
-      if (users.length === 0) {
-        return {
-          statusCode: 401,
-          headers: {
-            'Content-Type': 'application/json',
-            'Access-Control-Allow-Origin': '*',
-          },
-          body: JSON.stringify({ message: 'Felaktigt personnummer eller lösenord' }),
-        }
-      }
-
-      const user = users[0]
-
-      if (!user.better_auth_user_id) {
-        return {
-          statusCode: 401,
-          headers: {
-            'Content-Type': 'application/json',
-            'Access-Control-Allow-Origin': '*',
-          },
-          body: JSON.stringify({ message: 'Användaren är inte korrekt registrerad' }),
-        }
-      }
-      
-      userEmail = user.email
-    }
-
-    if (!userEmail) {
-      return {
-        statusCode: 401,
-        headers: {
-          'Content-Type': 'application/json',
-          'Access-Control-Allow-Origin': '*',
-        },
-        body: JSON.stringify({ message: 'Felaktigt personnummer eller lösenord' }),
-      }
-    }
+    const userEmail = email.toLowerCase().trim()
 
     // Use Better Auth to sign in with email and password
     const protocol = event.headers?.['X-Forwarded-Proto'] || event.headers?.['x-forwarded-proto'] || 'https'
@@ -112,24 +88,32 @@ export const handler = async (
     const authResponse = await auth.handler(signInRequest)
 
     if (!authResponse || authResponse.status !== 200) {
-      const error: { message?: string } = await authResponse?.json().catch(() => ({ message: 'Felaktigt personnummer eller lösenord' })) || { message: 'Felaktigt personnummer eller lösenord' }
+      const error: { message?: string } = await authResponse?.json().catch(() => ({ message: 'Felaktigt e-post eller lösenord' })) || { message: 'Felaktigt e-post eller lösenord' }
+      const origin = getCorsOrigin(event)
       return {
         statusCode: 401,
         headers: {
           'Content-Type': 'application/json',
-          'Access-Control-Allow-Origin': '*',
+          'Access-Control-Allow-Origin': origin,
+          'Access-Control-Allow-Credentials': 'true',
         },
-        body: JSON.stringify({ message: error?.message || 'Felaktigt personnummer eller lösenord' }),
+        body: JSON.stringify({ message: error?.message || 'Felaktigt e-post eller lösenord' }),
       }
     }
 
     // Get response body and headers
     const responseBody = await authResponse.text()
+    const origin = getCorsOrigin(event)
     const responseHeaders: Record<string, string> = {
-      'Access-Control-Allow-Origin': '*',
+      'Access-Control-Allow-Origin': origin,
+      'Access-Control-Allow-Credentials': 'true',
     }
+    // Copy headers from Better Auth response, but exclude CORS headers
     authResponse.headers.forEach((value, key) => {
-      responseHeaders[key] = value
+      const lowerKey = key.toLowerCase()
+      if (!lowerKey.startsWith('access-control-')) {
+        responseHeaders[key] = value
+      }
     })
 
     return {
@@ -139,11 +123,13 @@ export const handler = async (
     }
   } catch (error: any) {
     console.error('Login error:', error)
+    const origin = getCorsOrigin(event)
     return {
       statusCode: 500,
       headers: {
         'Content-Type': 'application/json',
-        'Access-Control-Allow-Origin': '*',
+        'Access-Control-Allow-Origin': origin,
+        'Access-Control-Allow-Credentials': 'true',
       },
       body: JSON.stringify({ message: error.message || 'Internal server error' }),
     }

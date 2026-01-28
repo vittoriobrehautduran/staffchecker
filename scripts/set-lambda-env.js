@@ -131,6 +131,7 @@ async function setAllFunctionEnvironments() {
     `${PROJECT_NAME}-auth-personnummer-login`,
     `${PROJECT_NAME}-auto-submit-reports`,
     `${PROJECT_NAME}-create-entry`,
+    `${PROJECT_NAME}-create-user-better-auth`,
     `${PROJECT_NAME}-delete-entry`,
     `${PROJECT_NAME}-get-entries`,
     `${PROJECT_NAME}-get-report`,

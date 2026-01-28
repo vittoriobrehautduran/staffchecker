@@ -47,9 +47,9 @@ export const handler = async (
 
   try {
     const body = JSON.parse(event.body || '{}')
-    const { email, firstName, lastName, personnummer, betterAuthUserId } = body
+    const { email, firstName, lastName, betterAuthUserId } = body
 
-    if (!email || !firstName || !lastName || !personnummer || !betterAuthUserId) {
+    if (!email || !firstName || !lastName || !betterAuthUserId) {
       const origin = getCorsOrigin(event)
       return {
         statusCode: 400,
@@ -62,12 +62,10 @@ export const handler = async (
       }
     }
 
-    const cleanPersonnummer = personnummer.replace(/\D/g, '')
-
     // Check if user already exists
     const existingUser = await sql`
       SELECT id FROM users 
-      WHERE personnummer = ${cleanPersonnummer} OR email = ${email.trim().toLowerCase()}
+      WHERE email = ${email.trim().toLowerCase()}
       LIMIT 1
     `
 
@@ -84,10 +82,10 @@ export const handler = async (
       }
     }
 
-    // Insert user
+    // Insert user (personnummer is optional/nullable in database)
     await sql`
-      INSERT INTO users (name, last_name, personnummer, email, better_auth_user_id)
-      VALUES (${firstName}, ${lastName}, ${cleanPersonnummer}, ${email.trim().toLowerCase()}, ${betterAuthUserId})
+      INSERT INTO users (name, last_name, email, better_auth_user_id)
+      VALUES (${firstName}, ${lastName}, ${email.trim().toLowerCase()}, ${betterAuthUserId})
     `
 
     const origin = getCorsOrigin(event)

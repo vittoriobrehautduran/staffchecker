@@ -12,12 +12,11 @@ interface AuthContextType {
   user: User | null
   isLoading: boolean
   isSignedIn: boolean
-  signIn: (identifier: string, password: string) => Promise<void>
+  signIn: (email: string, password: string) => Promise<void>
   signUp: (data: {
     email: string
     firstName: string
     lastName: string
-    personnummer: string
     password: string
   }) => Promise<void>
   signOut: () => Promise<void>
@@ -73,26 +72,15 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     }
   }, [])
 
-  const signIn = async (identifier: string, password: string) => {
-    // Identifier can be personnummer or email
-    // Look up email by personnummer or use email directly, then sign in with Better Auth
-    const API_BASE_URL = import.meta.env.VITE_API_BASE_URL || ''
-    if (!API_BASE_URL) {
-      throw new Error('VITE_API_BASE_URL är inte konfigurerad')
-    }
-
-    const loginResponse = await fetch(`${API_BASE_URL.replace(/\/$/, '')}/auth-personnummer-login`, {
-      method: 'POST',
-      headers: {
-        'Content-Type': 'application/json',
-      },
-      body: JSON.stringify({ identifier, password }),
-      credentials: 'include',
+  const signIn = async (email: string, password: string) => {
+    // Sign in with Better Auth using email and password
+    const result = await authClient.signIn.email({
+      email: email.trim(),
+      password,
     })
 
-    if (!loginResponse.ok) {
-      const error = await loginResponse.json()
-      throw new Error(error.message || 'Inloggning misslyckades')
+    if (result.error) {
+      throw new Error(result.error.message || 'Inloggning misslyckades')
     }
 
     // Refresh session after login
@@ -115,7 +103,6 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     email: string
     firstName: string
     lastName: string
-    personnummer: string
     password: string
   }) => {
     // First, sign up with Better Auth
@@ -135,7 +122,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       throw new Error('Kunde inte skapa användare i Better Auth')
     }
 
-    // Then, create user record in our users table with personnummer
+    // Then, create user record in our users table
     const API_BASE_URL = import.meta.env.VITE_API_BASE_URL || ''
     if (!API_BASE_URL) {
       throw new Error('VITE_API_BASE_URL är inte konfigurerad')
@@ -150,7 +137,6 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         email: data.email,
         firstName: data.firstName,
         lastName: data.lastName,
-        personnummer: data.personnummer,
         betterAuthUserId: result.data.user.id,
       }),
       credentials: 'include',
