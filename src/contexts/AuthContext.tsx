@@ -83,19 +83,46 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       throw new Error(result.error.message || 'Inloggning misslyckades')
     }
 
-    // Refresh session after login
-    const sessionData = await authClient.$fetch('/session', {
-      method: 'GET',
-    })
-    // Better Auth $fetch wraps responses in {data, error}
-    const userData = (sessionData as any)?.data
-    if (userData && typeof userData === 'object' && 'user' in userData) {
-      setUser(userData.user || null)
-    } else if (userData && typeof userData === 'object' && 'email' in userData) {
-      // Sometimes user data is returned directly
-      setUser(userData || null)
+    // Wait a moment for cookies to be set
+    await new Promise(resolve => setTimeout(resolve, 100))
+
+    // Refresh session after login - try multiple times if needed
+    let attempts = 0
+    let userData = null
+    
+    while (attempts < 3 && !userData) {
+      try {
+        const sessionData = await authClient.$fetch('/session', {
+          method: 'GET',
+        })
+        // Better Auth $fetch wraps responses in {data, error}
+        const data = (sessionData as any)?.data
+        if (data && typeof data === 'object') {
+          if ('user' in data) {
+            userData = data.user
+          } else if ('email' in data) {
+            userData = data
+          }
+        }
+      } catch (error) {
+        console.warn('Session fetch attempt', attempts + 1, 'failed:', error)
+      }
+      
+      if (!userData && attempts < 2) {
+        await new Promise(resolve => setTimeout(resolve, 200))
+      }
+      attempts++
+    }
+
+    if (userData) {
+      setUser(userData)
     } else {
-      setUser(null)
+      // If we can't get session, still set user from signIn result if available
+      if (result.data?.user) {
+        setUser(result.data.user)
+      } else {
+        throw new Error('Kunde inte hämta användarsession efter inloggning')
+      }
     }
   }
 

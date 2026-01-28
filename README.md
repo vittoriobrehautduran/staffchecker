@@ -42,12 +42,25 @@ BETTER_AUTH_SECRET=...
 - Format: `postgresql://user:password@host/database?sslmode=require`
 - Exempel: `postgresql://neondb_owner:password@ep-xxx.aws.neon.tech/neondb?sslmode=require`
 
-3. För lokal utveckling (endast frontend):
+3. För lokal utveckling:
 ```bash
 npm run dev
 ```
 
-**OBS:** För full funktionalitet behöver du köra Lambda-funktionerna lokalt eller använda din API Gateway URL i `VITE_API_BASE_URL`.
+**Lokal utveckling med AWS Lambda:**
+- Frontend körs lokalt på `http://localhost:5173`
+- Backend (Lambda) körs på AWS API Gateway
+- Sätt `VITE_API_BASE_URL` i `.env.local` till din API Gateway URL:
+  ```env
+  VITE_API_BASE_URL=https://ywqlyoek80.execute-api.eu-north-1.amazonaws.com/prod
+  ```
+- Alla API-anrop går till din riktiga API Gateway (Lambda-funktioner körs i AWS)
+- Detta är liknande `netlify dev` men använder AWS Lambda istället
+
+**OBS:** 
+- Du kan inte köra Lambda-funktionerna lokalt enkelt (kräver AWS SAM eller Docker)
+- För lokal utveckling, använd din API Gateway URL så att alla anrop går till AWS
+- Se till att `VITE_API_BASE_URL` är en fullständig URL som börjar med `https://`
 
 ## Bygga för produktion
 

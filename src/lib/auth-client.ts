@@ -11,6 +11,16 @@ function getAuthBaseURL(): string {
   
   if (apiBaseUrl) {
     const base = apiBaseUrl.trim()
+    
+    // Validate it's a proper URL
+    if (!base.startsWith('http://') && !base.startsWith('https://')) {
+      throw new Error(
+        `VITE_API_BASE_URL måste vara en fullständig URL som börjar med http:// eller https://. ` +
+        `Nuvarande värde: "${base}". ` +
+        `Exempel: https://xxxxx.execute-api.region.amazonaws.com/prod`
+      )
+    }
+    
     // Remove trailing slash if present
     const cleanBase = base.replace(/\/+$/, '')
     // Add /auth path if not already present
