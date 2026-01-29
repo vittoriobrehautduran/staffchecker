@@ -110,12 +110,9 @@ export default function Report() {
           if (dateStr && entriesMap[dateStr]) {
             entriesMap[dateStr].entries.push(entry)
           } else {
-            console.warn('Entry date not found in entriesMap:', dateStr, 'Entry:', entry)
           }
         })
       }
-      
-      console.log('Loaded entries:', reportData?.entries?.length || 0, 'entries for month', month, year)
       
       setMonthEntries(entriesMap)
     } catch (error: any) {

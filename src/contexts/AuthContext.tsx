@@ -52,11 +52,6 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         
         if (!isMounted) return
         
-        // Log the raw response for debugging
-        if (isInitialLoad && retryCount === 0) {
-          console.log('Session response:', sessionData)
-        }
-        
         // Check for error in response
         if ((sessionData as any)?.error) {
           throw new Error((sessionData as any).error.message || 'Session check failed')
@@ -92,7 +87,6 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         if (isInitialLoad) {
           // Retry if we haven't exceeded max retries
           if (retryCount < maxRetries) {
-            console.log(`Session check failed, retrying... (${retryCount + 1}/${maxRetries})`)
             await new Promise(resolve => setTimeout(resolve, 500))
             return fetchSession(isInitialLoad, retryCount + 1)
           }
@@ -109,7 +103,6 @@ export function AuthProvider({ children }: { children: ReactNode }) {
                                  !error?.response
           
           if (isNetworkError) {
-            console.log(`Network error, retrying session check... (${retryCount + 1}/${maxRetries})`)
             await new Promise(resolve => setTimeout(resolve, 500))
             return fetchSession(isInitialLoad, retryCount + 1)
           }
@@ -206,7 +199,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
           }
         }
       } catch (error) {
-        console.warn('Session fetch attempt', attempts + 1, 'failed:', error)
+        // Session fetch failed, will retry
       }
       
       if (!userData && attempts < 2) {
@@ -233,8 +226,28 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     lastName: string
     password: string
   }) => {
+    // Before registering, check if there's an unverified account for this email
+    // If it exists and is older than 2 minutes, delete it so user can register again
+    const API_BASE_URL = import.meta.env.VITE_API_BASE_URL || ''
+    if (API_BASE_URL) {
+      try {
+        // Try to delete unverified account (will fail silently if it doesn't exist or is verified)
+        await fetch(`${API_BASE_URL.replace(/\/$/, '')}/delete-unverified-user`, {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+          },
+          credentials: 'include',
+          body: JSON.stringify({ email: data.email.trim().toLowerCase() }),
+        })
+        // Don't wait or throw - just attempt cleanup, continue with registration
+      } catch (error) {
+        // Ignore errors - continue with registration attempt
+      }
+    }
+
     // First, sign up with Better Auth
-    const result = await authClient.signUp.email({
+    let result = await authClient.signUp.email({
       email: data.email,
       password: data.password,
       name: `${data.firstName} ${data.lastName}`,
@@ -243,7 +256,59 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     // Check for errors from Better Auth
     if (result.error) {
       const errorMessage = result.error.message || result.error.code || 'Kunde inte skapa användare i Better Auth'
-      throw new Error(errorMessage)
+      const errorCode = result.error.code || ''
+      
+      // If user already exists, try to delete unverified account and retry once
+      if (errorCode === 'USER_ALREADY_EXISTS_USE_ANOTHER_EMAIL' || 
+          errorMessage.includes('already exists') || 
+          errorMessage.includes('User already exists')) {
+        
+        // Try to delete unverified account
+        if (API_BASE_URL) {
+          try {
+            const deleteResponse = await fetch(`${API_BASE_URL.replace(/\/$/, '')}/delete-unverified-user`, {
+              method: 'POST',
+              headers: {
+                'Content-Type': 'application/json',
+              },
+              credentials: 'include',
+              body: JSON.stringify({ email: data.email.trim().toLowerCase() }),
+            })
+            
+            const deleteResult = await deleteResponse.json()
+            
+            // If deletion was successful (or account was too new), retry registration
+            if (deleteResponse.ok && (deleteResult.deleted || deleteResult.canDelete === false)) {
+              // Wait a moment, then retry
+              await new Promise(resolve => setTimeout(resolve, 500))
+              
+              const retryResult = await authClient.signUp.email({
+                email: data.email,
+                password: data.password,
+                name: `${data.firstName} ${data.lastName}`,
+              })
+              
+              if (retryResult.error) {
+                // Still failed after retry - might be verified user
+                throw new Error('E-postadressen är redan registrerad och verifierad. Logga in istället.')
+              }
+              
+              // Retry succeeded - continue with the retry result
+              result = retryResult
+            } else {
+              // Couldn't delete - probably verified user
+              throw new Error('E-postadressen är redan registrerad. Logga in istället.')
+            }
+          } catch (deleteError) {
+            // Deletion failed - probably verified user
+            throw new Error('E-postadressen är redan registrerad. Logga in istället.')
+          }
+        } else {
+          throw new Error(errorMessage)
+        }
+      } else {
+        throw new Error(errorMessage)
+      }
     }
 
     if (!result.data?.user?.id) {
@@ -251,7 +316,6 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     }
 
     // Then, create user record in our users table
-    const API_BASE_URL = import.meta.env.VITE_API_BASE_URL || ''
     if (!API_BASE_URL) {
       throw new Error('VITE_API_BASE_URL är inte konfigurerad')
     }
@@ -274,6 +338,24 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       const error = await createUserResponse.json()
       throw new Error(error.message || 'Kunde inte skapa användare')
     }
+
+    // Automatically send verification email after successful registration
+    try {
+      const emailToVerify = data.email.trim().toLowerCase()
+      const sendCodeResult = await authClient.$fetch('/email-otp/send-verification-otp', {
+        method: 'POST',
+        body: {
+          email: emailToVerify,
+          type: 'email-verification',
+        },
+      })
+      
+      if ((sendCodeResult as any)?.error) {
+        // Don't throw - registration was successful, user can resend code
+      }
+    } catch (error: any) {
+      // Don't throw - registration was successful, user can resend code manually
+    }
   }
 
   const signOut = async () => {
@@ -292,8 +374,6 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       },
     })
     
-    console.log('Email OTP verification result:', result)
-    
     if ((result as any)?.error) {
       throw new Error((result as any).error.message || 'Ogiltig verifieringskod')
     }
@@ -306,17 +386,14 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     const sessionData = await authClient.$fetch('/session', {
       method: 'GET',
     })
-    console.log('Session data after verification:', sessionData)
     
     // Better Auth $fetch wraps responses in {data, error}
     const userData = (sessionData as any)?.data
     if (userData && typeof userData === 'object' && 'user' in userData) {
       const user = userData.user
-      console.log('User emailVerified status:', user?.emailVerified)
       setUser(user || null)
     } else if (userData && typeof userData === 'object' && 'email' in userData) {
       // Sometimes the user data is returned directly
-      console.log('User emailVerified status:', userData?.emailVerified)
       setUser(userData || null)
     } else {
       setUser(null)
@@ -340,9 +417,6 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     // In development, the server includes the OTP code in the response
     // In production, the code is sent via email
     const code = (result as any)?.data?.code || (result as any)?.data?.otp || (result as any)?.code || ''
-    if (code) {
-      console.log('Verification code (for testing):', code)
-    }
     return code
   }
 

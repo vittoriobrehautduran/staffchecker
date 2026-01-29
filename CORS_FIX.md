@@ -38,8 +38,9 @@ Go to each Lambda function and verify these environment variables are set:
 - `DATABASE_URL` - Your Neon database connection string
 - `BETTER_AUTH_SECRET` - Generate with: `openssl rand -base64 32`
 - `BETTER_AUTH_URL` - Your Amplify frontend URL (e.g., `https://yourapp.amplifyapp.com`)
-- `RESEND_API_KEY` (optional, for email)
-- `RESEND_FROM_EMAIL` (optional, for email)
+- `SES_FROM_EMAIL` or `AWS_SES_FROM_EMAIL` - Verified sender email address in AWS SES (for email verification)
+- `SES_REGION` or `AWS_SES_REGION` - AWS region for SES (defaults to `eu-north-1` if not set)
+  - Note: `AWS_REGION` is reserved by Lambda and cannot be set as an environment variable
 
 **For other Lambda functions:**
 - `DATABASE_URL`

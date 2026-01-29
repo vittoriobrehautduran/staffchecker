@@ -6,7 +6,7 @@ import { Label } from '@/components/ui/label'
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card'
 import { useToast } from '@/components/ui/use-toast'
 import { useAuth } from '@/contexts/AuthContext'
-import { Mail, User, Lock, UserPlus } from 'lucide-react'
+import { Mail, User, Lock, UserPlus, Eye, EyeOff } from 'lucide-react'
 import { LoadingSpinner, PremiumLoadingOverlay } from '@/components/ui/loading-spinner'
 
 export default function Register() {
@@ -14,6 +14,7 @@ export default function Register() {
   const [firstName, setFirstName] = useState('')
   const [lastName, setLastName] = useState('')
   const [password, setPassword] = useState('')
+  const [showPassword, setShowPassword] = useState(false)
   const [isLoading, setIsLoading] = useState(false)
   const { signUp } = useAuth()
   const navigate = useNavigate()
@@ -41,8 +42,9 @@ export default function Register() {
         description: 'Du kommer att få en verifieringskod via e-post',
       })
 
-      // Store email for verification page
+      // Store email and registration timestamp for verification page
       localStorage.setItem('pending_verification_email', email.trim().toLowerCase())
+      localStorage.setItem('registration_timestamp', Date.now().toString())
       
       // Navigate to email verification page
       navigate('/verify-email')
@@ -164,16 +166,32 @@ export default function Register() {
                 <Lock className="h-4 w-4 text-muted-foreground" />
                 Lösenord
               </Label>
-              <Input
-                id="password"
-                type="password"
-                value={password}
-                onChange={(e) => setPassword(e.target.value)}
-                placeholder="Minst 8 tecken"
-                required
-                disabled={isLoading}
-                className="h-12 bg-white/50 dark:bg-gray-800/50 border-gray-200 dark:border-gray-700 focus:border-purple-500 focus:ring-2 focus:ring-purple-500/20 transition-all duration-200"
-              />
+              <div className="relative">
+                <Input
+                  id="password"
+                  type={showPassword ? 'text' : 'password'}
+                  value={password}
+                  onChange={(e) => setPassword(e.target.value)}
+                  placeholder="Minst 8 tecken"
+                  required
+                  disabled={isLoading}
+                  className="h-12 pl-4 pr-12 bg-white/50 dark:bg-gray-800/50 border-gray-200 dark:border-gray-700 focus:border-purple-500 focus:ring-2 focus:ring-purple-500/20 transition-all duration-200"
+                />
+                <Button
+                  type="button"
+                  variant="ghost"
+                  size="sm"
+                  className="absolute right-0 top-0 h-full px-3 py-2 hover:bg-transparent"
+                  onClick={() => setShowPassword((prev) => !prev)}
+                  disabled={isLoading}
+                >
+                  {showPassword ? (
+                    <EyeOff className="h-5 w-5 text-muted-foreground" />
+                  ) : (
+                    <Eye className="h-5 w-5 text-muted-foreground" />
+                  )}
+                </Button>
+              </div>
             </div>
             <Button 
               type="submit" 

@@ -69,7 +69,7 @@ const commonEnvVars = {
   BETTER_AUTH_URL: process.env.BETTER_AUTH_URL || process.env.VITE_API_BASE_URL?.replace('/.netlify/functions', '') || '',
 }
 
-// Environment variables for email functions
+// Environment variables for email functions (SES for reports)
 const emailEnvVars = {
   AWS_SES_REGION: process.env.AWS_SES_REGION || 'eu-north-1',
   AWS_SES_ACCESS_KEY_ID: process.env.AWS_SES_ACCESS_KEY_ID,
@@ -77,8 +77,18 @@ const emailEnvVars = {
   BOSS_EMAIL_ADDRESS: process.env.BOSS_EMAIL_ADDRESS,
 }
 
-// Functions that need email env vars
+// Environment variables for auth function (SES for email verification)
+// Note: AWS_REGION is reserved by Lambda, so we use SES_REGION instead
+const authEmailEnvVars = {
+  SES_FROM_EMAIL: process.env.SES_FROM_EMAIL || process.env.AWS_SES_FROM_EMAIL,
+  SES_REGION: process.env.SES_REGION || process.env.AWS_SES_REGION || process.env.AWS_REGION || process.env.AWS_DEFAULT_REGION || 'eu-north-1',
+}
+
+// Functions that need email env vars for reports
 const emailFunctions = ['submit-report', 'auto-submit-reports']
+
+// Functions that need SES for email verification
+const authFunctions = ['auth']
 
 async function setFunctionEnvironment(functionName) {
   try {
@@ -101,9 +111,23 @@ async function setFunctionEnvironment(functionName) {
       Object.assign(newEnvVars, emailEnvVars)
     }
     
-    // Remove undefined values
+    // Add SES vars for auth function (email verification)
+    if (authFunctions.includes(functionBaseName)) {
+      Object.assign(newEnvVars, authEmailEnvVars)
+      // Log what we're trying to set for debugging
+      console.log(`  Setting SES vars for ${functionName}:`, {
+        SES_FROM_EMAIL: authEmailEnvVars.SES_FROM_EMAIL ? 'SET' : 'NOT SET',
+        SES_REGION: authEmailEnvVars.SES_REGION,
+      })
+    }
+    
+    // Remove undefined values (but keep empty strings for SES_REGION default)
     Object.keys(newEnvVars).forEach(key => {
-      if (newEnvVars[key] === undefined || newEnvVars[key] === '') {
+      if (newEnvVars[key] === undefined) {
+        delete newEnvVars[key]
+      }
+      // Keep SES_REGION even if it's the default value
+      if (key === 'SES_REGION' && newEnvVars[key] === '') {
         delete newEnvVars[key]
       }
     })
@@ -118,7 +142,18 @@ async function setFunctionEnvironment(functionName) {
       })
     )
     
-    console.log(`✅ Updated environment variables for ${functionName}`)
+    // Show what was set for auth function
+    if (authFunctions.includes(functionBaseName)) {
+      const sesVars = Object.keys(newEnvVars).filter(key => key.includes('SES'))
+      console.log(`✅ Updated environment variables for ${functionName}`)
+      if (sesVars.length > 0) {
+        console.log(`   SES variables: ${sesVars.join(', ')}`)
+      } else {
+        console.log(`   ⚠️  No SES variables found - make sure SES_FROM_EMAIL is set in .env.local`)
+      }
+    } else {
+      console.log(`✅ Updated environment variables for ${functionName}`)
+    }
   } catch (error) {
     console.error(`❌ Error updating ${functionName}:`, error.message)
     throw error
@@ -130,9 +165,11 @@ async function setAllFunctionEnvironments() {
     `${PROJECT_NAME}-auth`,
     `${PROJECT_NAME}-auth-personnummer-login`,
     `${PROJECT_NAME}-auto-submit-reports`,
+    `${PROJECT_NAME}-cleanup-unverified-users`,
     `${PROJECT_NAME}-create-entry`,
     `${PROJECT_NAME}-create-user-better-auth`,
     `${PROJECT_NAME}-delete-entry`,
+    `${PROJECT_NAME}-delete-unverified-user`,
     `${PROJECT_NAME}-get-entries`,
     `${PROJECT_NAME}-get-report`,
     `${PROJECT_NAME}-submit-report`,

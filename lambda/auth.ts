@@ -309,25 +309,7 @@ export const handler = async (
       if ((process.env.NODE_ENV !== 'production') && 
           relativePath === 'sign-up/email' &&
           response.status === 200) {
-        try {
-          const { db } = await import('../src/lib/auth')
-          const verificationRecords = await db.query.verification.findMany({
-            orderBy: (verification, { desc }) => [desc(verification.createdAt)],
-            limit: 1,
-          })
-          
-          if (verificationRecords.length > 0) {
-            const latestVerification = verificationRecords[0]
-            console.log('\n📧 EMAIL VERIFICATION CODE (Development Only)')
-            console.log('═══════════════════════════════════════════════════')
-            console.log(`Email: ${latestVerification.identifier}`)
-            console.log(`Verification Token: ${latestVerification.value}`)
-            console.log(`Expires At: ${latestVerification.expiresAt}`)
-            console.log('═══════════════════════════════════════════════════\n')
-          }
-        } catch (error) {
-          console.error('Error logging verification code:', error)
-        }
+        // Verification code is sent via email, not logged to console
       }
       
       // Log errors for debugging

@@ -48,10 +48,8 @@ function getAuthBaseURL(): string {
   )
 }
 
-// Get the auth base URL and log it for debugging
+// Get the auth base URL
 const authBaseURL = getAuthBaseURL()
-console.log('🔐 Better Auth baseURL:', authBaseURL)
-console.log('🔐 VITE_API_BASE_URL env var:', import.meta.env.VITE_API_BASE_URL)
 
 export const authClient = createAuthClient({
   baseURL: authBaseURL,

@@ -11,6 +11,7 @@ export default function VerifyEmail() {
   const [code, setCode] = useState('')
   const [email, setEmail] = useState('')
   const [isLoading, setIsLoading] = useState(false)
+  const [timeLeft, setTimeLeft] = useState(120) // 2 minutes in seconds
   const { verifyEmail, resendVerificationCode } = useAuth()
   const navigate = useNavigate()
   const { toast } = useToast()
@@ -20,11 +21,73 @@ export default function VerifyEmail() {
     const pendingEmail = localStorage.getItem('pending_verification_email')
     if (pendingEmail) {
       setEmail(pendingEmail)
+      
+      // Get registration timestamp from localStorage
+      const registrationTime = localStorage.getItem('registration_timestamp')
+      const now = Date.now()
+      const twoMinutes = 2 * 60 * 1000 // 2 minutes in milliseconds
+      
+      if (registrationTime) {
+        const elapsed = now - parseInt(registrationTime, 10)
+        const remaining = Math.max(0, twoMinutes - elapsed)
+        setTimeLeft(Math.floor(remaining / 1000))
+      } else {
+        // If no timestamp, set it now and start from 2 minutes
+        localStorage.setItem('registration_timestamp', now.toString())
+        setTimeLeft(120)
+      }
     } else {
       // If no pending email, redirect to register
       navigate('/register')
     }
   }, [navigate])
+
+  // Countdown timer
+  useEffect(() => {
+    if (timeLeft <= 0) {
+      // Time's up - delete unverified account and redirect
+      const deleteAndRedirect = async () => {
+        try {
+          const apiBaseUrl = import.meta.env.VITE_API_BASE_URL
+          if (apiBaseUrl && email) {
+            await fetch(`${apiBaseUrl}/delete-unverified-user`, {
+              method: 'POST',
+              headers: {
+                'Content-Type': 'application/json',
+              },
+              credentials: 'include',
+              body: JSON.stringify({ email }),
+            })
+          }
+        } catch (error) {
+          console.error('Error deleting unverified account:', error)
+        } finally {
+          localStorage.removeItem('pending_verification_email')
+          localStorage.removeItem('registration_timestamp')
+          toast({
+            title: 'Tiden gick ut',
+            description: 'Din verifieringstid har gått ut. Du kan registrera igen.',
+            variant: 'destructive',
+          })
+          navigate('/register')
+        }
+      }
+      deleteAndRedirect()
+      return
+    }
+
+    const timer = setInterval(() => {
+      setTimeLeft((prev) => {
+        if (prev <= 1) {
+          clearInterval(timer)
+          return 0
+        }
+        return prev - 1
+      })
+    }, 1000)
+
+    return () => clearInterval(timer)
+  }, [timeLeft, email, navigate, toast])
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault()
@@ -38,8 +101,10 @@ export default function VerifyEmail() {
         description: 'Ditt konto är nu aktiverat',
       })
       
-      // Clear pending email
+      // Clear pending email and timestamp immediately after successful verification
+      // This prevents cleanup from deleting the verified account
       localStorage.removeItem('pending_verification_email')
+      localStorage.removeItem('registration_timestamp')
       
       // Session will be updated automatically by Better Auth
       navigate('/report')
@@ -58,13 +123,11 @@ export default function VerifyEmail() {
   const handleResend = async () => {
     setIsLoading(true)
     try {
-      const newCode = await resendVerificationCode(email)
+      await resendVerificationCode(email)
       toast({
         title: 'Kod skickad',
         description: 'En ny verifieringskod har skickats till din e-post',
       })
-      // For testing, show the code (remove in production)
-      console.log('Verification code (for testing):', newCode)
     } catch (error: any) {
       console.error('Resend error:', error)
       toast({
@@ -89,6 +152,19 @@ export default function VerifyEmail() {
           <CardDescription>
             Vi har skickat en verifieringskod till din e-post. Ange koden nedan.
           </CardDescription>
+          {timeLeft > 0 && (
+            <div className="mt-2 text-sm">
+              <span className="text-muted-foreground">Tid kvar: </span>
+              <span className={`font-semibold ${timeLeft <= 30 ? 'text-red-500' : 'text-orange-500'}`}>
+                {Math.floor(timeLeft / 60)}:{(timeLeft % 60).toString().padStart(2, '0')}
+              </span>
+              {timeLeft <= 30 && (
+                <span className="text-red-500 text-xs block mt-1">
+                  Du har {timeLeft} sekunder kvar innan kontot raderas
+                </span>
+              )}
+            </div>
+          )}
         </CardHeader>
         <CardContent>
           <form onSubmit={handleSubmit} className="space-y-4">

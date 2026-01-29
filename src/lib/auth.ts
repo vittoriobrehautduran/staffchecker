@@ -73,7 +73,7 @@ const otpCodeStore = new Map<string, { code: string, timestamp: number }>()
 // Email OTP plugin configuration
 // Sends 6-digit codes via email for verification
 const emailOTPPlugin = emailOTP({
-  sendVerificationOTP: async ({ email, otp, type }) => {
+  sendVerificationOTP: async ({ email, otp, type: _type }) => {
     // Store OTP code for retrieval in development
     otpCodeStore.set(email, { code: otp, timestamp: Date.now() })
     
@@ -85,68 +85,110 @@ const emailOTPPlugin = emailOTP({
       }
     }
 
-    // In development, log to console
-    if (process.env.NETLIFY_DEV || process.env.NODE_ENV !== 'production') {
-      console.log('\n📧 EMAIL VERIFICATION CODE (Development)')
-      console.log('═══════════════════════════════════════════════════')
-      console.log(`Email: ${email}`)
-      console.log(`Verification Code: ${otp}`)
-      console.log(`Type: ${type}`)
-      console.log('═══════════════════════════════════════════════════\n')
-    }
 
-    // Send email via Resend if API key is configured
-    const resendApiKey = process.env.RESEND_API_KEY
-    if (resendApiKey) {
-      try {
-        const resendResponse = await fetch('https://api.resend.com/emails', {
-          method: 'POST',
-          headers: {
-            'Authorization': `Bearer ${resendApiKey}`,
-            'Content-Type': 'application/json',
-          },
-          body: JSON.stringify({
-            from: process.env.RESEND_FROM_EMAIL || 'noreply@example.com',
-            to: email,
-            subject: 'Verifiera din e-post',
-            html: `
-              <h2>Verifiera din e-post</h2>
-              <p>Din verifieringskod är:</p>
-              <h1 style="font-size: 32px; letter-spacing: 8px; text-align: center; margin: 20px 0;">${otp}</h1>
-              <p>Ange denna kod på verifieringssidan för att aktivera ditt konto.</p>
-              <p>Koden är giltig i 10 minuter.</p>
-              <p>Om du inte begärde detta, kan du ignorera detta meddelande.</p>
-            `,
-            text: `Din verifieringskod är: ${otp}\n\nAnge denna kod på verifieringssidan för att aktivera ditt konto.\n\nKoden är giltig i 10 minuter.`,
-          }),
-        })
-
-        if (!resendResponse.ok) {
-          const errorData = await resendResponse.text()
-          console.error('Resend API error:', errorData)
-          throw new Error(`Failed to send email: ${resendResponse.status}`)
-        }
-
-        const result = await resendResponse.json() as { id?: string }
-        console.log('Email sent via Resend:', result.id)
-        return Promise.resolve()
-      } catch (error) {
-        console.error('Error sending email via Resend:', error)
-        // In development, still allow the flow to continue even if email fails
+    // Send email via AWS SES
+    try {
+      // Dynamically import AWS SDK to avoid loading it if not needed
+      const { SESClient, SendEmailCommand } = await import('@aws-sdk/client-ses')
+      
+      // Get AWS region from environment or default to eu-north-1
+      // Note: AWS_REGION is reserved by Lambda, so we use SES_REGION instead
+      const awsRegion = process.env.SES_REGION || process.env.AWS_SES_REGION || 'eu-north-1'
+      const fromEmail = process.env.SES_FROM_EMAIL || process.env.AWS_SES_FROM_EMAIL
+      
+      
+      if (!fromEmail) {
+        // In development, allow continuing without email
         if (process.env.NETLIFY_DEV || process.env.NODE_ENV !== 'production') {
-          console.warn('Continuing in development mode despite email error')
           return Promise.resolve()
+        } else {
+          console.error('SES_FROM_EMAIL environment variable is required for email verification in production')
+          throw new Error('SES_FROM_EMAIL environment variable is required for email verification in production')
         }
-        throw error
       }
-    } else {
-      // No Resend API key - in development, just log to console
+
+      // Create SES client
+      // In Lambda, credentials are automatically provided via IAM role
+      // For local development, AWS SDK will use ~/.aws/credentials or environment variables
+      const sesClient = new SESClient({
+        region: awsRegion,
+      })
+
+      // Email content
+      const htmlContent = `
+        <!DOCTYPE html>
+        <html>
+          <head>
+            <meta charset="utf-8">
+            <meta name="viewport" content="width=device-width, initial-scale=1.0">
+          </head>
+          <body style="font-family: Arial, sans-serif; line-height: 1.6; color: #333; max-width: 600px; margin: 0 auto; padding: 20px;">
+            <div style="background: linear-gradient(135deg, #667eea 0%, #764ba2 100%); padding: 30px; text-align: center; border-radius: 10px 10px 0 0;">
+              <h1 style="color: white; margin: 0; font-size: 28px;">Verifiera din e-post</h1>
+            </div>
+            <div style="background: #f9f9f9; padding: 30px; border-radius: 0 0 10px 10px; border: 1px solid #e0e0e0; border-top: none;">
+              <p style="font-size: 16px; margin-bottom: 20px;">Din verifieringskod är:</p>
+              <div style="background: white; padding: 20px; border-radius: 8px; text-align: center; margin: 20px 0; border: 2px solid #667eea;">
+                <h1 style="font-size: 36px; letter-spacing: 12px; margin: 0; color: #667eea; font-weight: bold;">${otp}</h1>
+              </div>
+              <p style="font-size: 14px; color: #666; margin-top: 20px;">
+                Ange denna kod på verifieringssidan för att aktivera ditt konto.
+              </p>
+              <p style="font-size: 12px; color: #999; margin-top: 30px; padding-top: 20px; border-top: 1px solid #e0e0e0;">
+                Koden är giltig i 10 minuter.<br>
+                Om du inte begärde detta, kan du ignorera detta meddelande.
+              </p>
+            </div>
+          </body>
+        </html>
+      `
+
+      const textContent = `Verifiera din e-post\n\nDin verifieringskod är: ${otp}\n\nAnge denna kod på verifieringssidan för att aktivera ditt konto.\n\nKoden är giltig i 10 minuter.\n\nOm du inte begärde detta, kan du ignorera detta meddelande.`
+
+      // Send email via SES
+      const command = new SendEmailCommand({
+        Source: fromEmail,
+        Destination: {
+          ToAddresses: [email],
+        },
+        Message: {
+          Subject: {
+            Data: 'Verifiera din e-post',
+            Charset: 'UTF-8',
+          },
+          Body: {
+            Html: {
+              Data: htmlContent,
+              Charset: 'UTF-8',
+            },
+            Text: {
+              Data: textContent,
+              Charset: 'UTF-8',
+            },
+          },
+        },
+      })
+
+      await sesClient.send(command)
+      return Promise.resolve()
+    } catch (error: any) {
+      console.error('❌ Error sending email via AWS SES:', {
+        error: error.message,
+        code: error.code,
+        name: error.name,
+        stack: error.stack,
+        email,
+        fromEmail: process.env.SES_FROM_EMAIL || process.env.AWS_SES_FROM_EMAIL || 'NOT SET',
+        region: process.env.SES_REGION || process.env.AWS_SES_REGION || 'NOT SET',
+      })
+      
+      // In development, allow continuing even if email fails
       if (process.env.NETLIFY_DEV || process.env.NODE_ENV !== 'production') {
-        console.warn('RESEND_API_KEY not set - email not sent. Check console for verification code.')
         return Promise.resolve()
-      } else {
-        throw new Error('RESEND_API_KEY environment variable is required for email verification in production')
       }
+      
+      // In production, throw error
+      throw new Error(`Failed to send verification email: ${error.message || 'Unknown error'}`)
     }
   },
 })
@@ -241,9 +283,6 @@ export const auth = betterAuth({
   },
 })
 
-console.log('Better Auth default baseURL (frontend origin):', defaultBaseURL)
-console.log('Better Auth basePath (API Gateway path):', basePath)
-console.log('BETTER_AUTH_URL env var:', process.env.BETTER_AUTH_URL)
 
 // Export function to get auth for a specific origin
 export function getAuth(origin?: string) {
@@ -269,7 +308,6 @@ export async function updateEmailVerified(email: string, verified: boolean) {
       await db.update(schema.user)
         .set({ emailVerified: verified, updatedAt: new Date() })
         .where(eq(schema.user.id, user.id))
-      console.log(`Updated emailVerified for ${email} to ${verified}`)
       return true
     }
     return false
