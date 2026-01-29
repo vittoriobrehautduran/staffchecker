@@ -152,7 +152,6 @@ export default function Report() {
     const updateNextButton = () => {
       const nextButton = document.querySelector('.fc-next-button')
       const currentMonth = format(startOfMonth(currentDate), 'yyyy-MM')
-      const todayMonth = format(startOfMonth(today), 'yyyy-MM')
       const nextMonth = format(startOfMonth(addMonths(today, 1)), 'yyyy-MM')
       
       if (nextButton) {
@@ -290,7 +289,6 @@ export default function Report() {
     const currentMonth = startOfMonth(today)
     const nextMonth = addMonths(currentMonth, 1)
     const newMonthKey = format(newDate, 'yyyy-MM')
-    const currentMonthKey = format(currentMonth, 'yyyy-MM')
     const nextMonthKey = format(nextMonth, 'yyyy-MM')
     
     // Allow navigation to next month (one month forward), but prevent beyond that
@@ -375,7 +373,6 @@ export default function Report() {
               const dateStr = format(arg.date, 'yyyy-MM-dd')
               const dayData = monthEntries[dateStr]
               const dateMonth = format(arg.date, 'yyyy-MM')
-              const todayMonth = format(today, 'yyyy-MM')
               const nextMonth = format(addMonths(today, 1), 'yyyy-MM')
               const classes = ['hover:bg-blue-50', 'active:bg-blue-100', 'cursor-pointer', 'transition-colors', 'touch-manipulation']
               

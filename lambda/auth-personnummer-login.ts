@@ -59,11 +59,11 @@ export const handler = async (
           'Content-Type': 'application/json',
           'Access-Control-Allow-Origin': origin,
           'Access-Control-Allow-Credentials': 'true',
-        },
+          },
         body: JSON.stringify({ message: 'E-post och lösenord krävs' }),
+        }
       }
-    }
-
+      
     const userEmail = email.toLowerCase().trim()
 
     // Use Better Auth to sign in with email and password
@@ -112,7 +112,7 @@ export const handler = async (
     authResponse.headers.forEach((value, key) => {
       const lowerKey = key.toLowerCase()
       if (!lowerKey.startsWith('access-control-')) {
-        responseHeaders[key] = value
+      responseHeaders[key] = value
       }
     })
 

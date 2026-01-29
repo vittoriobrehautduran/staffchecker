@@ -28,7 +28,7 @@ export default function Register() {
     try {
       // Small delay to show the loading animation
       await new Promise(resolve => setTimeout(resolve, 300))
-      
+
       await signUp({
         email: email.trim(),
         firstName,
@@ -110,37 +110,37 @@ export default function Register() {
         <CardContent className="relative space-y-6">
           <form onSubmit={handleSubmit} className="space-y-5">
             <div className="grid grid-cols-2 gap-4">
-              <div className="space-y-2">
+            <div className="space-y-2">
                 <Label htmlFor="firstName" className="text-sm font-medium flex items-center gap-2">
                   <User className="h-4 w-4 text-muted-foreground" />
                   Förnamn
                 </Label>
-                <Input
-                  id="firstName"
-                  type="text"
-                  value={firstName}
-                  onChange={(e) => setFirstName(e.target.value)}
-                  placeholder="Ditt förnamn"
-                  required
-                  disabled={isLoading}
+              <Input
+                id="firstName"
+                type="text"
+                value={firstName}
+                onChange={(e) => setFirstName(e.target.value)}
+                placeholder="Ditt förnamn"
+                required
+                disabled={isLoading}
                   className="h-12 bg-white/50 dark:bg-gray-800/50 border-gray-200 dark:border-gray-700 focus:border-purple-500 focus:ring-2 focus:ring-purple-500/20 transition-all duration-200"
-                />
-              </div>
-              <div className="space-y-2">
+              />
+            </div>
+            <div className="space-y-2">
                 <Label htmlFor="lastName" className="text-sm font-medium flex items-center gap-2">
                   <User className="h-4 w-4 text-muted-foreground" />
                   Efternamn
                 </Label>
-                <Input
-                  id="lastName"
-                  type="text"
-                  value={lastName}
-                  onChange={(e) => setLastName(e.target.value)}
-                  placeholder="Ditt efternamn"
-                  required
-                  disabled={isLoading}
+              <Input
+                id="lastName"
+                type="text"
+                value={lastName}
+                onChange={(e) => setLastName(e.target.value)}
+                placeholder="Ditt efternamn"
+                required
+                disabled={isLoading}
                   className="h-12 bg-white/50 dark:bg-gray-800/50 border-gray-200 dark:border-gray-700 focus:border-purple-500 focus:ring-2 focus:ring-purple-500/20 transition-all duration-200"
-                />
+              />
               </div>
             </div>
             <div className="space-y-2">
@@ -227,7 +227,7 @@ export default function Register() {
           animation-delay: 4s;
         }
       `}</style>
-      </div>
+    </div>
     </>
   )
 }

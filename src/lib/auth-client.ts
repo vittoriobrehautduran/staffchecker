@@ -19,8 +19,8 @@ function getAuthBaseURL(): string {
         `Nuvarande värde: "${base}". ` +
         `Exempel: https://xxxxx.execute-api.region.amazonaws.com/prod`
       )
-    }
-    
+  }
+
     // Remove trailing slash if present
     const cleanBase = base.replace(/\/+$/, '')
     // Add /auth path if not already present
