@@ -34,40 +34,75 @@ export function AuthProvider({ children }: { children: ReactNode }) {
 
   // Fetch session on mount and when auth state changes
   useEffect(() => {
-    const fetchSession = async () => {
+    let isMounted = true
+    let focusTimeout: NodeJS.Timeout | null = null
+
+    const fetchSession = async (isInitialLoad = false) => {
       try {
         const sessionData = await authClient.$fetch('/session', {
           method: 'GET',
         })
+        
+        if (!isMounted) return
+        
         // Better Auth $fetch wraps responses in {data, error}
         const userData = (sessionData as any)?.data
+        
         if (userData && typeof userData === 'object' && 'user' in userData) {
           setUser(userData.user || null)
         } else if (userData && typeof userData === 'object' && 'email' in userData) {
           // Sometimes user data is returned directly
           setUser(userData || null)
         } else {
-          setUser(null)
+          // Only clear user on initial load if no session found
+          // On subsequent checks, keep existing user state if fetch fails
+          if (isInitialLoad) {
+            setUser(null)
+          }
         }
       } catch (error) {
         console.error('Error fetching session:', error)
-        setUser(null)
+        // Only clear user on initial load if session fetch fails
+        // On window focus or periodic checks, don't clear user on transient errors
+        if (isInitialLoad) {
+          setUser(null)
+        }
+        // Otherwise, keep the existing user state - don't log out on transient errors
       } finally {
-        setIsLoading(false)
+        if (isInitialLoad) {
+          setIsLoading(false)
+        }
       }
     }
 
-    fetchSession()
+    // Initial session fetch
+    fetchSession(true)
 
     // Set up a listener for auth state changes
     // Better Auth might have a way to listen to session changes
     // For now, we'll refetch periodically or on focus
-    const interval = setInterval(fetchSession, 60000) // Check every minute
-    const handleFocus = () => fetchSession()
+    const interval = setInterval(() => {
+      fetchSession(false)
+    }, 60000) // Check every minute
+    
+    // Debounce focus handler to avoid rapid successive calls
+    const handleFocus = () => {
+      if (focusTimeout) {
+        clearTimeout(focusTimeout)
+      }
+      focusTimeout = setTimeout(() => {
+        fetchSession(false)
+      }, 300) // Wait 300ms after focus before checking session
+    }
+    
     window.addEventListener('focus', handleFocus)
 
     return () => {
+      isMounted = false
       clearInterval(interval)
+      if (focusTimeout) {
+        clearTimeout(focusTimeout)
+      }
       window.removeEventListener('focus', handleFocus)
     }
   }, [])

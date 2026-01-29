@@ -138,6 +138,9 @@ export const handler = async (
     // Use the actual frontend origin, not the API Gateway origin
     headers.set('origin', frontendOrigin)
     
+    // Log origin for debugging
+    console.log('Request origin:', frontendOrigin)
+    
     // Copy all headers from API Gateway event
     Object.entries(event.headers || {}).forEach(([key, value]) => {
       if (value && typeof value === 'string') {
@@ -173,11 +176,15 @@ export const handler = async (
     // Call Better Auth handler
     try {
       // Lazy load auth to catch initialization errors
+      // Use origin-specific auth instance to handle localhost vs Amplify
       const startTime = Date.now()
       let auth
       try {
         console.log('Starting auth module import...')
-        auth = await getAuth()
+        // Import getAuth function that accepts origin
+        const { getAuth } = await import('../src/lib/auth')
+        // Get auth instance for this specific origin (handles localhost vs Amplify)
+        auth = getAuth(frontendOrigin)
         console.log(`Auth module imported in ${Date.now() - startTime}ms`)
       } catch (authInitError: any) {
         console.error('Failed to initialize Better Auth:', authInitError)

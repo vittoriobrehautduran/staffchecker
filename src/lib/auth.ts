@@ -34,8 +34,19 @@ export const db = drizzle(client, { schema })
 // baseURL should be just the origin (protocol + host) of the frontend
 // Better Auth uses this to construct callback URLs and other absolute URLs
 // basePath should be the API Gateway path to the auth endpoint (e.g., /auth)
-function getBaseURL(): string {
-  // Check environment variable first (most reliable)
+// For local development, we need to accept localhost origins
+function getBaseURL(requestOrigin?: string): string {
+  // If we have a request origin (from API Gateway headers), use it for localhost
+  // This allows local development to work
+  if (requestOrigin) {
+    const origin = requestOrigin.trim()
+    // Allow localhost for local development
+    if (origin.startsWith('http://localhost:') || origin.startsWith('https://localhost:')) {
+      return origin
+    }
+  }
+
+  // Check environment variable (most reliable for production)
   // This should be your Amplify frontend URL (e.g., https://yourapp.amplifyapp.com)
   if (process.env.BETTER_AUTH_URL) {
     const url = process.env.BETTER_AUTH_URL.trim()
@@ -51,13 +62,9 @@ function getBaseURL(): string {
   return 'https://yourapp.amplifyapp.com' // This should be overridden via env var
 }
 
-const baseURL = getBaseURL()
 // API Gateway path to the auth Lambda function
 // This should match your API Gateway route (e.g., /auth)
 const basePath = '/auth'
-console.log('Better Auth baseURL (frontend origin):', baseURL)
-console.log('Better Auth basePath (API Gateway path):', basePath)
-console.log('BETTER_AUTH_URL env var:', process.env.BETTER_AUTH_URL)
 
 // In-memory store for OTP codes in development
 // Keyed by email, stores the latest OTP code for that email
@@ -144,6 +151,88 @@ const emailOTPPlugin = emailOTP({
   },
 })
 
+// Cache for auth instances per origin (to avoid recreating on every request)
+const authCache = new Map<string, ReturnType<typeof betterAuth>>()
+
+// Function to get or create auth instance for a specific origin
+function getAuthForOrigin(origin: string) {
+  // Normalize origin
+  const normalizedOrigin = origin.trim().replace(/\/$/, '')
+  
+  // Check cache first
+  if (authCache.has(normalizedOrigin)) {
+    return authCache.get(normalizedOrigin)!
+  }
+  
+  // Determine baseURL based on origin
+  let baseURL: string
+  if (normalizedOrigin.startsWith('http://localhost:') || normalizedOrigin.startsWith('https://localhost:')) {
+    // Use localhost origin for local development
+    baseURL = normalizedOrigin
+  } else {
+    // Use environment variable or fallback for production
+    baseURL = process.env.BETTER_AUTH_URL?.trim().replace(/\/$/, '') || normalizedOrigin
+  }
+  
+  // Create auth instance with this baseURL
+  const auth = betterAuth({
+    baseURL: baseURL,
+    basePath: basePath,
+    secret: process.env.BETTER_AUTH_SECRET || process.env.SECRET,
+    database: drizzleAdapter(db, {
+      provider: 'pg',
+      schema,
+    }),
+    emailAndPassword: {
+      enabled: true,
+      requireEmailVerification: true,
+    },
+    plugins: [emailOTPPlugin],
+    session: {
+      expiresIn: 60 * 60 * 24 * 30, // 30 days
+      updateAge: 60 * 60 * 24, // 1 day
+    },
+  })
+  
+  // Cache it
+  authCache.set(normalizedOrigin, auth)
+  
+  return auth
+}
+
+// Default auth instance (for backward compatibility)
+const defaultBaseURL = getBaseURL()
+export const auth = betterAuth({
+  baseURL: defaultBaseURL,
+  basePath: basePath,
+  secret: process.env.BETTER_AUTH_SECRET || process.env.SECRET,
+  database: drizzleAdapter(db, {
+    provider: 'pg',
+    schema,
+  }),
+  emailAndPassword: {
+    enabled: true,
+    requireEmailVerification: true,
+  },
+  plugins: [emailOTPPlugin],
+  session: {
+    expiresIn: 60 * 60 * 24 * 30, // 30 days
+    updateAge: 60 * 60 * 24, // 1 day
+  },
+})
+
+console.log('Better Auth default baseURL (frontend origin):', defaultBaseURL)
+console.log('Better Auth basePath (API Gateway path):', basePath)
+console.log('BETTER_AUTH_URL env var:', process.env.BETTER_AUTH_URL)
+
+// Export function to get auth for a specific origin
+export function getAuth(origin?: string) {
+  if (!origin) {
+    return auth
+  }
+  return getAuthForOrigin(origin)
+}
+
 // Export function to get OTP code by email (for development)
 export function getOTPCode(email: string): string | undefined {
   return otpCodeStore.get(email)?.code
@@ -169,30 +258,4 @@ export async function updateEmailVerified(email: string, verified: boolean) {
     throw error
   }
 }
-
-// Better Auth configuration
-// Use baseURL as origin only (frontend URL), and basePath separately (API Gateway path)
-// This is the recommended approach for serverless environments
-export const auth = betterAuth({
-  baseURL: baseURL, // Frontend origin: https://yourapp.amplifyapp.com
-  basePath: basePath, // API Gateway path: /auth
-  secret: process.env.BETTER_AUTH_SECRET || process.env.SECRET, // Required for encryption and hashing
-  database: drizzleAdapter(db, {
-    provider: 'pg', // PostgreSQL provider
-    schema, // Pass the schema to Better Auth's Drizzle adapter
-  }),
-  emailAndPassword: {
-    enabled: true,
-    requireEmailVerification: true,
-  },
-  // Email OTP plugin for 6-digit code verification
-  // This replaces the standard token-based email verification
-  // Note: Passkeys/WebAuthn support may require a newer version of Better Auth
-  // or a separate package. For now, we'll keep the structure ready for when it's available.
-  plugins: [emailOTPPlugin],
-  session: {
-    expiresIn: 60 * 60 * 24 * 30, // 30 days
-    updateAge: 60 * 60 * 24, // 1 day
-  },
-})
 

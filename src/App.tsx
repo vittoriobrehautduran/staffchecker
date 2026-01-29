@@ -2,6 +2,7 @@ import { Routes, Route, Navigate } from 'react-router-dom'
 import { useAuth } from '@/contexts/AuthContext'
 import { Toaster } from '@/components/ui/toaster'
 import { Header } from '@/components/Layout/Header'
+import { LoadingOverlay } from '@/components/ui/loading-spinner'
 import Login from '@/pages/Login'
 import Register from '@/pages/Register'
 import VerifyEmail from '@/pages/VerifyEmail'
@@ -13,7 +14,7 @@ function ProtectedRoute({ children }: { children: React.ReactNode }) {
   const { isSignedIn, isLoading } = useAuth()
 
   if (isLoading) {
-    return <div>Laddar...</div>
+    return <LoadingOverlay message="Laddar..." />
   }
 
   if (!isSignedIn) {

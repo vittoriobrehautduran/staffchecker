@@ -2,17 +2,45 @@ import { APIGatewayProxyEvent, APIGatewayProxyResult } from 'aws-lambda'
 import { sql } from './utils/database'
 import { getUserIdFromBetterAuthSession } from './utils/auth'
 
+// Helper function to get CORS origin from request
+function getCorsOrigin(event: APIGatewayProxyEvent): string {
+  const requestOrigin = event.headers?.Origin || event.headers?.origin || '*'
+  const allowedOrigins = [
+    'http://localhost:5173',
+    'https://main.d3jub8c52hgrc6.amplifyapp.com',
+  ]
+  return allowedOrigins.includes(requestOrigin) ? requestOrigin : allowedOrigins[0]
+}
+
 export const handler = async (
   event: APIGatewayProxyEvent
 ): Promise<APIGatewayProxyResult> => {
+  // Handle OPTIONS preflight requests
+  if (event.httpMethod === 'OPTIONS') {
+    const origin = getCorsOrigin(event)
+    return {
+      statusCode: 200,
+      headers: {
+        'Access-Control-Allow-Origin': origin,
+        'Access-Control-Allow-Credentials': 'true',
+        'Access-Control-Allow-Methods': 'PUT,OPTIONS',
+        'Access-Control-Allow-Headers': 'Content-Type,Authorization,Cookie',
+        'Access-Control-Max-Age': '86400', // 24 hours
+      },
+      body: '',
+    }
+  }
+
   const httpMethod = event.httpMethod || 'PUT'
+  const origin = getCorsOrigin(event)
   
   if (httpMethod !== 'PUT') {
     return {
       statusCode: 405,
       headers: {
         'Content-Type': 'application/json',
-        'Access-Control-Allow-Origin': '*',
+        'Access-Control-Allow-Origin': origin,
+        'Access-Control-Allow-Credentials': 'true',
       },
       body: JSON.stringify({ message: 'Method not allowed' }),
     }
@@ -27,7 +55,8 @@ export const handler = async (
         statusCode: 401,
         headers: {
           'Content-Type': 'application/json',
-          'Access-Control-Allow-Origin': '*',
+          'Access-Control-Allow-Origin': origin,
+          'Access-Control-Allow-Credentials': 'true',
         },
         body: JSON.stringify({ message: 'Not authenticated' }),
       }
@@ -41,7 +70,8 @@ export const handler = async (
         statusCode: 400,
         headers: {
           'Content-Type': 'application/json',
-          'Access-Control-Allow-Origin': '*',
+          'Access-Control-Allow-Origin': origin,
+          'Access-Control-Allow-Credentials': 'true',
         },
         body: JSON.stringify({ message: 'All required fields must be provided' }),
       }
@@ -61,7 +91,8 @@ export const handler = async (
         statusCode: 403,
         headers: {
           'Content-Type': 'application/json',
-          'Access-Control-Allow-Origin': '*',
+          'Access-Control-Allow-Origin': origin,
+          'Access-Control-Allow-Credentials': 'true',
         },
         body: JSON.stringify({ message: 'Entry not found or access denied' }),
       }
@@ -72,7 +103,8 @@ export const handler = async (
         statusCode: 400,
         headers: {
           'Content-Type': 'application/json',
-          'Access-Control-Allow-Origin': '*',
+          'Access-Control-Allow-Origin': origin,
+          'Access-Control-Allow-Credentials': 'true',
         },
         body: JSON.stringify({ message: 'Cannot edit entries in a submitted report' }),
       }
@@ -95,17 +127,20 @@ export const handler = async (
       statusCode: 200,
       headers: {
         'Content-Type': 'application/json',
-        'Access-Control-Allow-Origin': '*',
+        'Access-Control-Allow-Origin': origin,
+        'Access-Control-Allow-Credentials': 'true',
       },
       body: JSON.stringify(result[0]),
     }
   } catch (error: any) {
     console.error('Error:', error)
+    const errorOrigin = getCorsOrigin(event)
     return {
       statusCode: 500,
       headers: {
         'Content-Type': 'application/json',
-        'Access-Control-Allow-Origin': '*',
+        'Access-Control-Allow-Origin': errorOrigin,
+        'Access-Control-Allow-Credentials': 'true',
       },
       body: JSON.stringify({ message: error.message || 'Internal server error' }),
     }
