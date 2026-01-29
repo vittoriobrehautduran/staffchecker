@@ -127,10 +127,18 @@ export const handler = async (
     const reportStatus = reportStatusResult.length > 0 ? reportStatusResult[0].status : 'draft'
 
     // Get entries for the specific date
+    // Format date as yyyy-MM-dd for frontend compatibility
     const entries = await sql`
-      SELECT id, date, time_from, time_to, work_type, annat_specification, comment
+      SELECT 
+        id, 
+        TO_CHAR(date, 'YYYY-MM-DD') as date,
+        time_from, 
+        time_to, 
+        work_type, 
+        annat_specification, 
+        comment
       FROM entries
-      WHERE report_id = ${reportId} AND date = ${date}
+      WHERE report_id = ${reportId} AND date = ${date}::date
       ORDER BY time_from
     `
 

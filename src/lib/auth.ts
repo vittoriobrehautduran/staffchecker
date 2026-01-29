@@ -192,6 +192,16 @@ function getAuthForOrigin(origin: string) {
       expiresIn: 60 * 60 * 24 * 30, // 30 days
       updateAge: 60 * 60 * 24, // 1 day
     },
+    trustedOrigins: [
+      'http://localhost:5173',
+      'https://main.d3jub8c52hgrc6.amplifyapp.com',
+    ],
+    advanced: {
+      cookiePrefix: '',
+      generateId: undefined,
+      useSecureCookies: true,
+      sameSite: 'none' as const,
+    },
   })
   
   // Cache it
@@ -218,6 +228,16 @@ export const auth = betterAuth({
   session: {
     expiresIn: 60 * 60 * 24 * 30, // 30 days
     updateAge: 60 * 60 * 24, // 1 day
+  },
+  trustedOrigins: [
+    'http://localhost:5173',
+    'https://main.d3jub8c52hgrc6.amplifyapp.com',
+  ],
+  advanced: {
+    cookiePrefix: '',
+    generateId: undefined,
+    useSecureCookies: true,
+    sameSite: 'none' as const,
   },
 })
 

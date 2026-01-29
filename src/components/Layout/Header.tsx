@@ -33,14 +33,6 @@ export function Header() {
               <Button
                 variant="ghost"
                 size="sm"
-                onClick={() => navigate('/dashboard')}
-                className="hover:bg-blue-50 dark:hover:bg-gray-800 transition-colors"
-              >
-                Dashboard
-              </Button>
-              <Button
-                variant="ghost"
-                size="sm"
                 onClick={() => navigate('/report')}
                 className="hover:bg-blue-50 dark:hover:bg-gray-800 transition-colors"
               >

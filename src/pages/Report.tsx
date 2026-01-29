@@ -1,7 +1,7 @@
 import { useState, useRef, useEffect } from 'react'
 import { useAuth } from '@/contexts/AuthContext'
 import { useNavigate } from 'react-router-dom'
-import { format, startOfMonth, endOfMonth, eachDayOfInterval } from 'date-fns'
+import { format, startOfMonth, endOfMonth, eachDayOfInterval, addMonths } from 'date-fns'
 import FullCalendar from '@fullcalendar/react'
 import dayGridPlugin from '@fullcalendar/daygrid'
 import interactionPlugin from '@fullcalendar/interaction'
@@ -96,12 +96,26 @@ export default function Report() {
       // Populate entries by date
       if (reportData?.entries) {
         reportData.entries.forEach((entry) => {
-          const dateStr = entry.date
-          if (entriesMap[dateStr]) {
+          // Ensure date is in yyyy-MM-dd format
+          let dateStr = entry.date
+          // If date is in a different format, convert it
+          if (dateStr && typeof dateStr === 'string') {
+            // Handle ISO date strings or other formats
+            const dateObj = new Date(dateStr)
+            if (!isNaN(dateObj.getTime())) {
+              dateStr = format(dateObj, 'yyyy-MM-dd')
+            }
+          }
+          
+          if (dateStr && entriesMap[dateStr]) {
             entriesMap[dateStr].entries.push(entry)
+          } else {
+            console.warn('Entry date not found in entriesMap:', dateStr, 'Entry:', entry)
           }
         })
       }
+      
+      console.log('Loaded entries:', reportData?.entries?.length || 0, 'entries for month', month, year)
       
       setMonthEntries(entriesMap)
     } catch (error: any) {
@@ -133,15 +147,17 @@ export default function Report() {
     }
   }, [currentDate, isSignedIn])
 
-  // Disable next button on initial load if on current month
+  // Enable next button only if we can go one month forward
   useEffect(() => {
     const updateNextButton = () => {
       const nextButton = document.querySelector('.fc-next-button')
       const currentMonth = format(startOfMonth(currentDate), 'yyyy-MM')
       const todayMonth = format(startOfMonth(today), 'yyyy-MM')
+      const nextMonth = format(startOfMonth(addMonths(today, 1)), 'yyyy-MM')
       
       if (nextButton) {
-        if (currentMonth >= todayMonth) {
+        // Disable if we're on next month (one month forward) or beyond
+        if (currentMonth >= nextMonth) {
           nextButton.classList.add('fc-button-disabled')
           nextButton.setAttribute('disabled', 'true')
         } else {
@@ -198,18 +214,26 @@ export default function Report() {
     setIsModalOpen(true)
   }
 
-  const handleEntrySaved = () => {
+  const handleEntrySaved = async () => {
     if (selectedDate) {
-      loadMonthEntries(currentDate)
-      loadEntriesForDate(selectedDate)
+      // Clear cache for the month to force reload
+      lastLoadedMonthRef.current = ''
+      
+      // Reload month entries first, then load entries for the selected date
+      await loadMonthEntries(currentDate)
+      await loadEntriesForDate(selectedDate)
     }
     setIsModalOpen(false)
   }
 
-  const handleEntryDeleted = () => {
+  const handleEntryDeleted = async () => {
     if (selectedDate) {
-      loadMonthEntries(currentDate)
-      loadEntriesForDate(selectedDate)
+      // Clear cache for the month to force reload
+      lastLoadedMonthRef.current = ''
+      
+      // Reload month entries first, then load entries for the selected date
+      await loadMonthEntries(currentDate)
+      await loadEntriesForDate(selectedDate)
     }
   }
 
@@ -244,9 +268,13 @@ export default function Report() {
         annat: entry.annat_specification || 'Annat',
       }
 
+      // Extract hours from time strings (e.g., "15:00" -> "15", "19:30" -> "19")
+      const startHour = entry.time_from.substring(0, 2)
+      const endHour = entry.time_to.substring(0, 2)
+
       return {
         id: entry.id.toString(),
-        title: `${entry.time_from.substring(0, 5)} - ${workTypeLabels[entry.work_type]}`,
+        title: `${startHour}-${endHour} ${workTypeLabels[entry.work_type]}`,
         start: dateStr,
         allDay: true,
         backgroundColor: data.reportStatus === 'submitted' ? '#9ca3af' : '#3b82f6',
@@ -260,13 +288,15 @@ export default function Report() {
   const handleDatesSet = (arg: any) => {
     const newDate = startOfMonth(arg.start)
     const currentMonth = startOfMonth(today)
+    const nextMonth = addMonths(currentMonth, 1)
     const newMonthKey = format(newDate, 'yyyy-MM')
     const currentMonthKey = format(currentMonth, 'yyyy-MM')
+    const nextMonthKey = format(nextMonth, 'yyyy-MM')
     
-    // Prevent navigation to future months - reset to current month if user tries
-    if (newMonthKey > currentMonthKey) {
+    // Allow navigation to next month (one month forward), but prevent beyond that
+    if (newMonthKey > nextMonthKey) {
       if (calendarRef.current) {
-        calendarRef.current.getApi().gotoDate(currentMonth)
+        calendarRef.current.getApi().gotoDate(nextMonth)
       }
       return
     }
@@ -276,11 +306,11 @@ export default function Report() {
       setCurrentDate(newDate)
     }
     
-    // Disable next button if we're on current month or future
+    // Disable next button if we're on next month (one month forward) or beyond
     setTimeout(() => {
       const nextButton = document.querySelector('.fc-next-button')
       if (nextButton) {
-        if (newMonthKey >= currentMonthKey) {
+        if (newMonthKey >= nextMonthKey) {
           nextButton.classList.add('fc-button-disabled')
           nextButton.setAttribute('disabled', 'true')
         } else {
@@ -346,10 +376,11 @@ export default function Report() {
               const dayData = monthEntries[dateStr]
               const dateMonth = format(arg.date, 'yyyy-MM')
               const todayMonth = format(today, 'yyyy-MM')
+              const nextMonth = format(addMonths(today, 1), 'yyyy-MM')
               const classes = ['hover:bg-blue-50', 'active:bg-blue-100', 'cursor-pointer', 'transition-colors', 'touch-manipulation']
               
-              // Gray out if it's a future month
-              if (dateMonth > todayMonth) {
+              // Gray out if it's beyond next month (more than one month forward)
+              if (dateMonth > nextMonth) {
                 classes.push('opacity-40', 'pointer-events-none')
               }
               

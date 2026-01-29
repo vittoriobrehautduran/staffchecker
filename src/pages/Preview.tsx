@@ -96,7 +96,7 @@ export default function Preview() {
         description: 'Din timrapport har skickats till chefen',
       })
 
-      navigate('/dashboard')
+      navigate('/report')
     } catch (error: any) {
       console.error('Error submitting report:', error)
       toast({

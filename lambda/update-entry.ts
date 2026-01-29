@@ -111,6 +111,7 @@ export const handler = async (
     }
 
     // Update entry
+    // Format date as yyyy-MM-dd for frontend compatibility
     const result = await sql`
       UPDATE entries
       SET time_from = ${time_from}::time,
@@ -120,7 +121,7 @@ export const handler = async (
           comment = ${comment || null},
           updated_at = CURRENT_TIMESTAMP
       WHERE id = ${entryId}
-      RETURNING id, date, time_from, time_to, work_type, annat_specification, comment
+      RETURNING id, TO_CHAR(date, 'YYYY-MM-DD') as date, time_from, time_to, work_type, annat_specification, comment
     `
 
     return {

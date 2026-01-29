@@ -42,7 +42,7 @@ export default function VerifyEmail() {
       localStorage.removeItem('pending_verification_email')
       
       // Session will be updated automatically by Better Auth
-      navigate('/dashboard')
+      navigate('/report')
     } catch (error: any) {
       console.error('Verification error:', error)
       toast({

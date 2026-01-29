@@ -79,6 +79,7 @@ export function DateModal({
   const [comment, setComment] = useState('')
   const [editingEntry, setEditingEntry] = useState<Entry | null>(null)
   const [isSubmitting, setIsSubmitting] = useState(false)
+  const [pendingDeleteId, setPendingDeleteId] = useState<number | null>(null)
   const { toast } = useToast()
 
   useEffect(() => {
@@ -116,7 +117,7 @@ export function DateModal({
     setComment(entry.comment || '')
   }
 
-  const handleDelete = async (entryId: number) => {
+  const handleDeleteClick = (entryId: number) => {
     if (reportStatus === 'submitted') {
       toast({
         title: 'Rapport redan skickad',
@@ -125,11 +126,10 @@ export function DateModal({
       })
       return
     }
+    setPendingDeleteId(entryId)
+  }
 
-    if (!confirm('Är du säker på att du vill ta bort denna post?')) {
-      return
-    }
-
+  const handleDeleteConfirm = async (entryId: number) => {
     try {
       await apiRequest(`/delete-entry`, {
         method: 'DELETE',
@@ -139,6 +139,7 @@ export function DateModal({
         title: 'Post borttagen',
         description: 'Timposten har tagits bort',
       })
+      setPendingDeleteId(null)
       onEntryDeleted()
       if (editingEntry?.id === entryId) {
         resetForm()
@@ -150,7 +151,12 @@ export function DateModal({
         description: error.message || 'Ett fel uppstod',
         variant: 'destructive',
       })
+      setPendingDeleteId(null)
     }
+  }
+
+  const handleDeleteCancel = () => {
+    setPendingDeleteId(null)
   }
 
   const handleSubmit = async (e: React.FormEvent) => {
@@ -308,24 +314,45 @@ export function DateModal({
                           </div>
                         </div>
                         <div className="flex gap-2">
-                          <Button
-                            variant="ghost"
-                            size="icon"
-                            onClick={() => handleEdit(entry)}
-                            disabled={reportStatus === 'submitted'}
-                            title={reportStatus === 'submitted' ? 'Rapport redan skickad' : 'Redigera'}
-                          >
-                            <Edit2 className="h-4 w-4" />
-                          </Button>
-                          <Button
-                            variant="ghost"
-                            size="icon"
-                            onClick={() => handleDelete(entry.id)}
-                            disabled={reportStatus === 'submitted'}
-                            title={reportStatus === 'submitted' ? 'Rapport redan skickad' : 'Ta bort'}
-                          >
-                            <Trash2 className="h-4 w-4" />
-                          </Button>
+                          {pendingDeleteId === entry.id ? (
+                            <>
+                              <Button
+                                variant="destructive"
+                                size="sm"
+                                onClick={() => handleDeleteConfirm(entry.id)}
+                              >
+                                Ja, ta bort
+                              </Button>
+                              <Button
+                                variant="outline"
+                                size="sm"
+                                onClick={handleDeleteCancel}
+                              >
+                                Avbryt
+                              </Button>
+                            </>
+                          ) : (
+                            <>
+                              <Button
+                                variant="ghost"
+                                size="icon"
+                                onClick={() => handleEdit(entry)}
+                                disabled={reportStatus === 'submitted'}
+                                title={reportStatus === 'submitted' ? 'Rapport redan skickad' : 'Redigera'}
+                              >
+                                <Edit2 className="h-4 w-4" />
+                              </Button>
+                              <Button
+                                variant="ghost"
+                                size="icon"
+                                onClick={() => handleDeleteClick(entry.id)}
+                                disabled={reportStatus === 'submitted'}
+                                title={reportStatus === 'submitted' ? 'Rapport redan skickad' : 'Ta bort'}
+                              >
+                                <Trash2 className="h-4 w-4 text-red-500" />
+                              </Button>
+                            </>
+                          )}
                         </div>
                       </div>
                     </CardContent>

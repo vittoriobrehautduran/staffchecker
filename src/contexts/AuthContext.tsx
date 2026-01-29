@@ -37,46 +37,112 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     let isMounted = true
     let focusTimeout: NodeJS.Timeout | null = null
 
-    const fetchSession = async (isInitialLoad = false) => {
+    const fetchSession = async (isInitialLoad = false, retryCount = 0) => {
+      const maxRetries = isInitialLoad ? 2 : 0
+      
       try {
+        // Add a small delay on initial load to ensure cookies are available
+        if (isInitialLoad && retryCount === 0) {
+          await new Promise(resolve => setTimeout(resolve, 200))
+        }
+        
         const sessionData = await authClient.$fetch('/session', {
           method: 'GET',
         })
         
         if (!isMounted) return
         
-        // Better Auth $fetch wraps responses in {data, error}
-        const userData = (sessionData as any)?.data
+        // Log the raw response for debugging
+        if (isInitialLoad && retryCount === 0) {
+          console.log('Session response:', sessionData)
+        }
         
-        if (userData && typeof userData === 'object' && 'user' in userData) {
-          setUser(userData.user || null)
-        } else if (userData && typeof userData === 'object' && 'email' in userData) {
-          // Sometimes user data is returned directly
-          setUser(userData || null)
-        } else {
-          // Only clear user on initial load if no session found
-          // On subsequent checks, keep existing user state if fetch fails
-          if (isInitialLoad) {
-            setUser(null)
+        // Check for error in response
+        if ((sessionData as any)?.error) {
+          throw new Error((sessionData as any).error.message || 'Session check failed')
+        }
+        
+        // Better Auth $fetch wraps responses in {data, error}
+        // But sometimes it returns the data directly
+        let userData = (sessionData as any)?.data || sessionData
+        
+        // Handle different response formats
+        if (userData && typeof userData === 'object') {
+          // Format 1: {user: {...}}
+          if ('user' in userData && userData.user) {
+            setUser(userData.user)
+            if (isInitialLoad) setIsLoading(false)
+            return // Success - exit early
+          }
+          // Format 2: User object directly with email/id
+          if ('email' in userData && (userData.id || userData.email)) {
+            setUser(userData)
+            if (isInitialLoad) setIsLoading(false)
+            return // Success - exit early
+          }
+          // Format 3: {data: {user: {...}}}
+          if ('data' in userData && userData.data?.user) {
+            setUser(userData.data.user)
+            if (isInitialLoad) setIsLoading(false)
+            return // Success - exit early
           }
         }
-      } catch (error) {
-        console.error('Error fetching session:', error)
-        // Only clear user on initial load if session fetch fails
-        // On window focus or periodic checks, don't clear user on transient errors
+        
+        // No user found
         if (isInitialLoad) {
+          // Retry if we haven't exceeded max retries
+          if (retryCount < maxRetries) {
+            console.log(`Session check failed, retrying... (${retryCount + 1}/${maxRetries})`)
+            await new Promise(resolve => setTimeout(resolve, 500))
+            return fetchSession(isInitialLoad, retryCount + 1)
+          }
+          // Only clear user after all retries failed
           setUser(null)
         }
-        // Otherwise, keep the existing user state - don't log out on transient errors
+      } catch (error: any) {
+        console.error('Error fetching session:', error)
+        
+        // Retry on network errors during initial load
+        if (isInitialLoad && retryCount < maxRetries) {
+          const isNetworkError = error?.message?.includes('Failed to fetch') || 
+                                 error?.message?.includes('NetworkError') ||
+                                 !error?.response
+          
+          if (isNetworkError) {
+            console.log(`Network error, retrying session check... (${retryCount + 1}/${maxRetries})`)
+            await new Promise(resolve => setTimeout(resolve, 500))
+            return fetchSession(isInitialLoad, retryCount + 1)
+          }
+        }
+        
+        // On initial load, only clear user if it's a clear authentication error (not network)
+        if (isInitialLoad && retryCount >= maxRetries) {
+          const isNetworkError = error?.message?.includes('Failed to fetch') || 
+                                 error?.message?.includes('NetworkError') ||
+                                 !error?.response
+          
+          if (!isNetworkError) {
+            // Clear user only on clear auth errors after all retries
+            setUser(null)
+          }
+          // If it's a network error, keep existing user state (might be temporary)
+        }
+        // On subsequent checks, always keep existing user state
       } finally {
-        if (isInitialLoad) {
+        // Always set loading to false after initial load attempt (and all retries)
+        if (isInitialLoad && retryCount >= maxRetries) {
           setIsLoading(false)
         }
       }
     }
 
-    // Initial session fetch
-    fetchSession(true)
+    // Initial session fetch - wait for it to complete before allowing navigation
+    fetchSession(true).catch(() => {
+      // Error already handled in fetchSession
+      if (isMounted) {
+        setIsLoading(false)
+      }
+    })
 
     // Set up a listener for auth state changes
     // Better Auth might have a way to listen to session changes

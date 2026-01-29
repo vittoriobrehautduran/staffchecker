@@ -53,7 +53,7 @@ export default function Login() {
         title: 'Välkommen!',
         description: 'Du är nu inloggad',
       })
-      navigate('/dashboard')
+      navigate('/report')
     } catch (error: any) {
       console.error('Login error:', error)
       
@@ -204,7 +204,7 @@ export default function Login() {
                         title: 'Välkommen!',
                         description: 'Du är nu inloggad med biometrisk autentisering',
                       })
-                      navigate('/dashboard')
+                      navigate('/report')
                     } catch (error: any) {
                       toast({
                         title: 'Biometrisk inloggning misslyckades',

@@ -370,11 +370,30 @@ export const handler = async (
       }
       
       // Copy other headers from Better Auth response, but NEVER copy CORS headers
+      // For Set-Cookie headers, ensure they work cross-origin (SameSite=None; Secure)
       response.headers.forEach((value: string, key: string) => {
         const lowerKey = key.toLowerCase()
         // Explicitly exclude ALL CORS-related headers from Better Auth response
         if (!lowerKey.startsWith('access-control-')) {
-          responseHeaders[key] = value
+          // Fix Set-Cookie headers for cross-origin
+          if (lowerKey === 'set-cookie') {
+            // Ensure cookies have SameSite=None and Secure for cross-origin
+            let cookieValue = value
+            // Add SameSite=None if not present
+            if (!cookieValue.includes('SameSite=')) {
+              cookieValue += '; SameSite=None'
+            } else if (!cookieValue.includes('SameSite=None')) {
+              // Replace existing SameSite with None
+              cookieValue = cookieValue.replace(/SameSite=[^;]+/gi, 'SameSite=None')
+            }
+            // Ensure Secure is present (required for SameSite=None)
+            if (!cookieValue.includes('Secure')) {
+              cookieValue += '; Secure'
+            }
+            responseHeaders[key] = cookieValue
+          } else {
+            responseHeaders[key] = value
+          }
         }
       })
 
