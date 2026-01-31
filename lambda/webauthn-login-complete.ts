@@ -157,69 +157,50 @@ export const handler = async (
     loginChallenges.delete(challengeKey)
 
     // Create a Better Auth session for this user
-    // We'll create a session directly in the database
-    const frontendOrigin = event.headers?.Origin || event.headers?.origin || process.env.BETTER_AUTH_URL || 'https://main.d3jub8c52hgrc6.amplifyapp.com'
+    // Generate session token and ID
+    const sessionId = randomBytes(16).toString('hex')
+    const sessionToken = randomBytes(32).toString('hex')
+    const expiresAt = new Date(Date.now() + 30 * 24 * 60 * 60 * 1000) // 30 days
     
-    try {
-      const { getAuth } = await import('../../src/lib/auth')
-      const auth = getAuth(frontendOrigin)
-      
-      // Generate session token and ID
-      const sessionId = randomBytes(16).toString('hex')
-      const sessionToken = randomBytes(32).toString('hex')
-      const expiresAt = new Date(Date.now() + 30 * 24 * 60 * 60 * 1000) // 30 days
-      
-      // Create session in database
-      await sql`
-        INSERT INTO public."session" (id, "userId", "expiresAt", token, "ipAddress", "userAgent")
-        VALUES (
-          ${sessionId},
-          ${userId},
-          ${expiresAt.toISOString()},
-          ${sessionToken},
-          ${event.requestContext?.identity?.sourceIp || null},
-          ${event.headers?.['user-agent'] || event.headers?.['User-Agent'] || null}
-        )
-      `
-      
-      // Set session cookie
-      // Better Auth uses a specific cookie format
-      const cookieName = 'better-auth.session_token'
-      const cookieValue = sessionToken
-      const cookieOptions = [
-        `${cookieName}=${cookieValue}`,
-        `Path=/`,
-        `Max-Age=${30 * 24 * 60 * 60}`, // 30 days
-        `SameSite=None`,
-        `Secure`,
-        `HttpOnly`,
-      ].join('; ')
-      
-      return {
-        statusCode: 200,
-        headers: {
-          'Content-Type': 'application/json',
-          'Access-Control-Allow-Origin': origin,
-          'Access-Control-Allow-Credentials': 'true',
-          'Set-Cookie': cookieOptions,
-        },
-        body: JSON.stringify({
-          message: 'Authentication successful',
-          userId,
-          sessionId,
-        }),
-      }
-    } catch (authError: any) {
-      console.error('Error creating session:', authError)
-      return {
-        statusCode: 500,
-        headers: {
-          'Content-Type': 'application/json',
-          'Access-Control-Allow-Origin': origin,
-          'Access-Control-Allow-Credentials': 'true',
-        },
-        body: JSON.stringify({ message: 'Authentication successful but session creation failed' }),
-      }
+    // Create session in database
+    await sql`
+      INSERT INTO public."session" (id, "userId", "expiresAt", token, "ipAddress", "userAgent")
+      VALUES (
+        ${sessionId},
+        ${userId},
+        ${expiresAt.toISOString()},
+        ${sessionToken},
+        ${event.requestContext?.identity?.sourceIp || null},
+        ${event.headers?.['user-agent'] || event.headers?.['User-Agent'] || null}
+      )
+    `
+    
+    // Set session cookie
+    // Better Auth uses a specific cookie format
+    const cookieName = 'better-auth.session_token'
+    const cookieValue = sessionToken
+    const cookieOptions = [
+      `${cookieName}=${cookieValue}`,
+      `Path=/`,
+      `Max-Age=${30 * 24 * 60 * 60}`, // 30 days
+      `SameSite=None`,
+      `Secure`,
+      `HttpOnly`,
+    ].join('; ')
+    
+    return {
+      statusCode: 200,
+      headers: {
+        'Content-Type': 'application/json',
+        'Access-Control-Allow-Origin': origin,
+        'Access-Control-Allow-Credentials': 'true',
+        'Set-Cookie': cookieOptions,
+      },
+      body: JSON.stringify({
+        message: 'Authentication successful',
+        userId,
+        sessionId,
+      }),
     }
   } catch (error: any) {
     console.error('Error in webauthn-login-complete:', error)

@@ -10,7 +10,6 @@ import {
 } from '@/components/ui/dialog'
 import { Button } from '@/components/ui/button'
 import { Fingerprint, CheckCircle2, XCircle } from 'lucide-react'
-import { authClient } from '@/lib/auth-client'
 
 interface SettingsDialogProps {
   open: boolean
@@ -22,7 +21,6 @@ export function SettingsDialog({ open, onOpenChange }: SettingsDialogProps) {
   const { toast } = useToast()
   const [isRegistering, setIsRegistering] = useState(false)
   const [hasPasskeys, setHasPasskeys] = useState(false)
-  const [isChecking, setIsChecking] = useState(true)
   const [isWebAuthnSupported, setIsWebAuthnSupported] = useState(false)
 
   useEffect(() => {
@@ -33,7 +31,6 @@ export function SettingsDialog({ open, onOpenChange }: SettingsDialogProps) {
       // Check if user has registered passkeys
       const checkPasskeys = async () => {
         try {
-          setIsChecking(true)
           const API_BASE_URL = import.meta.env.VITE_API_BASE_URL || ''
           if (!API_BASE_URL) {
             setHasPasskeys(false)
@@ -46,15 +43,12 @@ export function SettingsDialog({ open, onOpenChange }: SettingsDialogProps) {
           setHasPasskeys(false)
         } catch (error) {
           setHasPasskeys(false)
-        } finally {
-          setIsChecking(false)
         }
       }
       
       checkPasskeys()
     } else {
       setIsWebAuthnSupported(false)
-      setIsChecking(false)
     }
   }, [open])
 
