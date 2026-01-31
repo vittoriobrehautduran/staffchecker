@@ -174,6 +174,10 @@ async function setAllFunctionEnvironments() {
     `${PROJECT_NAME}-get-report`,
     `${PROJECT_NAME}-submit-report`,
     `${PROJECT_NAME}-update-entry`,
+    `${PROJECT_NAME}-webauthn-register-start`,
+    `${PROJECT_NAME}-webauthn-register-complete`,
+    `${PROJECT_NAME}-webauthn-login-start`,
+    `${PROJECT_NAME}-webauthn-login-complete`,
   ]
   
   console.log(`\n🔧 Setting environment variables for ${functions.length} Lambda functions...\n`)

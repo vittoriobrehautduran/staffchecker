@@ -45,8 +45,11 @@ export default function Report() {
   const [reportStatus, setReportStatus] = useState<'draft' | 'submitted'>('draft')
   const [isModalOpen, setIsModalOpen] = useState(false)
   const [monthEntries, setMonthEntries] = useState<MonthEntries>({})
+  const [isLoadingEntries, setIsLoadingEntries] = useState(false)
+  const [showNotification, setShowNotification] = useState(true)
   const loadingRef = useRef(false)
   const lastLoadedMonthRef = useRef<string | null>(null)
+  const notificationTimeoutsRef = useRef<NodeJS.Timeout[]>([])
 
   if (!isSignedIn) {
     navigate('/login')
@@ -63,6 +66,7 @@ export default function Report() {
 
     try {
       loadingRef.current = true
+      setIsLoadingEntries(true)
       lastLoadedMonthRef.current = monthKey
       
       const month = date.getMonth() + 1
@@ -132,6 +136,7 @@ export default function Report() {
       setMonthEntries(entriesMap)
     } finally {
       loadingRef.current = false
+      setIsLoadingEntries(false)
     }
   }
 
@@ -143,6 +148,41 @@ export default function Report() {
       }
     }
   }, [currentDate, isSignedIn])
+
+  // Notification cycle: show for 10s, fade out, wait 30s, repeat
+  useEffect(() => {
+    if (isLoadingEntries || !isSignedIn) {
+      setShowNotification(false)
+      notificationTimeoutsRef.current.forEach(timeout => clearTimeout(timeout))
+      notificationTimeoutsRef.current = []
+      return
+    }
+
+    const cycle = () => {
+      // Show notification
+      setShowNotification(true)
+      
+      // Hide after 10 seconds
+      const hideTimeout = setTimeout(() => {
+        setShowNotification(false)
+        
+        // Show again after 30 more seconds
+        const showTimeout = setTimeout(() => {
+          cycle() // Repeat the cycle
+        }, 30000)
+        notificationTimeoutsRef.current.push(showTimeout)
+      }, 10000)
+      notificationTimeoutsRef.current.push(hideTimeout)
+    }
+
+    // Start the cycle
+    cycle()
+
+    return () => {
+      notificationTimeoutsRef.current.forEach(timeout => clearTimeout(timeout))
+      notificationTimeoutsRef.current = []
+    }
+  }, [isLoadingEntries, isSignedIn])
 
   // Enable next button only if we can go one month forward
   useEffect(() => {
@@ -338,6 +378,37 @@ export default function Report() {
             <span className="sm:hidden">Förhandsgranska</span>
         </Button>
         </div>
+      </div>
+      
+      {/* Loading banner / Notification - always reserves space to prevent layout shift */}
+      <div className="flex-shrink-0 h-[48px] sm:h-[52px] px-3 sm:px-4 md:px-6 border-b transition-all duration-200 relative">
+        {/* Loading state */}
+        <div className={`absolute inset-0 h-full flex items-center gap-3 text-blue-700 transition-opacity duration-300 ${
+          isLoadingEntries 
+            ? 'opacity-100 bg-blue-50/80 border-blue-200/50 backdrop-blur-sm z-10' 
+            : 'opacity-0 z-0'
+        }`}>
+          <div className="relative h-4 w-4 sm:h-5 sm:w-5 flex-shrink-0">
+            <div className="absolute inset-0 rounded-full border-2 border-blue-200"></div>
+            <div className="absolute inset-0 rounded-full border-2 border-transparent border-t-blue-600 animate-spin"></div>
+          </div>
+          <p className="text-sm sm:text-base font-medium">
+            Laddar dina timmar, vänta en stund...
+          </p>
+        </div>
+        
+        {/* Notification state */}
+        {!isLoadingEntries && (
+          <div className={`absolute inset-0 h-full flex items-center gap-3 text-amber-700 transition-opacity duration-500 ${
+            showNotification 
+              ? 'opacity-100 bg-amber-50/80 border-amber-200/50 backdrop-blur-sm z-10' 
+              : 'opacity-0 z-0'
+          }`}>
+            <p className="text-sm sm:text-base font-medium">
+              Glöm inte att lämna in rapporten i slutet av månaden
+            </p>
+          </div>
+        )}
       </div>
       
       {/* Calendar with premium container */}

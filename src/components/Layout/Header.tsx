@@ -1,11 +1,21 @@
+import { useState } from 'react'
 import { useAuth } from '@/contexts/AuthContext'
 import { useNavigate } from 'react-router-dom'
 import { Button } from '@/components/ui/button'
-import { LogOut, Calendar, Eye, Clock } from 'lucide-react'
+import {
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuSeparator,
+  DropdownMenuTrigger,
+} from '@/components/ui/dropdown-menu'
+import { LogOut, Calendar, Eye, Clock, Settings } from 'lucide-react'
+import { SettingsDialog } from './SettingsDialog'
 
 export function Header() {
   const { isSignedIn, user, signOut } = useAuth()
   const navigate = useNavigate()
+  const [isSettingsOpen, setIsSettingsOpen] = useState(false)
 
   if (!isSignedIn) {
     return null
@@ -51,24 +61,40 @@ export function Header() {
             </nav>
           </div>
           <div className="flex items-center gap-4">
-            <div className="hidden sm:flex items-center gap-3 px-4 py-2 rounded-lg bg-gray-50 dark:bg-gray-800/50">
-              <div className="h-8 w-8 rounded-full bg-gradient-to-br from-blue-500 to-indigo-600 flex items-center justify-center text-white font-semibold text-sm">
-                {user?.name?.charAt(0).toUpperCase() || 'U'}
-              </div>
-              <span className="text-sm font-medium text-gray-700 dark:text-gray-300">
-                {user?.name || 'Användare'}
-              </span>
-            </div>
+            <DropdownMenu>
+              <DropdownMenuTrigger asChild>
+                <button className="hidden sm:flex items-center gap-3 px-4 py-2 rounded-lg bg-gray-50 dark:bg-gray-800/50 hover:bg-gray-100 dark:hover:bg-gray-800 transition-colors cursor-pointer">
+                  <div className="h-8 w-8 rounded-full bg-gradient-to-br from-blue-500 to-indigo-600 flex items-center justify-center text-white font-semibold text-sm">
+                    {user?.name?.charAt(0).toUpperCase() || 'U'}
+                  </div>
+                  <span className="text-sm font-medium text-gray-700 dark:text-gray-300">
+                    {user?.name || 'Användare'}
+                  </span>
+                </button>
+              </DropdownMenuTrigger>
+              <DropdownMenuContent align="end" className="w-56">
+                <DropdownMenuItem onClick={() => setIsSettingsOpen(true)}>
+                  <Settings className="h-4 w-4 mr-2" />
+                  Inställningar
+                </DropdownMenuItem>
+                <DropdownMenuSeparator />
+                <DropdownMenuItem onClick={handleSignOut} className="text-red-600 dark:text-red-400">
+                  <LogOut className="h-4 w-4 mr-2" />
+                  Logga ut
+                </DropdownMenuItem>
+              </DropdownMenuContent>
+            </DropdownMenu>
             <Button 
               variant="ghost" 
               size="sm" 
               onClick={handleSignOut}
-              className="hover:bg-red-50 dark:hover:bg-red-900/20 text-red-600 dark:text-red-400 hover:text-red-700 dark:hover:text-red-300 transition-colors"
+              className="sm:hidden hover:bg-red-50 dark:hover:bg-red-900/20 text-red-600 dark:text-red-400 hover:text-red-700 dark:hover:text-red-300 transition-colors"
             >
-              <LogOut className="h-4 w-4 mr-2" />
-              <span className="hidden sm:inline">Logga ut</span>
+              <LogOut className="h-4 w-4" />
             </Button>
           </div>
+          
+          <SettingsDialog open={isSettingsOpen} onOpenChange={setIsSettingsOpen} />
         </div>
       </div>
     </header>

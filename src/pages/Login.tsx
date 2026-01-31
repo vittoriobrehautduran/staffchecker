@@ -19,11 +19,14 @@ export default function Login() {
   const navigate = useNavigate()
   const { toast } = useToast()
 
-  // Check if user has registered passkeys
-  // Note: Disabled until Better Auth passkey plugin is available
+  // Check if WebAuthn/Passkeys are supported in the browser
   useEffect(() => {
-    // Passkeys not available in current Better Auth version
-    setHasPasskeys(false)
+    // Check if the browser supports WebAuthn API
+    if (typeof window !== 'undefined' && window.PublicKeyCredential) {
+      setHasPasskeys(true)
+    } else {
+      setHasPasskeys(false)
+    }
   }, [])
 
   const handleSubmit = async (e: React.FormEvent) => {
@@ -199,7 +202,12 @@ export default function Login() {
                   onClick={async () => {
                     try {
                       setIsLoading(true)
-                      await signInWithPasskey()
+                      // Prompt for email if not provided
+                      const email = prompt('Ange din e-postadress för biometrisk inloggning:')
+                      if (!email) {
+                        return
+                      }
+                      await signInWithPasskey(email)
                       toast({
                         title: 'Välkommen!',
                         description: 'Du är nu inloggad med biometrisk autentisering',

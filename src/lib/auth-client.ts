@@ -53,7 +53,6 @@ const authBaseURL = getAuthBaseURL()
 
 export const authClient = createAuthClient({
   baseURL: authBaseURL,
-  // Email OTP plugin methods are automatically available when the plugin is configured on the server
-  // Note: Passkeys client plugin not available in current Better Auth version
+  // Email OTP and Passkey plugin methods are automatically available when plugins are configured on the server
 })
 

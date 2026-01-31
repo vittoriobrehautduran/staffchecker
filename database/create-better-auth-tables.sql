@@ -52,9 +52,23 @@ CREATE TABLE IF NOT EXISTS public."verification" (
   "updatedAt" TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP
 );
 
+-- Passkey table - for WebAuthn/passkey authentication (biometric login)
+CREATE TABLE IF NOT EXISTS public."passkey" (
+  "id" TEXT PRIMARY KEY,
+  "userId" TEXT NOT NULL REFERENCES public."user"("id") ON DELETE CASCADE,
+  "name" TEXT,
+  "publicKey" TEXT NOT NULL,
+  "credentialId" TEXT NOT NULL UNIQUE,
+  "counter" TEXT NOT NULL,
+  "createdAt" TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
+  "updatedAt" TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP
+);
+
 -- Create indexes for better performance
 CREATE INDEX IF NOT EXISTS "idx_session_userId" ON public."session"("userId");
 CREATE INDEX IF NOT EXISTS "idx_session_token" ON public."session"("token");
 CREATE INDEX IF NOT EXISTS "idx_account_userId" ON public."account"("userId");
 CREATE INDEX IF NOT EXISTS "idx_verification_identifier" ON public."verification"("identifier");
+CREATE INDEX IF NOT EXISTS "idx_passkey_userId" ON public."passkey"("userId");
+CREATE INDEX IF NOT EXISTS "idx_passkey_credentialId" ON public."passkey"("credentialId");
 
