@@ -77,11 +77,16 @@ export async function getBetterAuthUserIdFromRequest(event: APIGatewayProxyEvent
       }
       
       console.log('Calling Better Auth getSession with headers:', Object.keys(headers))
+      console.log('Cookie header present:', !!cookieHeader, cookieHeader ? cookieHeader.substring(0, 50) + '...' : '')
+      console.log('Authorization header present:', !!headers['authorization'])
+      
       const sessionResult = await (auth.api as any).getSession({
         headers,
       })
       
-      console.log('Better Auth session result:', sessionResult ? 'Got result' : 'No result', sessionResult?.user?.id || sessionResult?.data?.user?.id)
+      console.log('Better Auth session result:', sessionResult ? 'Got result' : 'No result')
+      console.log('Session user ID:', sessionResult?.user?.id || sessionResult?.data?.user?.id || 'NOT FOUND')
+      console.log('Full session result keys:', sessionResult ? Object.keys(sessionResult) : 'null')
       
       // Better Auth API returns {user: {...}} or {data: {user: {...}}}
       const user = sessionResult?.user || sessionResult?.data?.user
@@ -131,7 +136,11 @@ export async function getBetterAuthUserIdFromRequest(event: APIGatewayProxyEvent
 // Get numeric user ID from Better Auth session
 export async function getUserIdFromBetterAuthSession(event: APIGatewayProxyEvent): Promise<number | null> {
   const betterAuthUserId = await getBetterAuthUserIdFromRequest(event)
+  
+  console.log('getUserIdFromBetterAuthSession: Better Auth user ID:', betterAuthUserId ? 'Found' : 'Missing')
+  
   if (!betterAuthUserId) {
+    console.error('getUserIdFromBetterAuthSession: No Better Auth user ID found in session')
     return null
   }
 
@@ -144,9 +153,41 @@ export async function getUserIdFromBetterAuthSession(event: APIGatewayProxyEvent
     `
 
     if (result.length === 0) {
+      console.error(`getUserIdFromBetterAuthSession: No user found with better_auth_user_id: ${betterAuthUserId}`)
+      
+      // Fallback: Try to find user by email from Better Auth user table
+      try {
+        const betterAuthUser = await sql`
+          SELECT email FROM "user" WHERE id = ${betterAuthUserId} LIMIT 1
+        `
+        
+        if (betterAuthUser.length > 0) {
+          const email = betterAuthUser[0].email
+          console.log(`getUserIdFromBetterAuthSession: Trying fallback lookup by email: ${email}`)
+          
+          const emailResult = await sql`
+            SELECT id FROM users WHERE email = ${email} LIMIT 1
+          `
+          
+          if (emailResult.length > 0) {
+            console.log(`getUserIdFromBetterAuthSession: Found user by email, updating better_auth_user_id`)
+            // Update the better_auth_user_id to fix the mapping
+            await sql`
+              UPDATE users 
+              SET better_auth_user_id = ${betterAuthUserId}
+              WHERE id = ${emailResult[0].id}
+            `
+            return emailResult[0].id
+          }
+        }
+      } catch (fallbackError) {
+        console.error('getUserIdFromBetterAuthSession: Fallback lookup failed:', fallbackError)
+      }
+      
       return null
     }
 
+    console.log(`getUserIdFromBetterAuthSession: Found user ID: ${result[0].id}`)
     return result[0].id
   } catch (error) {
     console.error('Error getting user ID:', error)
