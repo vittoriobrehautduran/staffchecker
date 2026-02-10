@@ -167,14 +167,14 @@ export default function Register() {
                 Lösenord
               </Label>
               <div className="relative">
-                <Input
-                  id="password"
+              <Input
+                id="password"
                   type={showPassword ? 'text' : 'password'}
-                  value={password}
-                  onChange={(e) => setPassword(e.target.value)}
-                  placeholder="Minst 8 tecken"
-                  required
-                  disabled={isLoading}
+                value={password}
+                onChange={(e) => setPassword(e.target.value)}
+                placeholder="Minst 8 tecken"
+                required
+                disabled={isLoading}
                   className="h-12 pl-4 pr-12 bg-white/50 dark:bg-gray-800/50 border-gray-200 dark:border-gray-700 focus:border-purple-500 focus:ring-2 focus:ring-purple-500/20 transition-all duration-200"
                 />
                 <Button

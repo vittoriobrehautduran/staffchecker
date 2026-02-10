@@ -60,7 +60,7 @@ function getBaseURL(requestOrigin?: string): string {
   // For now, we'll require BETTER_AUTH_URL to be set in Lambda environment variables
   console.warn('BETTER_AUTH_URL not set. This should be your Amplify frontend URL.')
   return 'https://yourapp.amplifyapp.com' // This should be overridden via env var
-}
+  }
 
 // API Gateway path to the auth Lambda function
 // This should match your API Gateway route (e.g., /auth)
@@ -104,7 +104,7 @@ const emailOTPPlugin = emailOTP({
         } else {
           console.error('SES_FROM_EMAIL environment variable is required for email verification in production')
           throw new Error('SES_FROM_EMAIL environment variable is required for email verification in production')
-        }
+      }
       }
 
       // Create SES client

@@ -1,7 +1,7 @@
 import { useState, useEffect } from 'react'
 import { useAuth } from '@/contexts/AuthContext'
 import { useNavigate } from 'react-router-dom'
-import { format } from 'date-fns'
+import { addMonths, format } from 'date-fns'
 import { sv } from 'date-fns/locale'
 import { Button } from '@/components/ui/button'
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card'
@@ -27,6 +27,8 @@ interface ReportData {
   entries: Entry[]
 }
 
+type ReportPeriod = 'current' | 'previous'
+
 export default function Preview() {
   const { isSignedIn } = useAuth()
   const navigate = useNavigate()
@@ -34,28 +36,72 @@ export default function Preview() {
   const [reportData, setReportData] = useState<ReportData | null>(null)
   const [isLoading, setIsLoading] = useState(true)
   const [isSubmitting, setIsSubmitting] = useState(false)
+  const [selectedPeriod, setSelectedPeriod] = useState<ReportPeriod>('current')
 
   useEffect(() => {
     if (!isSignedIn) {
       navigate('/login')
       return
     }
-    loadReportData()
+    initializeReportPeriod()
   }, [isSignedIn])
 
-  const loadReportData = async () => {
+  // Decide which month to show first:
+  // - If last month's report is not submitted -> show last month
+  // - If last month's report is submitted     -> show current month
+  const initializeReportPeriod = async () => {
     if (!isSignedIn) return
 
     try {
       setIsLoading(true)
+
       const today = new Date()
-      const month = today.getMonth() + 1
-      const year = today.getFullYear()
+      const lastMonthDate = addMonths(today, -1)
+      const lastMonth = lastMonthDate.getMonth() + 1
+      const lastYear = lastMonthDate.getFullYear()
+
+      // Try last month first
+      const lastMonthData = await apiRequest<ReportData>(
+        `/get-report?month=${lastMonth}&year=${lastYear}`,
+        { method: 'GET' }
+      )
+
+      if (lastMonthData.status !== 'submitted') {
+        setReportData(lastMonthData)
+        setSelectedPeriod('previous')
+        return
+      }
+
+      // If last month is already submitted, fall back to current month
+      await loadReportData('current')
+    } catch (error: any) {
+      console.error('Error initializing report period:', error)
+      toast({
+        title: 'Kunde inte ladda rapport',
+        description: error.message || 'Ett fel uppstod',
+        variant: 'destructive',
+      })
+    } finally {
+      setIsLoading(false)
+    }
+  }
+
+  const loadReportData = async (period: ReportPeriod) => {
+    if (!isSignedIn) return
+
+    try {
+      setIsLoading(true)
+
+      const today = new Date()
+      const baseDate = period === 'current' ? today : addMonths(today, -1)
+      const month = baseDate.getMonth() + 1
+      const year = baseDate.getFullYear()
 
       const data = await apiRequest<ReportData>(`/get-report?month=${month}&year=${year}`, {
         method: 'GET',
       })
       setReportData(data)
+      setSelectedPeriod(period)
     } catch (error: any) {
       console.error('Error loading report:', error)
       toast({
@@ -66,6 +112,11 @@ export default function Preview() {
     } finally {
       setIsLoading(false)
     }
+  }
+
+  const handleChangePeriod = async (period: ReportPeriod) => {
+    if (!isSignedIn || period === selectedPeriod) return
+    await loadReportData(period)
   }
 
   const handleSubmit = async () => {
@@ -183,6 +234,26 @@ export default function Preview() {
             <CardDescription>
               Granska din rapport innan du skickar den
             </CardDescription>
+            <div className="mt-4 flex flex-wrap gap-2">
+              <Button
+                type="button"
+                variant={selectedPeriod === 'previous' ? 'default' : 'outline'}
+                size="sm"
+                disabled={isLoading || isSubmitting}
+                onClick={() => handleChangePeriod('previous')}
+              >
+                Förra månaden
+              </Button>
+              <Button
+                type="button"
+                variant={selectedPeriod === 'current' ? 'default' : 'outline'}
+                size="sm"
+                disabled={isLoading || isSubmitting}
+                onClick={() => handleChangePeriod('current')}
+              >
+                Denna månad
+              </Button>
+            </div>
           </CardHeader>
           <CardContent className="space-y-6">
             {sortedDates.length === 0 ? (

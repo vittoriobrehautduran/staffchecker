@@ -53,6 +53,6 @@ const authBaseURL = getAuthBaseURL()
 
 export const authClient = createAuthClient({
   baseURL: authBaseURL,
-  // Email OTP and Passkey plugin methods are automatically available when plugins are configured on the server
+  // Email OTP plugin methods are automatically available when plugins are configured on the server
 })
 

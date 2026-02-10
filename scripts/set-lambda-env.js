@@ -152,7 +152,7 @@ async function setFunctionEnvironment(functionName) {
         console.log(`   ⚠️  No SES variables found - make sure SES_FROM_EMAIL is set in .env.local`)
       }
     } else {
-      console.log(`✅ Updated environment variables for ${functionName}`)
+    console.log(`✅ Updated environment variables for ${functionName}`)
     }
   } catch (error) {
     console.error(`❌ Error updating ${functionName}:`, error.message)
@@ -174,10 +174,6 @@ async function setAllFunctionEnvironments() {
     `${PROJECT_NAME}-get-report`,
     `${PROJECT_NAME}-submit-report`,
     `${PROJECT_NAME}-update-entry`,
-    `${PROJECT_NAME}-webauthn-register-start`,
-    `${PROJECT_NAME}-webauthn-register-complete`,
-    `${PROJECT_NAME}-webauthn-login-start`,
-    `${PROJECT_NAME}-webauthn-login-complete`,
   ]
   
   console.log(`\n🔧 Setting environment variables for ${functions.length} Lambda functions...\n`)

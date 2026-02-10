@@ -22,8 +22,7 @@ interface AuthContextType {
   signOut: () => Promise<void>
   verifyEmail: (code: string, email: string) => Promise<void>
   resendVerificationCode: (email: string) => Promise<string>
-  registerPasskey: () => Promise<void>
-  signInWithPasskey: (email?: string) => Promise<void>
+  changePassword: (currentPassword: string, newPassword: string) => Promise<void>
 }
 
 const AuthContext = createContext<AuthContextType | undefined>(undefined)
@@ -36,7 +35,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   // Fetch session function - accessible throughout the component
   const fetchSession = async (isInitialLoad = false, retryCount = 0) => {
       const maxRetries = isInitialLoad ? 2 : 0
-      
+
       try {
         // Add a small delay on initial load to ensure cookies are available
         if (isInitialLoad && retryCount === 0) {
@@ -113,7 +112,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
           
           if (!isNetworkError) {
             // Clear user only on clear auth errors after all retries
-            setUser(null)
+        setUser(null)
           }
           // If it's a network error, keep existing user state (might be temporary)
         }
@@ -121,9 +120,9 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       } finally {
         // Always set loading to false after initial load attempt (and all retries)
         if (isInitialLoad && retryCount >= maxRetries) {
-          setIsLoading(false)
-        }
+        setIsLoading(false)
       }
+    }
     }
 
   // Fetch session on mount and when auth state changes
@@ -188,10 +187,10 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     
     while (attempts < 3 && !userData) {
       try {
-        const sessionData = await authClient.$fetch('/session', {
-          method: 'GET',
-        })
-        // Better Auth $fetch wraps responses in {data, error}
+    const sessionData = await authClient.$fetch('/session', {
+      method: 'GET',
+    })
+    // Better Auth $fetch wraps responses in {data, error}
         const data = (sessionData as any)?.data
         if (data && typeof data === 'object') {
           if ('user' in data) {
@@ -422,212 +421,27 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     return code
   }
 
-  // Register passkey for biometric authentication using WebAuthn API
-  const registerPasskey = async () => {
-    if (!user) {
-      throw new Error('Du måste vara inloggad för att registrera biometrisk autentisering')
-    }
-
-    if (!window.PublicKeyCredential) {
-      throw new Error('Din webbläsare stöder inte biometrisk autentisering')
-    }
-
+  const changePassword = async (currentPassword: string, newPassword: string) => {
     try {
-      const API_BASE_URL = import.meta.env.VITE_API_BASE_URL || ''
-      if (!API_BASE_URL) {
-        throw new Error('VITE_API_BASE_URL är inte konfigurerad')
-      }
-
-      // Step 1: Get registration challenge from server
-      const startResponse = await fetch(`${API_BASE_URL.replace(/\/$/, '')}/webauthn-register-start`, {
+      // Use Better Auth's built-in password change endpoint
+      const result = await authClient.$fetch('/change-password', {
         method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
+        body: {
+          currentPassword,
+          newPassword,
         },
-        credentials: 'include',
       })
 
-      if (!startResponse.ok) {
-        const error = await startResponse.json()
-        throw new Error(error.message || 'Kunde inte starta registrering')
+      if ((result as any)?.error) {
+        throw new Error((result as any).error.message || 'Kunde inte ändra lösenord')
       }
-
-      const { challengeKey, options } = await startResponse.json()
-
-      // Step 2: Convert options to WebAuthn format
-      const publicKeyCredentialCreationOptions = {
-        ...options,
-        challenge: new Uint8Array(options.challenge),
-        user: {
-          ...options.user,
-          id: new Uint8Array(options.user.id),
-        },
-      }
-
-      // Step 3: Call browser WebAuthn API
-      const credential = await navigator.credentials.create({
-        publicKey: publicKeyCredentialCreationOptions,
-      }) as PublicKeyCredential
-
-      if (!credential) {
-        throw new Error('Kunde inte skapa biometrisk autentisering')
-      }
-
-      // Step 4: Convert credential to JSON-serializable format
-      const credentialData = {
-        rawId: Array.from(new Uint8Array(credential.rawId)),
-        id: credential.id,
-        type: credential.type,
-        response: {
-          attestationObject: credential.response instanceof AuthenticatorAttestationResponse
-            ? Array.from(new Uint8Array(credential.response.attestationObject))
-            : null,
-          clientDataJSON: Array.from(new Uint8Array(credential.response.clientDataJSON)),
-        },
-      }
-
-      // Step 5: Send credential to server
-      const completeResponse = await fetch(`${API_BASE_URL.replace(/\/$/, '')}/webauthn-register-complete`, {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-        },
-        credentials: 'include',
-        body: JSON.stringify({
-          challengeKey,
-          credential: credentialData,
-          name: `${user.name || user.email}'s enhet`,
-        }),
-      })
-
-      if (!completeResponse.ok) {
-        const error = await completeResponse.json()
-        throw new Error(error.message || 'Kunde inte slutföra registrering')
-      }
-
-      // Refresh session after registration
-      await fetchSession(false)
     } catch (error: any) {
-      if (error.name === 'NotSupportedError') {
-        throw new Error('Din enhet stöder inte biometrisk autentisering')
+      // Better Auth might return specific error messages
+      if (error.message?.includes('current password') || error.message?.includes('nuvarande lösenord')) {
+        throw new Error('Felaktigt nuvarande lösenord')
       }
-      if (error.name === 'NotAllowedError' || error.name === 'AbortError') {
-        throw new Error('Biometrisk autentisering avbröts')
-      }
-      throw error
-    }
-  }
-
-  // Sign in with passkey (biometric) using WebAuthn API
-  const signInWithPasskey = async (email?: string) => {
-    if (!window.PublicKeyCredential) {
-      throw new Error('Din webbläsare stöder inte biometrisk autentisering')
-    }
-
-    try {
-      const API_BASE_URL = import.meta.env.VITE_API_BASE_URL || ''
-      if (!API_BASE_URL) {
-        throw new Error('VITE_API_BASE_URL är inte konfigurerad')
-      }
-
-      // If email not provided, prompt user
-      const userEmail = email || prompt('Ange din e-postadress:')
-      if (!userEmail) {
-        throw new Error('E-postadress krävs')
-      }
-
-      // Step 1: Get login challenge from server
-      const startResponse = await fetch(`${API_BASE_URL.replace(/\/$/, '')}/webauthn-login-start`, {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-        },
-        credentials: 'include',
-        body: JSON.stringify({ email: userEmail.trim().toLowerCase() }),
-      })
-
-      if (!startResponse.ok) {
-        const error = await startResponse.json()
-        throw new Error(error.message || 'Kunde inte starta inloggning')
-      }
-
-      const { challengeKey, options } = await startResponse.json()
-
-      // Step 2: Convert options to WebAuthn format
-      const publicKeyCredentialRequestOptions = {
-        ...options,
-        challenge: new Uint8Array(options.challenge),
-        allowCredentials: options.allowCredentials?.map((cred: any) => ({
-          ...cred,
-          id: new Uint8Array(cred.id),
-        })),
-      }
-
-      // Step 3: Call browser WebAuthn API
-      const credential = await navigator.credentials.get({
-        publicKey: publicKeyCredentialRequestOptions,
-      }) as PublicKeyCredential
-
-      if (!credential) {
-        throw new Error('Kunde inte autentisera med biometrisk autentisering')
-      }
-
-      // Step 4: Convert credential to JSON-serializable format
-      const credentialData = {
-        rawId: Array.from(new Uint8Array(credential.rawId)),
-        id: credential.id,
-        type: credential.type,
-        response: {
-          authenticatorData: credential.response instanceof AuthenticatorAssertionResponse
-            ? Array.from(new Uint8Array(credential.response.authenticatorData))
-            : null,
-          clientDataJSON: Array.from(new Uint8Array(credential.response.clientDataJSON)),
-          signature: credential.response instanceof AuthenticatorAssertionResponse
-            ? Array.from(new Uint8Array(credential.response.signature))
-            : null,
-          userHandle: credential.response instanceof AuthenticatorAssertionResponse
-            ? credential.response.userHandle
-              ? Array.from(new Uint8Array(credential.response.userHandle))
-              : null
-            : null,
-        },
-      }
-
-      // Step 5: Send credential to server for verification
-      const completeResponse = await fetch(`${API_BASE_URL.replace(/\/$/, '')}/webauthn-login-complete`, {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-        },
-        credentials: 'include',
-        body: JSON.stringify({
-          challengeKey,
-          credential: credentialData,
-        }),
-      })
-
-      if (!completeResponse.ok) {
-        const error = await completeResponse.json()
-        throw new Error(error.message || 'Kunde inte slutföra inloggning')
-      }
-
-      await completeResponse.json()
-
-      // Step 6: Session is created by the server and cookie is set
-      // Wait a moment for cookie to be set
-      await new Promise(resolve => setTimeout(resolve, 300))
-
-      // Refresh session to get the new session data
-      await fetchSession(false)
-
-      // If session fetch didn't work, we might need a custom session creation endpoint
-      // For now, this should work if the user was already logged in
-    } catch (error: any) {
-      if (error.name === 'NotSupportedError') {
-        throw new Error('Din enhet stöder inte biometrisk autentisering')
-      }
-      if (error.name === 'NotAllowedError' || error.name === 'AbortError') {
-        throw new Error('Biometrisk autentisering avbröts')
+      if (error.message?.includes('same') || error.message?.includes('samma')) {
+        throw new Error('Nytt lösenord måste skilja sig från det nuvarande')
       }
       throw error
     }
@@ -651,8 +465,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         signOut,
         verifyEmail,
         resendVerificationCode,
-        registerPasskey,
-        signInWithPasskey,
+        changePassword,
       }}
     >
       {children}

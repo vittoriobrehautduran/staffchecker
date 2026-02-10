@@ -165,8 +165,8 @@ export const handler = async (
       }
     } catch {
       // Fallback if even getCorsOrigin fails
-      return {
-        statusCode: 500,
+    return {
+      statusCode: 500,
         headers: getCorsHeaders('https://main.d3jub8c52hgrc6.amplifyapp.com'),
         body: JSON.stringify({ 
           message: 'Internal server error',

@@ -127,7 +127,7 @@ export function DateModal({
       return
     }
     setPendingDeleteId(entryId)
-  }
+    }
 
   const handleDeleteConfirm = async (entryId: number) => {
     try {
@@ -333,24 +333,24 @@ export function DateModal({
                             </>
                           ) : (
                             <>
-                              <Button
-                                variant="ghost"
-                                size="icon"
-                                onClick={() => handleEdit(entry)}
-                                disabled={reportStatus === 'submitted'}
-                                title={reportStatus === 'submitted' ? 'Rapport redan skickad' : 'Redigera'}
-                              >
-                                <Edit2 className="h-4 w-4" />
-                              </Button>
-                              <Button
-                                variant="ghost"
-                                size="icon"
+                          <Button
+                            variant="ghost"
+                            size="icon"
+                            onClick={() => handleEdit(entry)}
+                            disabled={reportStatus === 'submitted'}
+                            title={reportStatus === 'submitted' ? 'Rapport redan skickad' : 'Redigera'}
+                          >
+                            <Edit2 className="h-4 w-4" />
+                          </Button>
+                          <Button
+                            variant="ghost"
+                            size="icon"
                                 onClick={() => handleDeleteClick(entry.id)}
-                                disabled={reportStatus === 'submitted'}
-                                title={reportStatus === 'submitted' ? 'Rapport redan skickad' : 'Ta bort'}
-                              >
+                            disabled={reportStatus === 'submitted'}
+                            title={reportStatus === 'submitted' ? 'Rapport redan skickad' : 'Ta bort'}
+                          >
                                 <Trash2 className="h-4 w-4 text-red-500" />
-                              </Button>
+                          </Button>
                             </>
                           )}
                         </div>

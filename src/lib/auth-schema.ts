@@ -51,18 +51,6 @@ export const verification = pgTable('verification', {
   updatedAt: timestamp('updatedAt').notNull().defaultNow(),
 })
 
-// Passkey table - for WebAuthn/passkey authentication (biometric login)
-export const passkey = pgTable('passkey', {
-  id: text('id').primaryKey(),
-  userId: text('userId').notNull().references(() => user.id, { onDelete: 'cascade' }),
-  name: text('name'),
-  publicKey: text('publicKey').notNull(),
-  credentialId: text('credentialId').notNull().unique(),
-  counter: text('counter').notNull(),
-  createdAt: timestamp('createdAt').notNull().defaultNow(),
-  updatedAt: timestamp('updatedAt').notNull().defaultNow(),
-})
-
 // Export all tables as a schema object for Better Auth
 // Note: Indexes are optional and can be added later if needed for performance
 export const schema = {
@@ -70,6 +58,5 @@ export const schema = {
   session,
   account,
   verification,
-  passkey,
 }
 

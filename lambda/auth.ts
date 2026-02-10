@@ -231,7 +231,7 @@ export const handler = async (
           
           return {
             statusCode: 200,
-            headers: {
+            headers: { 
               'Content-Type': 'application/json',
               'Access-Control-Allow-Origin': origin,
               'Access-Control-Allow-Credentials': 'true',
@@ -374,7 +374,7 @@ export const handler = async (
             }
             responseHeaders[key] = cookieValue
           } else {
-            responseHeaders[key] = value
+        responseHeaders[key] = value
           }
         }
       })

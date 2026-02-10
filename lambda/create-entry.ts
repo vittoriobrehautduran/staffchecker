@@ -145,8 +145,8 @@ export const handler = async (
         }),
       }
     } catch {
-      return {
-        statusCode: 500,
+    return {
+      statusCode: 500,
         headers: getCorsHeaders('https://main.d3jub8c52hgrc6.amplifyapp.com'),
         body: JSON.stringify({ message: 'Internal server error' }),
       }

@@ -6,7 +6,7 @@ import { Label } from '@/components/ui/label'
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card'
 import { useToast } from '@/components/ui/use-toast'
 import { useAuth } from '@/contexts/AuthContext'
-import { Eye, EyeOff, Fingerprint, Mail, Lock } from 'lucide-react'
+import { Eye, EyeOff, Mail, Lock } from 'lucide-react'
 import { LoadingSpinner, PremiumLoadingOverlay } from '@/components/ui/loading-spinner'
 
 export default function Login() {
@@ -14,20 +14,9 @@ export default function Login() {
   const [password, setPassword] = useState('')
   const [showPassword, setShowPassword] = useState(false)
   const [isLoading, setIsLoading] = useState(false)
-  const [hasPasskeys, setHasPasskeys] = useState(false)
-  const { signIn, signInWithPasskey } = useAuth()
+  const { signIn } = useAuth()
   const navigate = useNavigate()
   const { toast } = useToast()
-
-  // Check if WebAuthn/Passkeys are supported in the browser
-  useEffect(() => {
-    // Check if the browser supports WebAuthn API
-    if (typeof window !== 'undefined' && window.PublicKeyCredential) {
-      setHasPasskeys(true)
-    } else {
-      setHasPasskeys(false)
-    }
-  }, [])
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault()
@@ -41,14 +30,14 @@ export default function Login() {
       
       // Validate email
       if (!email.includes('@') || !email.includes('.')) {
-        toast({
-          title: 'Fel',
-          description: 'Ange en giltig e-postadress',
-          variant: 'destructive',
-        })
-        setIsLoading(false)
-        return
-      }
+          toast({
+            title: 'Fel',
+            description: 'Ange en giltig e-postadress',
+            variant: 'destructive',
+          })
+          setIsLoading(false)
+          return
+        }
 
       await signIn(email.trim(), password)
       
@@ -123,16 +112,16 @@ export default function Login() {
                 E-post
               </Label>
               <div className="relative">
-                <Input
+              <Input
                   id="email"
                   type="email"
                   value={email}
                   onChange={(e) => setEmail(e.target.value)}
                   placeholder="din@epost.se"
-                  required
-                  disabled={isLoading}
+                required
+                disabled={isLoading}
                   className="h-12 pl-4 pr-4 bg-white/50 dark:bg-gray-800/50 border-gray-200 dark:border-gray-700 focus:border-blue-500 focus:ring-2 focus:ring-blue-500/20 transition-all duration-200"
-                />
+              />
               </div>
             </div>
             <div className="space-y-2">
@@ -181,54 +170,6 @@ export default function Login() {
                 'Logga in'
               )}
             </Button>
-            
-            {/* Biometric login option */}
-            {hasPasskeys && (
-              <>
-                <div className="relative">
-                  <div className="absolute inset-0 flex items-center">
-                    <span className="w-full border-t border-gray-200 dark:border-gray-700" />
-                  </div>
-                  <div className="relative flex justify-center text-xs uppercase">
-                    <span className="bg-white/80 dark:bg-gray-900/80 px-2 text-muted-foreground">eller</span>
-                  </div>
-                </div>
-                
-                <Button
-                  type="button"
-                  variant="outline"
-                  className="w-full h-12 border-2 hover:bg-gray-50 dark:hover:bg-gray-800 transition-all duration-200"
-                  disabled={isLoading}
-                  onClick={async () => {
-                    try {
-                      setIsLoading(true)
-                      // Prompt for email if not provided
-                      const email = prompt('Ange din e-postadress för biometrisk inloggning:')
-                      if (!email) {
-                        return
-                      }
-                      await signInWithPasskey(email)
-                      toast({
-                        title: 'Välkommen!',
-                        description: 'Du är nu inloggad med biometrisk autentisering',
-                      })
-                      navigate('/report')
-                    } catch (error: any) {
-                      toast({
-                        title: 'Biometrisk inloggning misslyckades',
-                        description: error.message || 'Ett fel uppstod',
-                        variant: 'destructive',
-                      })
-                    } finally {
-                      setIsLoading(false)
-                    }
-                  }}
-                >
-                  <Fingerprint className="mr-2 h-4 w-4" />
-                  Logga in med fingeravtryck/ansikte
-                </Button>
-              </>
-            )}
           </form>
           <div className="mt-6 space-y-2 text-center text-sm">
             <div>
@@ -267,7 +208,7 @@ export default function Login() {
           animation-delay: 4s;
         }
       `}</style>
-      </div>
+    </div>
     </>
   )
 }
