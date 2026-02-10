@@ -227,6 +227,30 @@ export const handler = async (
             headers: Object.fromEntries(request.headers.entries()),
           })
           
+          // Extract the session token from cookies if available, and add it to the response
+          // This allows the frontend to use it for cross-origin requests
+          const cookies = request.headers.get('cookie') || ''
+          let sessionToken = null
+          
+          // Try to extract session token from cookie
+          const cookieMatch = cookies.match(/(?:__Secure-)?better-auth\.session_token=([^;]+)/)
+          if (cookieMatch) {
+            sessionToken = decodeURIComponent(cookieMatch[1])
+          }
+          
+          // If we have a session result, add the token to it
+          if (sessionResult && sessionToken) {
+            // Add token to session object if it exists
+            if (sessionResult.session) {
+              sessionResult.session.token = sessionToken
+            } else if (sessionResult.data?.session) {
+              sessionResult.data.session.token = sessionToken
+            } else {
+              // Create session object with token
+              sessionResult.session = { ...sessionResult.session, token: sessionToken }
+            }
+          }
+          
           const origin = getCorsOrigin(event)
           
           return {

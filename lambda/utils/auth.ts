@@ -67,12 +67,22 @@ export async function getBetterAuthUserIdFromRequest(event: APIGatewayProxyEvent
       // This works better for cross-origin requests and mobile browsers
       if (event.headers?.Authorization || event.headers?.authorization) {
         const authHeader = event.headers.Authorization || event.headers.authorization || ''
+        console.log('Authorization header received:', authHeader.substring(0, 50) + '...')
+        
         // If it's a Bearer token, extract just the token part
         if (authHeader.startsWith('Bearer ')) {
           const token = authHeader.substring(7)
+          console.log('Extracted Bearer token, length:', token.length)
+          
           // Better Auth expects the session token in a cookie format
-          // So we'll set it as a cookie header for Better Auth to parse
-          headers['cookie'] = `__Secure-better-auth.session_token=${token}`
+          // The token from session.response.token might be the session ID, not the cookie value
+          // Try both formats: as cookie and as authorization header
+          headers['cookie'] = `__Secure-better-auth.session_token=${encodeURIComponent(token)}`
+          // Also try without __Secure- prefix
+          if (!headers['cookie'].includes(';')) {
+            headers['cookie'] += `; better-auth.session_token=${encodeURIComponent(token)}`
+          }
+          console.log('Set cookie header from Bearer token')
         } else {
           headers['authorization'] = authHeader
         }
@@ -87,7 +97,8 @@ export async function getBetterAuthUserIdFromRequest(event: APIGatewayProxyEvent
       
       console.log('Calling Better Auth getSession with headers:', Object.keys(headers))
       console.log('Cookie header present:', !!cookieHeader, cookieHeader ? cookieHeader.substring(0, 50) + '...' : '')
-      console.log('Authorization header present:', !!headers['authorization'])
+      console.log('Authorization header present:', !!(headers['authorization'] || headers['Authorization']))
+      console.log('All event headers:', Object.keys(event.headers || {}).filter(h => h.toLowerCase().includes('auth')))
       
       const sessionResult = await (auth.api as any).getSession({
         headers,
