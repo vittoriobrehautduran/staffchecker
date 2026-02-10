@@ -30,6 +30,10 @@ async function getAuth() {
 export async function getBetterAuthUserIdFromRequest(event: APIGatewayProxyEvent): Promise<string | null> {
   try {
     console.log('getBetterAuthUserIdFromRequest: Starting')
+    console.log('Event headers keys:', Object.keys(event.headers || {}))
+    console.log('Event multiValueHeaders keys:', Object.keys(event.multiValueHeaders || {}))
+    console.log('Raw Authorization header:', event.headers?.Authorization || event.headers?.authorization || 'NOT FOUND')
+    
     // Extract cookies from API Gateway event
     // API Gateway can send cookies in headers.Cookie, headers.cookie, or multiValueHeaders.Cookie
     let cookieHeader = ''
@@ -65,27 +69,33 @@ export async function getBetterAuthUserIdFromRequest(event: APIGatewayProxyEvent
       
       // Prioritize Authorization header (token-based auth) over cookies
       // This works better for cross-origin requests and mobile browsers
-      if (event.headers?.Authorization || event.headers?.authorization) {
-        const authHeader = event.headers.Authorization || event.headers.authorization || ''
+      // API Gateway may send headers in different cases, check both
+      // Also check multiValueHeaders (API Gateway v1)
+      const authHeader = event.headers?.Authorization || 
+                        event.headers?.authorization || 
+                        event.multiValueHeaders?.Authorization?.[0] ||
+                        event.multiValueHeaders?.authorization?.[0] ||
+                        ''
+      
+      if (authHeader) {
         console.log('Authorization header received:', authHeader.substring(0, 50) + '...')
         
         // If it's a Bearer token, extract just the token part
         if (authHeader.startsWith('Bearer ')) {
           const token = authHeader.substring(7)
-          console.log('Extracted Bearer token, length:', token.length)
+          console.log('Extracted Bearer token, length:', token.length, 'first 20 chars:', token.substring(0, 20))
           
           // Better Auth expects the session token in a cookie format
-          // The token from session.response.token might be the session ID, not the cookie value
-          // Try both formats: as cookie and as authorization header
-          headers['cookie'] = `__Secure-better-auth.session_token=${encodeURIComponent(token)}`
+          // Use the raw token value (don't double-encode, it's already URL encoded from cookie)
+          headers['cookie'] = `__Secure-better-auth.session_token=${token}`
           // Also try without __Secure- prefix
-          if (!headers['cookie'].includes(';')) {
-            headers['cookie'] += `; better-auth.session_token=${encodeURIComponent(token)}`
-          }
+          headers['cookie'] += `; better-auth.session_token=${token}`
           console.log('Set cookie header from Bearer token')
         } else {
           headers['authorization'] = authHeader
         }
+      } else {
+        console.log('No Authorization header found in event.headers or event.multiValueHeaders')
       }
       // Fallback to cookies if no Authorization header (for backward compatibility)
       if (cookieHeader && !headers['cookie']) {
