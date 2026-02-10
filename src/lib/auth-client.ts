@@ -53,6 +53,9 @@ const authBaseURL = getAuthBaseURL()
 
 export const authClient = createAuthClient({
   baseURL: authBaseURL,
+  // Better Auth uses cookies for /auth endpoints
+  // We'll extract session tokens from session responses for our custom API endpoints
+  // This allows token-based auth for cross-origin mobile support
   // Email OTP plugin methods are automatically available when plugins are configured on the server
 })
 

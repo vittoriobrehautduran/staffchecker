@@ -452,8 +452,8 @@ export default function Report() {
               right: 'next today',
             }}
             height="100%"
-            selectable={true}
-            selectMirror={true}
+            selectable={false}
+            selectMirror={false}
             dayMaxEvents={2}
             moreLinkClick="popover"
             events={calendarEvents}
@@ -511,23 +511,64 @@ export default function Report() {
                 cell.style.touchAction = 'manipulation'
                 // Use type assertion for vendor-specific property
                 ;(cell.style as any).webkitTapHighlightColor = 'transparent'
-                // Add explicit click handler for mobile Safari
-                const handleClick = (e: MouseEvent | TouchEvent) => {
-                  e.preventDefault()
-                  e.stopPropagation()
-                  const date = arg.date
-                  if (date) {
-                    handleDateSelect({
-                      start: date,
-                      end: date,
-                      allDay: false,
-                      jsEvent: e as any,
-                      view: arg.view,
-                    } as DateSelectArg)
+                
+                // Track touch start position and time to distinguish scroll from tap
+                let touchStartX = 0
+                let touchStartY = 0
+                let touchStartTime = 0
+                let isScrolling = false
+                
+                const handleTouchStart = (e: TouchEvent) => {
+                  const touch = e.touches[0]
+                  touchStartX = touch.clientX
+                  touchStartY = touch.clientY
+                  touchStartTime = Date.now()
+                  isScrolling = false
+                }
+                
+                const handleTouchMove = (e: TouchEvent) => {
+                  // If finger moved more than 10px, it's a scroll, not a tap
+                  if (e.touches[0]) {
+                    const deltaX = Math.abs(e.touches[0].clientX - touchStartX)
+                    const deltaY = Math.abs(e.touches[0].clientY - touchStartY)
+                    if (deltaX > 10 || deltaY > 10) {
+                      isScrolling = true
+                    }
                   }
                 }
-                cell.addEventListener('click', handleClick, { passive: false })
-                cell.addEventListener('touchend', handleClick, { passive: false })
+                
+                const handleTouchEnd = (e: TouchEvent) => {
+                  const touchDuration = Date.now() - touchStartTime
+                  const deltaX = Math.abs(e.changedTouches[0].clientX - touchStartX)
+                  const deltaY = Math.abs(e.changedTouches[0].clientY - touchStartY)
+                  
+                  // Only trigger if it was a tap (not a scroll) and quick (< 300ms)
+                  if (!isScrolling && touchDuration < 300 && deltaX < 10 && deltaY < 10) {
+                    e.preventDefault()
+                    e.stopPropagation()
+                    const date = arg.date
+                    if (date) {
+                      handleDateSelect({
+                        start: date,
+                        end: date,
+                        allDay: false,
+                        jsEvent: e as any,
+                        view: arg.view,
+                      } as DateSelectArg)
+                    }
+                  }
+                  
+                  // Reset
+                  isScrolling = false
+                  touchStartX = 0
+                  touchStartY = 0
+                  touchStartTime = 0
+                }
+                
+                // Use touch events instead of click for better mobile support
+                cell.addEventListener('touchstart', handleTouchStart, { passive: true })
+                cell.addEventListener('touchmove', handleTouchMove, { passive: true })
+                cell.addEventListener('touchend', handleTouchEnd, { passive: false })
               }
             }}
             dayHeaderFormat={{ weekday: 'short' }}

@@ -60,6 +60,16 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         // But sometimes it returns the data directly
         let userData = (sessionData as any)?.data || sessionData
         
+        // Store session token in localStorage for API calls (token-based auth)
+        // Extract session ID or token from the session response
+        const sessionToken = (sessionData as any)?.data?.session?.id || 
+                            (sessionData as any)?.session?.id ||
+                            (sessionData as any)?.data?.sessionToken ||
+                            (sessionData as any)?.sessionToken
+        if (sessionToken) {
+          localStorage.setItem('better-auth-session-token', sessionToken)
+        }
+        
         // Handle different response formats
         if (userData && typeof userData === 'object') {
           // Format 1: {user: {...}}
@@ -134,28 +144,43 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     let focusTimeout: NodeJS.Timeout | null = null
 
     // Initial session fetch - wait for it to complete before allowing navigation
-    fetchSession(true).catch(() => {
-      // Error already handled in fetchSession
-      if (isMountedRef.current) {
-        setIsLoading(false)
-      }
-    })
+    // On mobile Safari, add extra delay to ensure cookies are available after page load
+    const isMobile = /iPhone|iPad|iPod|Android/i.test(navigator.userAgent)
+    const initialDelay = isMobile ? 800 : 200
+    
+    setTimeout(() => {
+      fetchSession(true).catch(() => {
+        // Error already handled in fetchSession
+        if (isMountedRef.current) {
+          setIsLoading(false)
+        }
+      })
+    }, initialDelay)
 
     // Set up a listener for auth state changes
     // Better Auth might have a way to listen to session changes
     // For now, we'll refetch periodically or on focus
+    // On mobile, check more frequently to catch cookie issues
+    const isMobileCheck = /iPhone|iPad|iPod|Android/i.test(navigator.userAgent)
+    const checkInterval = isMobileCheck ? 30000 : 60000 // Every 30s on mobile, 60s on desktop
     const interval = setInterval(() => {
-      fetchSession(false)
-    }, 60000) // Check every minute
+      if (isMountedRef.current) {
+        fetchSession(false)
+      }
+    }, checkInterval)
     
     // Debounce focus handler to avoid rapid successive calls
+    // On mobile Safari, add extra delay after focus to ensure cookies are available
     const handleFocus = () => {
       if (focusTimeout) {
         clearTimeout(focusTimeout)
       }
+      const focusDelay = isMobileCheck ? 500 : 300
       focusTimeout = setTimeout(() => {
-        fetchSession(false)
-      }, 300) // Wait 300ms after focus before checking session
+        if (isMountedRef.current) {
+          fetchSession(false)
+        }
+      }, focusDelay)
     }
     
     window.addEventListener('focus', handleFocus)

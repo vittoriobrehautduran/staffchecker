@@ -63,12 +63,14 @@ export async function getBetterAuthUserIdFromRequest(event: APIGatewayProxyEvent
     if (auth?.api && typeof (auth.api as any).getSession === 'function') {
       const headers: Record<string, string> = {}
       
-      // Copy all headers from the original request
-      if (cookieHeader) {
-        headers['cookie'] = cookieHeader
-      }
+      // Prioritize Authorization header (token-based auth) over cookies
+      // This works better for cross-origin requests and mobile browsers
       if (event.headers?.Authorization || event.headers?.authorization) {
         headers['authorization'] = event.headers.Authorization || event.headers.authorization || ''
+      }
+      // Fallback to cookies if no Authorization header (for backward compatibility)
+      if (cookieHeader && !headers['authorization']) {
+        headers['cookie'] = cookieHeader
       }
       if (event.headers?.Host || event.headers?.host) {
         headers['host'] = event.headers.Host || event.headers.host || ''

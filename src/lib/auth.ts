@@ -243,6 +243,8 @@ function getAuthForOrigin(origin: string) {
       generateId: undefined,
       useSecureCookies: true,
       sameSite: 'none' as const,
+      // Enable token-based authentication (works better for cross-origin and mobile)
+      generateAccessToken: true,
     },
   })
   
