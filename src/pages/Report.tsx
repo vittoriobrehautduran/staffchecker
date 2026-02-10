@@ -509,7 +509,8 @@ export default function Report() {
               const cell = arg.el
               if (cell) {
                 cell.style.touchAction = 'manipulation'
-                cell.style.webkitTapHighlightColor = 'transparent'
+                // Use type assertion for vendor-specific property
+                ;(cell.style as any).webkitTapHighlightColor = 'transparent'
                 // Add explicit click handler for mobile Safari
                 const handleClick = (e: MouseEvent | TouchEvent) => {
                   e.preventDefault()
