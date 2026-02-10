@@ -227,21 +227,32 @@ export default function Report() {
     
     const dateStr = format(date, 'yyyy-MM-dd')
 
-    // Allow all dates in the current month, including future dates
-    // Only restrict dates from other months
-    const currentMonth = format(currentDate, 'yyyy-MM')
-    const selectedMonth = format(date, 'yyyy-MM')
+    // Allow selecting any date within the allowed range (6 months back to 1 month forward)
+    const today = new Date()
+    const earliestDate = addMonths(today, -6)
+    const latestDate = addMonths(today, 1)
     
-    if (selectedMonth !== currentMonth) {
+    if (date < startOfMonth(earliestDate) || date > endOfMonth(latestDate)) {
       toast({
-        title: 'Kan inte välja datum från annan månad',
-        description: 'Du kan endast välja datum i den aktuella månaden',
+        title: 'Datum utanför tillåtet intervall',
+        description: 'Du kan endast välja datum inom de senaste 6 månaderna eller nästa månad',
         variant: 'destructive',
       })
       return
     }
 
     setSelectedDate(date)
+    
+    // If the selected date is in a different month, navigate to that month first
+    const selectedMonth = format(date, 'yyyy-MM')
+    const currentMonthKey = format(currentDate, 'yyyy-MM')
+    if (selectedMonth !== currentMonthKey) {
+      setCurrentDate(startOfMonth(date))
+      // Wait a bit for the calendar to update, then load entries
+      setTimeout(async () => {
+        await loadMonthEntries(startOfMonth(date))
+      }, 100)
+    }
     
     // Load entries for this date
     if (monthEntries[dateStr]) {

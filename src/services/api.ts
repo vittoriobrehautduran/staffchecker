@@ -3,32 +3,26 @@
 // Or custom domain: https://api.yourapp.com
 const API_BASE_URL = import.meta.env.VITE_API_BASE_URL || ''
 
-// Get auth token from localStorage
-// Better Auth session token is stored by AuthContext after successful session fetch
+// Get auth token from cookies (Better Auth stores session in cookies)
+// Extract session cookie value to use as token for API calls
 function getAuthToken(): string | null {
-  // Check for the session token we store
-  const token = localStorage.getItem('better-auth-session-token')
-  if (token) {
-    return token
+  // First check localStorage for stored token
+  const storedToken = localStorage.getItem('better-auth-session-token')
+  if (storedToken) {
+    return storedToken
   }
   
-  // Fallback: try to find session token in Better Auth's localStorage keys
-  for (let i = 0; i < localStorage.length; i++) {
-    const key = localStorage.key(i)
-    if (key && key.includes('better-auth') && key.includes('session')) {
-      try {
-        const value = localStorage.getItem(key)
-        if (value) {
-          const parsed = JSON.parse(value)
-          if (parsed?.sessionToken || parsed?.token || parsed?.id) {
-            return parsed.sessionToken || parsed.token || parsed.id
-          }
-        }
-      } catch {
-        // Not JSON, skip
-      }
+  // Better Auth stores session in cookies
+  // Extract the session cookie value
+  const cookies = document.cookie.split(';')
+  for (const cookie of cookies) {
+    const [name, value] = cookie.trim().split('=')
+    // Better Auth uses cookie names like 'better-auth.session_token' or 'session_token'
+    if (name && (name.includes('session') || name.includes('auth'))) {
+      return decodeURIComponent(value)
     }
   }
+  
   return null
 }
 

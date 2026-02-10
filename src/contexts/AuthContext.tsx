@@ -215,6 +215,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     // Refresh session after login - try multiple times if needed
     let attempts = 0
     let userData = null
+    let sessionToken = null
     
     while (attempts < 3 && !userData) {
       try {
@@ -222,7 +223,15 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       method: 'GET',
     })
     // Better Auth $fetch wraps responses in {data, error}
-        const data = (sessionData as any)?.data
+        const data = (sessionData as any)?.data || sessionData
+        
+        // Extract session token for API calls
+        sessionToken = data?.session?.id || 
+                      data?.sessionToken || 
+                      data?.session?.token ||
+                      (sessionData as any)?.session?.id ||
+                      (sessionData as any)?.sessionToken
+        
         if (data && typeof data === 'object') {
           if ('user' in data) {
             userData = data.user
@@ -238,6 +247,21 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         await new Promise(resolve => setTimeout(resolve, 200))
       }
       attempts++
+    }
+
+    // Store session token in localStorage for API calls
+    if (sessionToken) {
+      localStorage.setItem('better-auth-session-token', sessionToken)
+    }
+    
+    // Also extract session cookie value as fallback
+    const cookies = document.cookie.split(';')
+    for (const cookie of cookies) {
+      const [name, value] = cookie.trim().split('=')
+      if (name && (name.includes('session') || name.includes('auth'))) {
+        localStorage.setItem('better-auth-session-token', decodeURIComponent(value))
+        break
+      }
     }
 
     if (userData) {
