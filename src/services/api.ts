@@ -9,19 +9,30 @@ function getSessionToken(): string | null {
   // First check localStorage (set after login)
   const storedToken = localStorage.getItem('better-auth-session-token')
   if (storedToken) {
+    console.log('✅ Found session token in localStorage')
     return storedToken
   }
   
   // Fallback: try to extract from cookies (works on same-origin)
   const cookies = document.cookie.split(';')
+  console.log('🔍 Checking cookies for session token. Available cookies:', cookies.length)
+  
   for (const cookie of cookies) {
     const [name, value] = cookie.trim().split('=')
+    const cookieName = name?.substring(0, 50) || 'unnamed'
+    console.log('🔍 Checking cookie:', cookieName)
+    
     // Better Auth uses __Secure-better-auth.session_token or better-auth.session_token
     if (name && (name.includes('better-auth.session_token') || name.includes('session_token'))) {
-      return decodeURIComponent(value)
+      const token = decodeURIComponent(value)
+      console.log('✅ Found session token in cookie:', cookieName, '- storing in localStorage')
+      localStorage.setItem('better-auth-session-token', token)
+      return token
     }
   }
   
+  console.warn('⚠️ No session token found in localStorage or cookies')
+  console.warn('⚠️ This will cause authentication to fail on mobile Safari')
   return null
 }
 

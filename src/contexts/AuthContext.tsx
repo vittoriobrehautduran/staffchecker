@@ -235,6 +235,13 @@ export function AuthProvider({ children }: { children: ReactNode }) {
             userData = data
           }
         }
+        
+        // Try to extract session token from session response
+        const session = data?.session || (sessionData as any)?.session
+        if (session?.token) {
+          localStorage.setItem('better-auth-session-token', session.token)
+          console.log('✅ Stored session token from session response')
+        }
       } catch (error) {
         // Session fetch failed, will retry
       }
@@ -245,6 +252,35 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       attempts++
     }
 
+    // Extract session token from cookies and store in localStorage for cross-origin requests
+    // This is needed for mobile Safari which blocks cross-origin cookies
+    // Try multiple times as cookies might take a moment to be set
+    for (let i = 0; i < 5; i++) {
+      const cookies = document.cookie.split(';')
+      console.log(`🔍 Attempt ${i + 1}: Checking ${cookies.length} cookies for session token`)
+      
+      for (const cookie of cookies) {
+        const [name, value] = cookie.trim().split('=')
+        // Better Auth uses __Secure-better-auth.session_token or better-auth.session_token
+        if (name && (name.includes('better-auth.session_token') || name.includes('session_token'))) {
+          const token = decodeURIComponent(value)
+          localStorage.setItem('better-auth-session-token', token)
+          console.log('✅ Stored session token in localStorage after login from cookie:', name)
+          break
+        }
+      }
+      
+      // If we found a token, break
+      if (localStorage.getItem('better-auth-session-token')) {
+        break
+      }
+      
+      // Wait a bit before retrying
+      if (i < 4) {
+        await new Promise(resolve => setTimeout(resolve, 200))
+      }
+    }
+
     if (userData) {
       setUser(userData)
     } else {
@@ -253,20 +289,6 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         setUser(result.data.user)
       } else {
         throw new Error('Kunde inte hämta användarsession efter inloggning')
-      }
-    }
-
-    // Extract session token from cookies and store in localStorage for cross-origin requests
-    // This is needed for mobile Safari which blocks cross-origin cookies
-    const cookies = document.cookie.split(';')
-    for (const cookie of cookies) {
-      const [name, value] = cookie.trim().split('=')
-      // Better Auth uses __Secure-better-auth.session_token or better-auth.session_token
-      if (name && (name.includes('better-auth.session_token') || name.includes('session_token'))) {
-        const token = decodeURIComponent(value)
-        localStorage.setItem('better-auth-session-token', token)
-        console.log('✅ Stored session token in localStorage after login')
-        break
       }
     }
   }
