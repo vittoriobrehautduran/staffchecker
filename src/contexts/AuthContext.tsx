@@ -37,9 +37,12 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       const maxRetries = isInitialLoad ? 2 : 0
 
       try {
-        // Add a small delay on initial load to ensure cookies are available
+        // Add a delay on initial load to ensure cookies are available
+        // Mobile Safari needs more time for cookies to be set
         if (isInitialLoad && retryCount === 0) {
-          await new Promise(resolve => setTimeout(resolve, 200))
+          const isMobile = /iPhone|iPad|iPod|Android/i.test(navigator.userAgent)
+          const delay = isMobile ? 500 : 200
+          await new Promise(resolve => setTimeout(resolve, delay))
         }
         
         const sessionData = await authClient.$fetch('/session', {
@@ -179,7 +182,10 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     }
 
     // Wait a moment for cookies to be set
-    await new Promise(resolve => setTimeout(resolve, 100))
+    // Mobile Safari needs more time for cookies to be set
+    const isMobile = /iPhone|iPad|iPod|Android/i.test(navigator.userAgent)
+    const cookieDelay = isMobile ? 500 : 100
+    await new Promise(resolve => setTimeout(resolve, cookieDelay))
 
     // Refresh session after login - try multiple times if needed
     let attempts = 0

@@ -188,8 +188,10 @@ export default function Report() {
   useEffect(() => {
     const updateNextButton = () => {
       const nextButton = document.querySelector('.fc-next-button')
+      const prevButton = document.querySelector('.fc-prev-button')
       const currentMonth = format(startOfMonth(currentDate), 'yyyy-MM')
       const nextMonth = format(startOfMonth(addMonths(today, 1)), 'yyyy-MM')
+      const earliestMonth = format(startOfMonth(addMonths(today, -6)), 'yyyy-MM')
       
       if (nextButton) {
         // Disable if we're on next month (one month forward) or beyond
@@ -201,6 +203,17 @@ export default function Report() {
           nextButton.removeAttribute('disabled')
         }
       }
+
+      if (prevButton) {
+        // Disable if we're at or before the earliest allowed month (6 months back)
+        if (currentMonth <= earliestMonth) {
+          prevButton.classList.add('fc-button-disabled')
+          prevButton.setAttribute('disabled', 'true')
+        } else {
+          prevButton.classList.remove('fc-button-disabled')
+          prevButton.removeAttribute('disabled')
+        }
+      }
     }
     
     // Run after calendar renders
@@ -210,6 +223,8 @@ export default function Report() {
 
   const handleDateSelect = async (selectInfo: DateSelectArg) => {
     const date = selectInfo.start
+    if (!date) return
+    
     const dateStr = format(date, 'yyyy-MM-dd')
 
     // Allow all dates in the current month, including future dates
@@ -325,9 +340,19 @@ export default function Report() {
     const newDate = startOfMonth(arg.start)
     const currentMonth = startOfMonth(today)
     const nextMonth = addMonths(currentMonth, 1)
+    const earliestMonth = addMonths(currentMonth, -6)
     const newMonthKey = format(newDate, 'yyyy-MM')
     const nextMonthKey = format(nextMonth, 'yyyy-MM')
+    const earliestMonthKey = format(earliestMonth, 'yyyy-MM')
     
+    // Prevent navigation further back than 6 months
+    if (newMonthKey < earliestMonthKey) {
+      if (calendarRef.current) {
+        calendarRef.current.getApi().gotoDate(earliestMonth)
+      }
+      return
+    }
+
     // Allow navigation to next month (one month forward), but prevent beyond that
     if (newMonthKey > nextMonthKey) {
       if (calendarRef.current) {
@@ -437,15 +462,24 @@ export default function Report() {
             fixedWeekCount={false}
             showNonCurrentDates={false}
             initialDate={today}
+            selectMinDistance={5}
+            longPressDelay={100}
+            eventLongPressDelay={100}
             dayCellClassNames={(arg) => {
               const dateStr = format(arg.date, 'yyyy-MM-dd')
               const dayData = monthEntries[dateStr]
               const dateMonth = format(arg.date, 'yyyy-MM')
               const nextMonth = format(addMonths(today, 1), 'yyyy-MM')
+              const earliestMonth = format(addMonths(today, -6), 'yyyy-MM')
               const classes = ['hover:bg-blue-50', 'active:bg-blue-100', 'cursor-pointer', 'transition-colors', 'touch-manipulation']
               
               // Gray out if it's beyond next month (more than one month forward)
               if (dateMonth > nextMonth) {
+                classes.push('opacity-40', 'pointer-events-none')
+              }
+
+              // Gray out if it's older than 6 months back
+              if (dateMonth < earliestMonth) {
                 classes.push('opacity-40', 'pointer-events-none')
               }
               
@@ -457,6 +491,10 @@ export default function Report() {
             eventClick={(info: EventClickArg) => {
               const eventDate = info.event.start
               if (eventDate) {
+                // Prevent default to avoid double-triggering on mobile
+                if (info.jsEvent) {
+                  info.jsEvent.preventDefault()
+                }
                 handleDateSelect({
                   start: eventDate,
                   end: eventDate,
@@ -464,6 +502,31 @@ export default function Report() {
                   jsEvent: info.jsEvent,
                   view: info.view,
                 } as DateSelectArg)
+              }
+            }}
+            dayCellDidMount={(arg) => {
+              // Ensure touch events work on mobile Safari
+              const cell = arg.el
+              if (cell) {
+                cell.style.touchAction = 'manipulation'
+                cell.style.webkitTapHighlightColor = 'transparent'
+                // Add explicit click handler for mobile Safari
+                const handleClick = (e: MouseEvent | TouchEvent) => {
+                  e.preventDefault()
+                  e.stopPropagation()
+                  const date = arg.date
+                  if (date) {
+                    handleDateSelect({
+                      start: date,
+                      end: date,
+                      allDay: false,
+                      jsEvent: e as any,
+                      view: arg.view,
+                    } as DateSelectArg)
+                  }
+                }
+                cell.addEventListener('click', handleClick, { passive: false })
+                cell.addEventListener('touchend', handleClick, { passive: false })
               }
             }}
             dayHeaderFormat={{ weekday: 'short' }}
