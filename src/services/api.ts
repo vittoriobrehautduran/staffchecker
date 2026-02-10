@@ -3,29 +3,6 @@
 // Or custom domain: https://api.yourapp.com
 const API_BASE_URL = import.meta.env.VITE_API_BASE_URL || ''
 
-// Get auth token from cookies (Better Auth stores session in cookies)
-// Extract session cookie value to use as token for API calls
-function getAuthToken(): string | null {
-  // First check localStorage for stored token
-  const storedToken = localStorage.getItem('better-auth-session-token')
-  if (storedToken) {
-    return storedToken
-  }
-  
-  // Better Auth stores session in cookies
-  // Extract the session cookie value
-  const cookies = document.cookie.split(';')
-  for (const cookie of cookies) {
-    const [name, value] = cookie.trim().split('=')
-    // Better Auth uses cookie names like 'better-auth.session_token' or 'session_token'
-    if (name && (name.includes('session') || name.includes('auth'))) {
-      return decodeURIComponent(value)
-    }
-  }
-  
-  return null
-}
-
 export async function apiRequest<T>(
   endpoint: string,
   options: RequestInit = {}
@@ -40,25 +17,14 @@ export async function apiRequest<T>(
   const cleanEndpoint = endpoint.startsWith('/') ? endpoint.slice(1) : endpoint
   const url = `${API_BASE_URL.replace(/\/$/, '')}/${cleanEndpoint}`
   
-  // Get auth token from localStorage
-  const token = getAuthToken()
-  
-  // Build headers with Authorization token if available
-  const headers: Record<string, string> = {
-    'Content-Type': 'application/json',
-    ...(options.headers as Record<string, string>),
-  }
-  
-  // Add Authorization header if token exists
-  if (token) {
-    headers['Authorization'] = `Bearer ${token}`
-  }
-  
   try {
     const response = await fetch(url, {
       ...options,
-      headers,
-      credentials: 'omit', // Don't use cookies, use token instead
+      headers: {
+        'Content-Type': 'application/json',
+        ...options.headers,
+      },
+      credentials: 'include', // Include cookies (Better Auth uses cookies)
     })
 
     if (!response.ok) {

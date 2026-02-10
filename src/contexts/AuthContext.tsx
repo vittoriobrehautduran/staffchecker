@@ -60,16 +60,6 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         // But sometimes it returns the data directly
         let userData = (sessionData as any)?.data || sessionData
         
-        // Store session token in localStorage for API calls (token-based auth)
-        // Extract session ID or token from the session response
-        const sessionToken = (sessionData as any)?.data?.session?.id || 
-                            (sessionData as any)?.session?.id ||
-                            (sessionData as any)?.data?.sessionToken ||
-                            (sessionData as any)?.sessionToken
-        if (sessionToken) {
-          localStorage.setItem('better-auth-session-token', sessionToken)
-        }
-        
         // Handle different response formats
         if (userData && typeof userData === 'object') {
           // Format 1: {user: {...}}
@@ -215,7 +205,6 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     // Refresh session after login - try multiple times if needed
     let attempts = 0
     let userData = null
-    let sessionToken = null
     
     while (attempts < 3 && !userData) {
       try {
@@ -224,13 +213,6 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     })
     // Better Auth $fetch wraps responses in {data, error}
         const data = (sessionData as any)?.data || sessionData
-        
-        // Extract session token for API calls
-        sessionToken = data?.session?.id || 
-                      data?.sessionToken || 
-                      data?.session?.token ||
-                      (sessionData as any)?.session?.id ||
-                      (sessionData as any)?.sessionToken
         
         if (data && typeof data === 'object') {
           if ('user' in data) {
@@ -247,21 +229,6 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         await new Promise(resolve => setTimeout(resolve, 200))
       }
       attempts++
-    }
-
-    // Store session token in localStorage for API calls
-    if (sessionToken) {
-      localStorage.setItem('better-auth-session-token', sessionToken)
-    }
-    
-    // Also extract session cookie value as fallback
-    const cookies = document.cookie.split(';')
-    for (const cookie of cookies) {
-      const [name, value] = cookie.trim().split('=')
-      if (name && (name.includes('session') || name.includes('auth'))) {
-        localStorage.setItem('better-auth-session-token', decodeURIComponent(value))
-        break
-      }
     }
 
     if (userData) {
