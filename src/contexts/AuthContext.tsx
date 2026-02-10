@@ -60,6 +60,20 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         // But sometimes it returns the data directly
         let userData = (sessionData as any)?.data || sessionData
         
+        // Extract session token from cookies and store in localStorage
+        // This is needed for mobile Safari which blocks cross-origin cookies
+        const cookies = document.cookie.split(';')
+        for (const cookie of cookies) {
+          const [name, value] = cookie.trim().split('=')
+          // Better Auth uses __Secure-better-auth.session_token or better-auth.session_token
+          if (name && (name.includes('better-auth.session_token') || name.includes('session_token'))) {
+            const token = decodeURIComponent(value)
+            localStorage.setItem('better-auth-session-token', token)
+            console.log('✅ Stored session token in localStorage for cross-origin requests')
+            break
+          }
+        }
+        
         // Handle different response formats
         if (userData && typeof userData === 'object') {
           // Format 1: {user: {...}}
@@ -239,6 +253,20 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         setUser(result.data.user)
       } else {
         throw new Error('Kunde inte hämta användarsession efter inloggning')
+      }
+    }
+
+    // Extract session token from cookies and store in localStorage for cross-origin requests
+    // This is needed for mobile Safari which blocks cross-origin cookies
+    const cookies = document.cookie.split(';')
+    for (const cookie of cookies) {
+      const [name, value] = cookie.trim().split('=')
+      // Better Auth uses __Secure-better-auth.session_token or better-auth.session_token
+      if (name && (name.includes('better-auth.session_token') || name.includes('session_token'))) {
+        const token = decodeURIComponent(value)
+        localStorage.setItem('better-auth-session-token', token)
+        console.log('✅ Stored session token in localStorage after login')
+        break
       }
     }
   }

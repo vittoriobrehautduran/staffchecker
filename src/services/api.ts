@@ -3,6 +3,28 @@
 // Or custom domain: https://api.yourapp.com
 const API_BASE_URL = import.meta.env.VITE_API_BASE_URL || ''
 
+// Get session token from localStorage or cookies
+// This is needed for mobile Safari which blocks cross-origin cookies
+function getSessionToken(): string | null {
+  // First check localStorage (set after login)
+  const storedToken = localStorage.getItem('better-auth-session-token')
+  if (storedToken) {
+    return storedToken
+  }
+  
+  // Fallback: try to extract from cookies (works on same-origin)
+  const cookies = document.cookie.split(';')
+  for (const cookie of cookies) {
+    const [name, value] = cookie.trim().split('=')
+    // Better Auth uses __Secure-better-auth.session_token or better-auth.session_token
+    if (name && (name.includes('better-auth.session_token') || name.includes('session_token'))) {
+      return decodeURIComponent(value)
+    }
+  }
+  
+  return null
+}
+
 export async function apiRequest<T>(
   endpoint: string,
   options: RequestInit = {}
@@ -17,14 +39,29 @@ export async function apiRequest<T>(
   const cleanEndpoint = endpoint.startsWith('/') ? endpoint.slice(1) : endpoint
   const url = `${API_BASE_URL.replace(/\/$/, '')}/${cleanEndpoint}`
   
+  // Get session token for Authorization header (works better for cross-origin)
+  const sessionToken = getSessionToken()
+  
+  // Build headers
+  const headers: Record<string, string> = {
+    'Content-Type': 'application/json',
+    ...(options.headers as Record<string, string> || {}),
+  }
+  
+  // Add Authorization header if we have a token
+  // Backend will use this if cookies aren't available (mobile Safari)
+  if (sessionToken) {
+    headers['Authorization'] = `Bearer ${sessionToken}`
+    console.log('🔑 Sending Authorization header with session token')
+  } else {
+    console.warn('⚠️ No session token found - cookies may be blocked (mobile Safari)')
+  }
+  
   try {
     const response = await fetch(url, {
       ...options,
-      headers: {
-        'Content-Type': 'application/json',
-        ...options.headers,
-      },
-      credentials: 'include', // Include cookies (Better Auth uses cookies)
+      headers,
+      credentials: 'include', // Still try cookies first (works on desktop)
     })
 
     if (!response.ok) {

@@ -66,10 +66,19 @@ export async function getBetterAuthUserIdFromRequest(event: APIGatewayProxyEvent
       // Prioritize Authorization header (token-based auth) over cookies
       // This works better for cross-origin requests and mobile browsers
       if (event.headers?.Authorization || event.headers?.authorization) {
-        headers['authorization'] = event.headers.Authorization || event.headers.authorization || ''
+        const authHeader = event.headers.Authorization || event.headers.authorization || ''
+        // If it's a Bearer token, extract just the token part
+        if (authHeader.startsWith('Bearer ')) {
+          const token = authHeader.substring(7)
+          // Better Auth expects the session token in a cookie format
+          // So we'll set it as a cookie header for Better Auth to parse
+          headers['cookie'] = `__Secure-better-auth.session_token=${token}`
+        } else {
+          headers['authorization'] = authHeader
+        }
       }
       // Fallback to cookies if no Authorization header (for backward compatibility)
-      if (cookieHeader && !headers['authorization']) {
+      if (cookieHeader && !headers['cookie']) {
         headers['cookie'] = cookieHeader
       }
       if (event.headers?.Host || event.headers?.host) {
