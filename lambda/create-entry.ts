@@ -37,7 +37,7 @@ export const handler = async (
       headers: {
         ...getCorsHeaders(origin),
         'Access-Control-Allow-Methods': 'POST,OPTIONS',
-        'Access-Control-Allow-Headers': 'Content-Type,Authorization,Cookie',
+        'Access-Control-Allow-Headers': 'Content-Type,Authorization,Cookie,X-Auth-Token',
         'Access-Control-Max-Age': '86400',
       },
       body: '',

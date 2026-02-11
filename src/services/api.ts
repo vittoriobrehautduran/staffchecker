@@ -61,10 +61,13 @@ export async function apiRequest<T>(
   
   // Add Authorization header if we have a token
   // Backend will use this if cookies aren't available (mobile Safari)
+  // Using both Authorization and X-Auth-Token to test which one API Gateway passes through
   if (sessionToken) {
     headers['Authorization'] = `Bearer ${sessionToken}`
+    headers['X-Auth-Token'] = sessionToken // Test with custom header
     console.log('🔑 Sending Authorization header with session token')
     console.log('🔍 Authorization header value (first 50 chars):', headers['Authorization'].substring(0, 50))
+    console.log('🔍 X-Auth-Token header value (first 50 chars):', headers['X-Auth-Token'].substring(0, 50))
   } else {
     console.warn('⚠️ No session token found - cookies may be blocked (mobile Safari)')
   }

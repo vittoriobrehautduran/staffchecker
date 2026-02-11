@@ -85,18 +85,32 @@ export async function getBetterAuthUserIdFromRequest(event: APIGatewayProxyEvent
       // This works better for cross-origin requests and mobile browsers
       // API Gateway may send headers in different cases, check both
       // Also check multiValueHeaders (API Gateway v1)
+      // Also check X-Auth-Token as fallback (API Gateway REST API sometimes strips Authorization)
       const authHeader = event.headers?.Authorization || 
                         event.headers?.authorization || 
                         event.multiValueHeaders?.Authorization?.[0] ||
                         event.multiValueHeaders?.authorization?.[0] ||
                         ''
       
-      if (authHeader) {
-        console.log('Authorization header received:', authHeader.substring(0, 50) + '...')
+      const xAuthToken = event.headers?.['X-Auth-Token'] || 
+                        event.headers?.['x-auth-token'] ||
+                        event.multiValueHeaders?.['X-Auth-Token']?.[0] ||
+                        event.multiValueHeaders?.['x-auth-token']?.[0] ||
+                        ''
+      
+      // Use X-Auth-Token if Authorization is missing (API Gateway REST API quirk)
+      const tokenToUse = authHeader ? authHeader : (xAuthToken ? `Bearer ${xAuthToken}` : '')
+      
+      if (tokenToUse) {
+        if (authHeader) {
+          console.log('Authorization header received:', authHeader.substring(0, 50) + '...')
+        } else if (xAuthToken) {
+          console.log('X-Auth-Token header received (Authorization was stripped by API Gateway):', xAuthToken.substring(0, 50) + '...')
+        }
         
         // If it's a Bearer token, extract just the token part
-        if (authHeader.startsWith('Bearer ')) {
-          const token = authHeader.substring(7)
+        if (tokenToUse.startsWith('Bearer ')) {
+          const token = tokenToUse.substring(7)
           console.log('Extracted Bearer token, length:', token.length, 'first 20 chars:', token.substring(0, 20))
           
           // Better Auth expects the session token in a cookie format
@@ -106,10 +120,10 @@ export async function getBetterAuthUserIdFromRequest(event: APIGatewayProxyEvent
           headers['cookie'] += `; better-auth.session_token=${token}`
           console.log('Set cookie header from Bearer token')
         } else {
-          headers['authorization'] = authHeader
+          headers['authorization'] = tokenToUse
         }
       } else {
-        console.log('No Authorization header found in event.headers or event.multiValueHeaders')
+        console.log('No Authorization or X-Auth-Token header found in event.headers or event.multiValueHeaders')
       }
       // Fallback to cookies if no Authorization header (for backward compatibility)
       if (cookieHeader && !headers['cookie']) {

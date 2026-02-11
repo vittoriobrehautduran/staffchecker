@@ -59,7 +59,7 @@ export const handler = async (
         'Access-Control-Allow-Origin': origin,
         'Access-Control-Allow-Credentials': 'true',
         'Access-Control-Allow-Methods': 'GET,POST,PUT,DELETE,OPTIONS',
-        'Access-Control-Allow-Headers': 'Content-Type,Authorization,Cookie',
+        'Access-Control-Allow-Headers': 'Content-Type,Authorization,Cookie,X-Auth-Token',
         'Access-Control-Max-Age': '86400', // 24 hours
       },
       body: '',
@@ -372,7 +372,7 @@ export const handler = async (
         'Access-Control-Allow-Origin': origin,
         'Access-Control-Allow-Credentials': 'true',
         'Access-Control-Allow-Methods': 'GET,POST,PUT,DELETE,OPTIONS',
-        'Access-Control-Allow-Headers': 'Content-Type,Authorization,Cookie',
+        'Access-Control-Allow-Headers': 'Content-Type,Authorization,Cookie,X-Auth-Token',
       }
       
       // Copy other headers from Better Auth response, but NEVER copy CORS headers
