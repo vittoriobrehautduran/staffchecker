@@ -34,6 +34,20 @@ export async function getBetterAuthUserIdFromRequest(event: APIGatewayProxyEvent
     console.log('Event multiValueHeaders keys:', Object.keys(event.multiValueHeaders || {}))
     console.log('Raw Authorization header:', event.headers?.Authorization || event.headers?.authorization || 'NOT FOUND')
     
+    // Debug: Log ALL headers (not just auth/cookie) to see what API Gateway receives
+    console.log('=== ALL HEADERS RECEIVED ===')
+    if (event.headers) {
+      Object.entries(event.headers).forEach(([key, value]) => {
+        console.log(`Header [${key}]:`, typeof value === 'string' ? value.substring(0, 100) : value)
+      })
+    }
+    if (event.multiValueHeaders) {
+      Object.entries(event.multiValueHeaders).forEach(([key, values]) => {
+        console.log(`MultiHeader [${key}]:`, Array.isArray(values) ? values.map(v => String(v).substring(0, 100)).join('; ') : values)
+      })
+    }
+    console.log('=== END HEADERS DEBUG ===')
+    
     // Extract cookies from API Gateway event
     // API Gateway can send cookies in headers.Cookie, headers.cookie, or multiValueHeaders.Cookie
     let cookieHeader = ''

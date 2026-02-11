@@ -64,9 +64,14 @@ export async function apiRequest<T>(
   if (sessionToken) {
     headers['Authorization'] = `Bearer ${sessionToken}`
     console.log('🔑 Sending Authorization header with session token')
+    console.log('🔍 Authorization header value (first 50 chars):', headers['Authorization'].substring(0, 50))
   } else {
     console.warn('⚠️ No session token found - cookies may be blocked (mobile Safari)')
   }
+  
+  // Debug: Log all headers being sent
+  console.log('📤 All headers being sent:', Object.keys(headers))
+  console.log('📤 Authorization header present:', 'Authorization' in headers)
   
   try {
     const response = await fetch(url, {
