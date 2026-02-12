@@ -250,6 +250,12 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       throw new Error(result.error.message || 'Inloggning misslyckades')
     }
 
+    // Extract session ID from signIn response (if available)
+    // Better Auth signIn response might have: {data: {session: {id, ...}}, ...}
+    const signInData = (result as any)?.data || result
+    const sessionIdFromSignIn = signInData?.session?.id || null
+    console.log('Session ID from signIn response:', sessionIdFromSignIn ? sessionIdFromSignIn.substring(0, 20) + '...' : 'NOT FOUND')
+
     // Wait a moment for cookies to be set after login
     // Mobile Safari needs more time for cookies to be set
     const isMobile = /iPhone|iPad|iPod|Android/i.test(navigator.userAgent)
@@ -268,13 +274,25 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         // Construct auth URL from environment variable
         const apiBaseUrl = import.meta.env.VITE_API_BASE_URL?.trim() || ''
         const authBaseUrl = apiBaseUrl.endsWith('/auth') ? apiBaseUrl : `${apiBaseUrl.replace(/\/+$/, '')}/auth`
-        const sessionUrl = `${authBaseUrl}/session`
+        let sessionUrl = `${authBaseUrl}/session`
+        
+        // If we have a session ID from signIn, send it as query parameter
+        // This allows the Lambda to look up the full token even if cookies are blocked
+        if (sessionIdFromSignIn) {
+          sessionUrl += `?_token=${encodeURIComponent(sessionIdFromSignIn)}`
+          console.log('Sending session ID to session endpoint as query parameter')
+        }
         
         const sessionResponse = await fetch(sessionUrl, {
           method: 'GET',
           credentials: 'include', // Try cookies first
           headers: {
             'Content-Type': 'application/json',
+            // Also send session ID in Authorization header as fallback
+            ...(sessionIdFromSignIn ? {
+              'Authorization': `Bearer ${sessionIdFromSignIn}`,
+              'X-Auth-Token': sessionIdFromSignIn,
+            } : {}),
           },
         })
         

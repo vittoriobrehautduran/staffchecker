@@ -227,6 +227,19 @@ export const handler = async (
             headers: Object.fromEntries(request.headers.entries()),
           })
           
+          console.log('Better Auth getSession result:', sessionResult ? 'Got result' : 'No result')
+          console.log('Session result keys:', sessionResult ? Object.keys(sessionResult) : 'null')
+          if (sessionResult?.session) {
+            console.log('Session object keys:', Object.keys(sessionResult.session))
+            console.log('Session ID:', sessionResult.session.id ? sessionResult.session.id.substring(0, 20) + '...' : 'NOT FOUND')
+            console.log('Session token in result:', sessionResult.session.token ? 'FOUND (length: ' + sessionResult.session.token.length + ')' : 'NOT FOUND')
+          }
+          if (sessionResult?.data?.session) {
+            console.log('Session object in data keys:', Object.keys(sessionResult.data.session))
+            console.log('Session ID in data:', sessionResult.data.session.id ? sessionResult.data.session.id.substring(0, 20) + '...' : 'NOT FOUND')
+            console.log('Session token in data:', sessionResult.data.session.token ? 'FOUND (length: ' + sessionResult.data.session.token.length + ')' : 'NOT FOUND')
+          }
+          
           // Extract the session token from cookies, Authorization header, or query parameter
           // This allows the frontend to use it for cross-origin requests (mobile Safari)
           const cookies = request.headers.get('cookie') || ''
@@ -254,6 +267,41 @@ export const handler = async (
             console.log('Extracted token from query parameter for session response, length:', sessionToken.length)
           }
           
+          // CRITICAL: If Better Auth returned a session but no token, extract the session ID and look up the token
+          // This happens on mobile Safari after login when cookies are blocked
+          if (!sessionToken && sessionResult) {
+            const session = sessionResult.session || sessionResult.data?.session
+            const sessionId = session?.id
+            if (sessionId && sessionId.length === 32) {
+              console.log('Better Auth returned session ID but no token. Looking up full token from database using session ID:', sessionId.substring(0, 20))
+              try {
+                const { sql } = await import('./utils/database')
+                const sessionRow = await sql`
+                  SELECT token, "expiresAt" FROM "session" WHERE id = ${sessionId}
+                `
+                if (sessionRow && sessionRow.length > 0) {
+                  const dbSession = sessionRow[0]
+                  if (dbSession.expiresAt && new Date(dbSession.expiresAt) < new Date()) {
+                    console.log('Session ID found but expired')
+                    sessionToken = null
+                  } else if (dbSession.token && dbSession.token.length > 50) {
+                    sessionToken = dbSession.token
+                    console.log('Found full token from database using session ID, length:', sessionToken.length)
+                  } else {
+                    console.warn('Session ID found but token is invalid')
+                    sessionToken = null
+                  }
+                } else {
+                  console.log('Session ID from Better Auth not found in database')
+                  sessionToken = null
+                }
+              } catch (dbError: any) {
+                console.error('Error querying database for session token:', dbError?.message)
+                sessionToken = null
+              }
+            }
+          }
+          
           // If we got a session ID (32 chars) instead of the full token, look it up in the database
           if (sessionToken && sessionToken.length === 32) {
             console.log('Received session ID (32 chars) instead of token, looking up full token from database...')
@@ -263,12 +311,12 @@ export const handler = async (
                 SELECT token, "expiresAt" FROM "session" WHERE id = ${sessionToken}
               `
               if (sessionRow && sessionRow.length > 0) {
-                const session = sessionRow[0]
-                if (session.expiresAt && new Date(session.expiresAt) < new Date()) {
+                const dbSession = sessionRow[0]
+                if (dbSession.expiresAt && new Date(dbSession.expiresAt) < new Date()) {
                   console.log('Session ID found but expired')
-                  sessionToken = null // Session expired
-                } else if (session.token && session.token.length > 50) {
-                  sessionToken = session.token
+                  sessionToken = null
+                } else if (dbSession.token && dbSession.token.length > 50) {
+                  sessionToken = dbSession.token
                   console.log('Found full token from database, length:', sessionToken.length)
                 } else {
                   console.warn('Session ID found but token is invalid')
@@ -298,6 +346,8 @@ export const handler = async (
             console.log('Added full token to session response, length:', sessionToken.length)
           } else if (sessionResult && sessionToken && sessionToken.length === 32) {
             console.warn('⚠️ Cannot add session ID to response - need full token. Session ID length:', sessionToken.length)
+          } else if (sessionResult && !sessionToken) {
+            console.warn('⚠️ Session result exists but no token found to add to response')
           }
           
           const origin = getCorsOrigin(event)
