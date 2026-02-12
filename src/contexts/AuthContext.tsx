@@ -45,9 +45,29 @@ export function AuthProvider({ children }: { children: ReactNode }) {
           await new Promise(resolve => setTimeout(resolve, delay))
         }
         
-        const sessionData = await authClient.$fetch('/session', {
+        // On mobile Safari, cookies aren't sent cross-origin, so send token as query parameter
+        const existingToken = localStorage.getItem('better-auth-session-token')
+        // Construct auth URL from environment variable (same as auth-client.ts)
+        const apiBaseUrl = import.meta.env.VITE_API_BASE_URL?.trim() || ''
+        const authBaseUrl = apiBaseUrl.endsWith('/auth') ? apiBaseUrl : `${apiBaseUrl.replace(/\/+$/, '')}/auth`
+        const sessionUrl = existingToken 
+          ? `${authBaseUrl}/session?_token=${encodeURIComponent(existingToken)}`
+          : `${authBaseUrl}/session`
+        
+        const sessionResponse = await fetch(sessionUrl, {
           method: 'GET',
+          credentials: 'include', // Still try cookies
+          headers: existingToken ? {
+            'Authorization': `Bearer ${existingToken}`,
+            'X-Auth-Token': existingToken,
+          } : {},
         })
+        
+        if (!sessionResponse.ok) {
+          throw new Error(`Session fetch failed: ${sessionResponse.status}`)
+        }
+        
+        const sessionData = await sessionResponse.json()
         
         if (!isMountedRef.current) return
         
@@ -250,10 +270,30 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     
     while (attempts < 3 && !userData) {
       try {
-    const sessionData = await authClient.$fetch('/session', {
-      method: 'GET',
-    })
-    // Better Auth $fetch wraps responses in {data, error}
+        // On mobile Safari, cookies aren't sent cross-origin, so send token as query parameter
+        const existingToken = localStorage.getItem('better-auth-session-token')
+        // Construct auth URL from environment variable (same as auth-client.ts)
+        const apiBaseUrl = import.meta.env.VITE_API_BASE_URL?.trim() || ''
+        const authBaseUrl = apiBaseUrl.endsWith('/auth') ? apiBaseUrl : `${apiBaseUrl.replace(/\/+$/, '')}/auth`
+        const sessionUrl = existingToken 
+          ? `${authBaseUrl}/session?_token=${encodeURIComponent(existingToken)}`
+          : `${authBaseUrl}/session`
+        
+        const sessionResponse = await fetch(sessionUrl, {
+          method: 'GET',
+          credentials: 'include', // Still try cookies
+          headers: existingToken ? {
+            'Authorization': `Bearer ${existingToken}`,
+            'X-Auth-Token': existingToken,
+          } : {},
+        })
+        
+        if (!sessionResponse.ok) {
+          throw new Error(`Session fetch failed: ${sessionResponse.status}`)
+        }
+        
+        const sessionData = await sessionResponse.json()
+        // Better Auth $fetch wraps responses in {data, error}
         const data = (sessionData as any)?.data || sessionData
         
         if (data && typeof data === 'object') {

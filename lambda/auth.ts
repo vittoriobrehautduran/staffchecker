@@ -227,15 +227,31 @@ export const handler = async (
             headers: Object.fromEntries(request.headers.entries()),
           })
           
-          // Extract the session token from cookies if available, and add it to the response
-          // This allows the frontend to use it for cross-origin requests
+w          // Extract the session token from cookies, Authorization header, or query parameter
+          // This allows the frontend to use it for cross-origin requests (mobile Safari)
           const cookies = request.headers.get('cookie') || ''
           let sessionToken = null
           
-          // Try to extract session token from cookie
+          // Try to extract session token from cookie first
           const cookieMatch = cookies.match(/(?:__Secure-)?better-auth\.session_token=([^;]+)/)
           if (cookieMatch) {
             sessionToken = decodeURIComponent(cookieMatch[1])
+            console.log('Extracted token from cookie for session response')
+          }
+          
+          // Fallback: try Authorization header (mobile Safari workaround)
+          if (!sessionToken) {
+            const authHeader = request.headers.get('authorization') || request.headers.get('Authorization') || ''
+            if (authHeader.startsWith('Bearer ')) {
+              sessionToken = authHeader.substring(7)
+              console.log('Extracted token from Authorization header for session response')
+            }
+          }
+          
+          // Fallback: try query parameter (mobile Safari workaround)
+          if (!sessionToken && event.queryStringParameters?._token) {
+            sessionToken = event.queryStringParameters._token
+            console.log('Extracted token from query parameter for session response')
           }
           
           // If we have a session result, add the token to it
