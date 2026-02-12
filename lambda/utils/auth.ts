@@ -127,8 +127,28 @@ export async function getBetterAuthUserIdFromRequest(event: APIGatewayProxyEvent
         
         // If it's a Bearer token, extract just the token part
         if (tokenToUse.startsWith('Bearer ')) {
-          const token = tokenToUse.substring(7)
+          let token = tokenToUse.substring(7)
           console.log('Extracted Bearer token, length:', token.length, 'first 20 chars:', token.substring(0, 20))
+          
+          // If token is 32 characters, it's likely a session ID, not the actual token
+          // Query database to get the real token from the session table
+          if (token.length === 32) {
+            console.log('Token is 32 chars (session ID), looking up actual token from database...')
+            try {
+              const sessionRow = await sql`
+                SELECT token FROM "session" WHERE id = ${token} AND "expiresAt" > NOW()
+              `
+              if (sessionRow && sessionRow.length > 0 && sessionRow[0].token) {
+                token = sessionRow[0].token
+                console.log('Found actual token from database, length:', token.length, 'first 20 chars:', token.substring(0, 20))
+              } else {
+                console.log('Session ID not found in database or expired')
+              }
+            } catch (dbError: any) {
+              console.error('Error querying database for session token:', dbError?.message)
+              // Continue with session ID - Better Auth might still work
+            }
+          }
           
           // Better Auth expects the session token in a cookie format
           // Use the raw token value (don't double-encode, it's already URL encoded from cookie)
