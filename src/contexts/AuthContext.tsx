@@ -269,17 +269,31 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       dataKeys: Object.keys((result as any)?.data || {}),
     })
 
+    // Check if mobile early (used multiple times)
+    const isMobile = /iPhone|iPad|iPod|Android/i.test(navigator.userAgent)
+    
     // CRITICAL: Better Auth's signIn response includes a 'token' field directly!
     // Extract it immediately - this works on both desktop and mobile Safari
     // Response structure can be: { data: { token, user, redirect } } or { token, user, redirect }
     const signInData = (result as any)?.data || result
-    console.log('📥 SignIn response structure:', {
+    const debugInfo = {
       hasData: !!(result as any)?.data,
       signInDataKeys: Object.keys(signInData || {}),
       hasToken: !!signInData?.token,
       tokenLength: signInData?.token?.length,
       fullResultKeys: Object.keys(result || {}),
-    })
+      tokenPreview: signInData?.token ? signInData.token.substring(0, 20) + '...' : 'NOT FOUND',
+    }
+    console.log('📥 SignIn response structure:', debugInfo)
+    
+    // TEMPORARY: Show debug info on mobile (remove after fixing)
+    if (isMobile) {
+      // Store debug info in localStorage so we can check it
+      localStorage.setItem('debug-signin-response', JSON.stringify(debugInfo))
+      // Also show an alert with key info
+      const debugMsg = `SignIn Debug:\nKeys: ${debugInfo.signInDataKeys.join(', ')}\nHas Token: ${debugInfo.hasToken}\nToken Length: ${debugInfo.tokenLength || 0}`
+      console.log('📱 MOBILE DEBUG:', debugMsg)
+    }
     
     let sessionToken = null
     let userData = null
@@ -305,10 +319,15 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     } else {
       console.warn('⚠️ No token found in signIn response. Will try fallback methods.')
       console.warn('⚠️ This usually means mobile Safari blocked cookies and Better Auth returned a different response structure.')
+      
+      // TEMPORARY: Show what we got on mobile
+      if (isMobile) {
+        const errorMsg = `Ingen token hittades i signIn-svaret.\n\nSvaret innehåller: ${debugInfo.signInDataKeys.join(', ')}\n\nKontrollera localStorage 'debug-signin-response' för mer info.`
+        console.error('📱 MOBILE ERROR:', errorMsg)
+      }
     }
     
     // Wait a moment for cookies to be set after login (for Better Auth's internal state)
-    const isMobile = /iPhone|iPad|iPod|Android/i.test(navigator.userAgent)
     const cookieDelay = isMobile ? 500 : 100
     await new Promise(resolve => setTimeout(resolve, cookieDelay))
 
@@ -402,12 +421,20 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     if (!sessionToken) {
       console.error('❌ CRITICAL: Could not retrieve full session token after login')
       console.error('This usually happens on mobile Safari when cookies are blocked')
-      console.error('SignIn response structure:', JSON.stringify({
+      
+      const finalDebugInfo = {
         resultKeys: Object.keys(result || {}),
         resultDataKeys: Object.keys((result as any)?.data || {}),
         hasToken: !!(result as any)?.data?.token || !!(result as any)?.token,
         tokenLength: (result as any)?.data?.token?.length || (result as any)?.token?.length,
-      }, null, 2))
+        signInDataKeys: Object.keys(signInData || {}),
+      }
+      console.error('SignIn response structure:', JSON.stringify(finalDebugInfo, null, 2))
+      
+      // Store final debug info
+      if (isMobile) {
+        localStorage.setItem('debug-signin-final', JSON.stringify(finalDebugInfo))
+      }
       
       // Try one more time to extract from result directly (in case structure is different)
       const directToken = (result as any)?.data?.token || (result as any)?.token
@@ -416,7 +443,11 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         localStorage.setItem('better-auth-session-token', sessionToken)
         console.log('✅ Found token on final attempt, length:', sessionToken.length)
       } else {
-        throw new Error('Kunde inte hämta sessions-token efter inloggning. Vänligen försök igen.')
+        // Show detailed error message with what we found
+        const errorDetails = isMobile 
+          ? `\n\nDebug info sparad i localStorage: 'debug-signin-response' och 'debug-signin-final'`
+          : `\n\nResponse keys: ${finalDebugInfo.resultDataKeys.join(', ')}`
+        throw new Error(`Kunde inte hämta sessions-token efter inloggning.${errorDetails}\n\nVänligen försök igen eller kontakta support.`)
       }
     }
 
