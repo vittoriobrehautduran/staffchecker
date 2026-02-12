@@ -241,30 +241,70 @@ export function AuthProvider({ children }: { children: ReactNode }) {
 
   const signIn = async (email: string, password: string) => {
     // Sign in with Better Auth using email and password
-    const result = await authClient.signIn.email({
-      email: email.trim(),
-      password,
-    })
+    let result
+    try {
+      result = await authClient.signIn.email({
+        email: email.trim(),
+        password,
+      })
+    } catch (networkError: any) {
+      console.error('❌ Network error during signIn:', networkError)
+      // Check if it's a CORS or network error
+      if (networkError?.message?.includes('CORS') || networkError?.message?.includes('Failed to fetch')) {
+        throw new Error('Nätverksfel: Kunde inte ansluta till servern. Kontrollera din internetanslutning.')
+      }
+      throw new Error(networkError?.message || 'Inloggning misslyckades: Nätverksfel')
+    }
 
     if (result.error) {
+      console.error('❌ Better Auth signIn error:', result.error)
       throw new Error(result.error.message || 'Inloggning misslyckades')
     }
+    
+    // Log the full result structure for debugging
+    console.log('📥 SignIn result structure:', {
+      hasData: !!(result as any)?.data,
+      hasError: !!result.error,
+      resultKeys: Object.keys(result || {}),
+      dataKeys: Object.keys((result as any)?.data || {}),
+    })
 
     // CRITICAL: Better Auth's signIn response includes a 'token' field directly!
     // Extract it immediately - this works on both desktop and mobile Safari
+    // Response structure can be: { data: { token, user, redirect } } or { token, user, redirect }
     const signInData = (result as any)?.data || result
-    console.log('📥 SignIn response keys:', Object.keys(signInData || {}))
+    console.log('📥 SignIn response structure:', {
+      hasData: !!(result as any)?.data,
+      signInDataKeys: Object.keys(signInData || {}),
+      hasToken: !!signInData?.token,
+      tokenLength: signInData?.token?.length,
+      fullResultKeys: Object.keys(result || {}),
+    })
     
     let sessionToken = null
     let userData = null
     
-    // First, try to get token directly from signIn response
-    // Better Auth signIn.email returns: { data: { token, user, redirect } }
+    // Try multiple ways to extract the token from signIn response
+    // Better Auth can return token in different places depending on configuration
     if (signInData?.token && signInData.token.length > 50) {
       sessionToken = signInData.token
+      console.log('✅ Found token in signInData.token')
+    } else if ((result as any)?.token && (result as any).token.length > 50) {
+      sessionToken = (result as any).token
+      console.log('✅ Found token in result.token')
+    } else if (signInData?.session?.token && signInData.session.token.length > 50) {
+      sessionToken = signInData.session.token
+      console.log('✅ Found token in signInData.session.token')
+    }
+    
+    // If we found a token, store it immediately
+    if (sessionToken) {
       localStorage.setItem('better-auth-session-token', sessionToken)
       console.log('✅ Stored FULL session token directly from signIn response, length:', sessionToken.length)
-      userData = signInData.user || null
+      userData = signInData?.user || (result as any)?.user || null
+    } else {
+      console.warn('⚠️ No token found in signIn response. Will try fallback methods.')
+      console.warn('⚠️ This usually means mobile Safari blocked cookies and Better Auth returned a different response structure.')
     }
     
     // Wait a moment for cookies to be set after login (for Better Auth's internal state)
@@ -362,7 +402,22 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     if (!sessionToken) {
       console.error('❌ CRITICAL: Could not retrieve full session token after login')
       console.error('This usually happens on mobile Safari when cookies are blocked')
-      throw new Error('Kunde inte hämta sessions-token efter inloggning. Vänligen försök igen.')
+      console.error('SignIn response structure:', JSON.stringify({
+        resultKeys: Object.keys(result || {}),
+        resultDataKeys: Object.keys((result as any)?.data || {}),
+        hasToken: !!(result as any)?.data?.token || !!(result as any)?.token,
+        tokenLength: (result as any)?.data?.token?.length || (result as any)?.token?.length,
+      }, null, 2))
+      
+      // Try one more time to extract from result directly (in case structure is different)
+      const directToken = (result as any)?.data?.token || (result as any)?.token
+      if (directToken && directToken.length > 50) {
+        sessionToken = directToken
+        localStorage.setItem('better-auth-session-token', sessionToken)
+        console.log('✅ Found token on final attempt, length:', sessionToken.length)
+      } else {
+        throw new Error('Kunde inte hämta sessions-token efter inloggning. Vänligen försök igen.')
+      }
     }
 
     // Extract session token from cookies and store in localStorage for cross-origin requests
