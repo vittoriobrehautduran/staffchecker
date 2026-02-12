@@ -82,14 +82,15 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         
         // Extract session token from session response (preferred - works even if cookies are HttpOnly)
         // Better Auth session response structure: {session: {id, userId, expiresAt, token}, user: {...}}
+        // CRITICAL: We MUST store the full token (77 chars), NEVER the session ID (32 chars)
         const session = userData?.session || (sessionData as any)?.session || (sessionData as any)?.data?.session
-        if (session?.token) {
+        if (session?.token && session.token.length > 50) {
+          // Only store if it's the full token (should be ~77 chars)
           localStorage.setItem('better-auth-session-token', session.token)
-          console.log('✅ Stored session token from session response (token)')
-        } else if (session?.id) {
-          // Fallback: use session ID as token
-          localStorage.setItem('better-auth-session-token', session.id)
-          console.log('✅ Stored session ID as token from session response')
+          console.log('✅ Stored FULL session token from session response, length:', session.token.length)
+        } else if (session?.token && session.token.length === 32) {
+          // This is a session ID, not the token - log warning but don't store it
+          console.warn('⚠️ Session response contains session ID (32 chars) instead of token. Token not stored.')
         } else {
           // Last resort: try to extract from cookies (may not work on mobile Safari if HttpOnly)
           const cookies = document.cookie.split(';')
@@ -101,9 +102,14 @@ export function AuthProvider({ children }: { children: ReactNode }) {
             // Better Auth uses __Secure-better-auth.session_token or better-auth.session_token
             if (name && (name.includes('better-auth.session_token') || name.includes('session_token'))) {
               const token = decodeURIComponent(value)
-              localStorage.setItem('better-auth-session-token', token)
-              console.log('✅ Stored session token from cookie:', cookieName)
-              break
+              // Only store if it's the full token (should be ~77 chars)
+              if (token.length > 50) {
+                localStorage.setItem('better-auth-session-token', token)
+                console.log('✅ Stored FULL session token from cookie, length:', token.length)
+                break
+              } else {
+                console.warn('⚠️ Cookie contains session ID (32 chars) instead of token. Token not stored.')
+              }
             }
           }
         }
@@ -244,48 +250,32 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       throw new Error(result.error.message || 'Inloggning misslyckades')
     }
 
-    // Try to extract token from signIn response immediately (before cookies are set)
-    // This is critical for mobile Safari which blocks cookies
-    const signInData = (result as any)?.data || result
-    if (signInData?.session?.token) {
-      localStorage.setItem('better-auth-session-token', signInData.session.token)
-      console.log('✅ Stored session token from signIn response (token)')
-    } else if (signInData?.session?.id) {
-      localStorage.setItem('better-auth-session-token', signInData.session.id)
-      console.log('✅ Stored session ID as token from signIn response')
-    } else if (signInData?.token) {
-      localStorage.setItem('better-auth-session-token', signInData.token)
-      console.log('✅ Stored token from signIn response')
-    }
-
-    // Wait a moment for cookies to be set
+    // Wait a moment for cookies to be set after login
     // Mobile Safari needs more time for cookies to be set
     const isMobile = /iPhone|iPad|iPod|Android/i.test(navigator.userAgent)
     const cookieDelay = isMobile ? 500 : 100
     await new Promise(resolve => setTimeout(resolve, cookieDelay))
 
-    // Refresh session after login - try multiple times if needed
+    // CRITICAL: Always fetch the session endpoint after login to get the full token
+    // Better Auth's signIn response doesn't include the full token - we must fetch it
+    // This is especially important for mobile Safari which blocks cookies
     let attempts = 0
     let userData = null
+    let sessionToken = null
     
-    while (attempts < 3 && !userData) {
+    while (attempts < 5 && !sessionToken) {
       try {
-        // On mobile Safari, cookies aren't sent cross-origin, so send token as query parameter
-        const existingToken = localStorage.getItem('better-auth-session-token')
-        // Construct auth URL from environment variable (same as auth-client.ts)
+        // Construct auth URL from environment variable
         const apiBaseUrl = import.meta.env.VITE_API_BASE_URL?.trim() || ''
         const authBaseUrl = apiBaseUrl.endsWith('/auth') ? apiBaseUrl : `${apiBaseUrl.replace(/\/+$/, '')}/auth`
-        const sessionUrl = existingToken 
-          ? `${authBaseUrl}/session?_token=${encodeURIComponent(existingToken)}`
-          : `${authBaseUrl}/session`
+        const sessionUrl = `${authBaseUrl}/session`
         
         const sessionResponse = await fetch(sessionUrl, {
           method: 'GET',
-          credentials: 'include', // Still try cookies
-          headers: existingToken ? {
-            'Authorization': `Bearer ${existingToken}`,
-            'X-Auth-Token': existingToken,
-          } : {},
+          credentials: 'include', // Try cookies first
+          headers: {
+            'Content-Type': 'application/json',
+          },
         })
         
         if (!sessionResponse.ok) {
@@ -304,25 +294,57 @@ export function AuthProvider({ children }: { children: ReactNode }) {
           }
         }
         
-        // Try to extract session token from session response
+        // Extract the FULL session token from session response
         // Better Auth session object has: {id, userId, expiresAt, token}
+        // We MUST get the token (77 chars), NOT the id (32 chars)
         const session = data?.session || (sessionData as any)?.session
-        if (session?.token) {
-          localStorage.setItem('better-auth-session-token', session.token)
-          console.log('✅ Stored session token from session response (token)')
-        } else if (session?.id) {
-          // Fallback: use session ID as token
-          localStorage.setItem('better-auth-session-token', session.id)
-          console.log('✅ Stored session ID as token from session response')
+        if (session?.token && session.token.length > 50) {
+          // Only store if it's the full token (should be ~77 chars)
+          sessionToken = session.token
+          localStorage.setItem('better-auth-session-token', sessionToken)
+          console.log('✅ Stored FULL session token from session response, length:', sessionToken.length)
+          break
+        } else if (session?.token && session.token.length === 32) {
+          // This is a session ID, not the token - we need to fetch it differently
+          console.warn('⚠️ Received session ID instead of token, will retry...')
         }
       } catch (error) {
-        // Session fetch failed, will retry
+        console.warn(`Session fetch attempt ${attempts + 1} failed:`, error)
       }
       
-      if (!userData && attempts < 2) {
-        await new Promise(resolve => setTimeout(resolve, 200))
+      if (!sessionToken && attempts < 4) {
+        // Wait longer between retries on mobile
+        await new Promise(resolve => setTimeout(resolve, isMobile ? 300 : 200))
       }
       attempts++
+    }
+    
+    // If we still don't have a token, try extracting from cookies as last resort
+    if (!sessionToken) {
+      for (let i = 0; i < 3; i++) {
+        const cookies = document.cookie.split(';')
+        for (const cookie of cookies) {
+          const [name, value] = cookie.trim().split('=')
+          if (name && (name.includes('better-auth.session_token') || name.includes('session_token'))) {
+            const token = decodeURIComponent(value)
+            // Only store if it's the full token (should be ~77 chars)
+            if (token.length > 50) {
+              sessionToken = token
+              localStorage.setItem('better-auth-session-token', sessionToken)
+              console.log('✅ Stored FULL session token from cookie, length:', sessionToken.length)
+              break
+            }
+          }
+        }
+        if (sessionToken) break
+        await new Promise(resolve => setTimeout(resolve, 200))
+      }
+    }
+    
+    // If we still don't have the full token, this is a critical error
+    if (!sessionToken) {
+      console.error('❌ CRITICAL: Could not retrieve full session token after login')
+      throw new Error('Kunde inte hämta sessions-token efter inloggning. Vänligen försök igen.')
     }
 
     // Extract session token from cookies and store in localStorage for cross-origin requests

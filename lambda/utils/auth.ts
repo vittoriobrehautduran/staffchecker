@@ -134,19 +134,32 @@ export async function getBetterAuthUserIdFromRequest(event: APIGatewayProxyEvent
           // Query database to get the real token from the session table
           if (token.length === 32) {
             console.log('Token is 32 chars (session ID), looking up actual token from database...')
+            console.log('Session ID (first 20 chars):', token.substring(0, 20))
             try {
               const sessionRow = await sql`
-                SELECT token FROM "session" WHERE id = ${token} AND "expiresAt" > NOW()
+                SELECT token, "expiresAt" FROM "session" WHERE id = ${token}
               `
-              if (sessionRow && sessionRow.length > 0 && sessionRow[0].token) {
-                token = sessionRow[0].token
-                console.log('Found actual token from database, length:', token.length, 'first 20 chars:', token.substring(0, 20))
+              if (sessionRow && sessionRow.length > 0) {
+                const session = sessionRow[0]
+                // Check if session is expired
+                if (session.expiresAt && new Date(session.expiresAt) < new Date()) {
+                  console.log('Session ID found but expired. ExpiresAt:', session.expiresAt)
+                  return null // Session expired
+                }
+                if (session.token && session.token.length > 50) {
+                  token = session.token
+                  console.log('Found actual token from database, length:', token.length, 'first 20 chars:', token.substring(0, 20))
+                } else {
+                  console.warn('Session ID found but token is invalid (length:', session.token?.length || 0, ')')
+                  return null // Invalid token format
+                }
               } else {
-                console.log('Session ID not found in database or expired')
+                console.log('Session ID not found in database')
+                return null // Session ID doesn't exist
               }
             } catch (dbError: any) {
-              console.error('Error querying database for session token:', dbError?.message)
-              // Continue with session ID - Better Auth might still work
+              console.error('Error querying database for session token:', dbError?.message, dbError?.stack)
+              return null // Database error - fail authentication
             }
           }
           
