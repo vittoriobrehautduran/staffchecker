@@ -250,83 +250,77 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       throw new Error(result.error.message || 'Inloggning misslyckades')
     }
 
-    // Extract session ID from signIn response if available
-    // Better Auth might return session info in the response
+    // CRITICAL: Better Auth's signIn response includes a 'token' field directly!
+    // Extract it immediately - this works on both desktop and mobile Safari
     const signInData = (result as any)?.data || result
-    const sessionIdFromSignIn = signInData?.session?.id || null
-    console.log('📥 SignIn response - session ID:', sessionIdFromSignIn ? sessionIdFromSignIn.substring(0, 20) + '...' : 'NOT FOUND')
     console.log('📥 SignIn response keys:', Object.keys(signInData || {}))
-
-    // Wait a moment for cookies to be set after login
-    const isMobile = /iPhone|iPad|iPod|Android/i.test(navigator.userAgent)
-    const cookieDelay = isMobile ? 1500 : 300
-    await new Promise(resolve => setTimeout(resolve, cookieDelay))
-
-    // CRITICAL: Use Better Auth's $fetch to get session - it handles cookies automatically
-    // This is the proper way to get session data after login
+    
     let sessionToken = null
     let userData = null
     
-    // Try Better Auth's $fetch first (works on desktop, may fail on mobile Safari)
-    try {
-      const sessionData = await authClient.$fetch('/session', {
-        method: 'GET',
-      })
-      
-      const data = (sessionData as any)?.data || sessionData
-      
-      if (data && typeof data === 'object') {
-        if ('user' in data) {
-          userData = data.user
-        } else if ('email' in data) {
-          userData = data
-        }
-      }
-      
-      const session = data?.session || (sessionData as any)?.session
-      
-      if (session?.token && session.token.length > 50) {
-        sessionToken = session.token
-        localStorage.setItem('better-auth-session-token', sessionToken)
-        console.log('✅ Stored FULL session token from Better Auth $fetch, length:', sessionToken.length)
-      } else if (session?.id && session.id.length === 32) {
-        // Got session ID but not token - this happens on mobile Safari
-        console.warn('⚠️ Got session ID from $fetch but no token. Will try fallback with session ID.')
-      }
-    } catch (error: any) {
-      console.warn('⚠️ Better Auth $fetch failed (expected on mobile Safari):', error?.message)
+    // First, try to get token directly from signIn response
+    // Better Auth signIn.email returns: { data: { token, user, redirect } }
+    if (signInData?.token && signInData.token.length > 50) {
+      sessionToken = signInData.token
+      localStorage.setItem('better-auth-session-token', sessionToken)
+      console.log('✅ Stored FULL session token directly from signIn response, length:', sessionToken.length)
+      userData = signInData.user || null
     }
     
-    // Fallback for mobile Safari: Try manual fetch with session ID from signIn response
+    // Wait a moment for cookies to be set after login (for Better Auth's internal state)
+    const isMobile = /iPhone|iPad|iPod|Android/i.test(navigator.userAgent)
+    const cookieDelay = isMobile ? 500 : 100
+    await new Promise(resolve => setTimeout(resolve, cookieDelay))
+
+    // Fallback: If token not in signIn response, try Better Auth's $fetch
+    // This works on desktop but may fail on mobile Safari due to cookie blocking
+    if (!sessionToken) {
+      try {
+        const sessionData = await authClient.$fetch('/session', {
+          method: 'GET',
+        })
+        
+        const data = (sessionData as any)?.data || sessionData
+        
+        if (data && typeof data === 'object') {
+          if ('user' in data) {
+            userData = data.user
+          } else if ('email' in data) {
+            userData = data
+          }
+        }
+        
+        const session = data?.session || (sessionData as any)?.session
+        
+        if (session?.token && session.token.length > 50) {
+          sessionToken = session.token
+          localStorage.setItem('better-auth-session-token', sessionToken)
+          console.log('✅ Stored FULL session token from Better Auth $fetch, length:', sessionToken.length)
+        }
+      } catch (error: any) {
+        console.warn('⚠️ Better Auth $fetch failed (expected on mobile Safari):', error?.message)
+      }
+    }
+    
+    // Last resort: Try manual fetch to session endpoint
+    // This should work if cookies are blocked but we have the token from signIn
     if (!sessionToken) {
       try {
         const apiBaseUrl = import.meta.env.VITE_API_BASE_URL?.trim() || ''
         const authBaseUrl = apiBaseUrl.endsWith('/auth') ? apiBaseUrl : `${apiBaseUrl.replace(/\/+$/, '')}/auth`
-        let sessionUrl = `${authBaseUrl}/session`
+        const sessionUrl = `${authBaseUrl}/session`
         
-        // If we have a session ID from signIn, send it as query parameter
-        // The Lambda will look it up in the database and return the full token
-        if (sessionIdFromSignIn) {
-          sessionUrl += `?_token=${encodeURIComponent(sessionIdFromSignIn)}`
-          console.log(`📡 Fallback: Calling session endpoint with session ID: ${sessionUrl}`)
-        } else {
-          console.log(`📡 Fallback: Calling session endpoint without session ID: ${sessionUrl}`)
-        }
+        console.log(`📡 Last resort: Calling session endpoint: ${sessionUrl}`)
         
         const sessionResponse = await fetch(sessionUrl, {
           method: 'GET',
           credentials: 'include',
           headers: {
             'Content-Type': 'application/json',
-            // Also send session ID in headers as fallback
-            ...(sessionIdFromSignIn ? {
-              'Authorization': `Bearer ${sessionIdFromSignIn}`,
-              'X-Auth-Token': sessionIdFromSignIn,
-            } : {}),
           },
         })
         
-        console.log(`📡 Fallback response status: ${sessionResponse.status}`)
+        console.log(`📡 Last resort response status: ${sessionResponse.status}`)
         
         if (sessionResponse.ok) {
           const sessionData = await sessionResponse.json()
@@ -336,19 +330,14 @@ export function AuthProvider({ children }: { children: ReactNode }) {
           if (session?.token && session.token.length > 50) {
             sessionToken = session.token
             localStorage.setItem('better-auth-session-token', sessionToken)
-            console.log('✅ Stored FULL session token from fallback fetch, length:', sessionToken.length)
-          } else {
-            console.warn('⚠️ Fallback fetch succeeded but no token in response')
-            console.warn('Session object:', session ? { hasId: !!session.id, hasToken: !!session.token, idLength: session.id?.length, tokenLength: session.token?.length } : 'null')
-            console.warn('Full response data keys:', data ? Object.keys(data) : 'null')
+            console.log('✅ Stored FULL session token from last resort fetch, length:', sessionToken.length)
           }
         } else {
           const errorText = await sessionResponse.text()
-          console.error(`❌ Fallback fetch failed: ${sessionResponse.status}`, errorText.substring(0, 200))
+          console.error(`❌ Last resort fetch failed: ${sessionResponse.status}`, errorText.substring(0, 200))
         }
       } catch (fallbackError: any) {
-        console.error('❌ Fallback fetch error:', fallbackError?.message)
-        console.error('Error stack:', fallbackError?.stack)
+        console.error('❌ Last resort fetch error:', fallbackError?.message)
       }
     }
     
