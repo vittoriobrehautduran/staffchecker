@@ -250,6 +250,13 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       throw new Error(result.error.message || 'Inloggning misslyckades')
     }
 
+    // Extract session ID from signIn response if available
+    // Better Auth might return session info in the response
+    const signInData = (result as any)?.data || result
+    const sessionIdFromSignIn = signInData?.session?.id || null
+    console.log('📥 SignIn response - session ID:', sessionIdFromSignIn ? sessionIdFromSignIn.substring(0, 20) + '...' : 'NOT FOUND')
+    console.log('📥 SignIn response keys:', Object.keys(signInData || {}))
+
     // Wait a moment for cookies to be set after login
     const isMobile = /iPhone|iPad|iPod|Android/i.test(navigator.userAgent)
     const cookieDelay = isMobile ? 1500 : 300
@@ -282,25 +289,40 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         sessionToken = session.token
         localStorage.setItem('better-auth-session-token', sessionToken)
         console.log('✅ Stored FULL session token from Better Auth $fetch, length:', sessionToken.length)
+      } else if (session?.id && session.id.length === 32) {
+        // Got session ID but not token - this happens on mobile Safari
+        console.warn('⚠️ Got session ID from $fetch but no token. Will try fallback with session ID.')
       }
     } catch (error: any) {
       console.warn('⚠️ Better Auth $fetch failed (expected on mobile Safari):', error?.message)
     }
     
-    // Fallback for mobile Safari: Try manual fetch with credentials
+    // Fallback for mobile Safari: Try manual fetch with session ID from signIn response
     if (!sessionToken) {
       try {
         const apiBaseUrl = import.meta.env.VITE_API_BASE_URL?.trim() || ''
         const authBaseUrl = apiBaseUrl.endsWith('/auth') ? apiBaseUrl : `${apiBaseUrl.replace(/\/+$/, '')}/auth`
-        const sessionUrl = `${authBaseUrl}/session`
+        let sessionUrl = `${authBaseUrl}/session`
         
-        console.log(`📡 Fallback: Calling session endpoint: ${sessionUrl}`)
+        // If we have a session ID from signIn, send it as query parameter
+        // The Lambda will look it up in the database and return the full token
+        if (sessionIdFromSignIn) {
+          sessionUrl += `?_token=${encodeURIComponent(sessionIdFromSignIn)}`
+          console.log(`📡 Fallback: Calling session endpoint with session ID: ${sessionUrl}`)
+        } else {
+          console.log(`📡 Fallback: Calling session endpoint without session ID: ${sessionUrl}`)
+        }
         
         const sessionResponse = await fetch(sessionUrl, {
           method: 'GET',
           credentials: 'include',
           headers: {
             'Content-Type': 'application/json',
+            // Also send session ID in headers as fallback
+            ...(sessionIdFromSignIn ? {
+              'Authorization': `Bearer ${sessionIdFromSignIn}`,
+              'X-Auth-Token': sessionIdFromSignIn,
+            } : {}),
           },
         })
         
@@ -317,7 +339,8 @@ export function AuthProvider({ children }: { children: ReactNode }) {
             console.log('✅ Stored FULL session token from fallback fetch, length:', sessionToken.length)
           } else {
             console.warn('⚠️ Fallback fetch succeeded but no token in response')
-            console.warn('Session object:', session ? { hasId: !!session.id, hasToken: !!session.token } : 'null')
+            console.warn('Session object:', session ? { hasId: !!session.id, hasToken: !!session.token, idLength: session.id?.length, tokenLength: session.token?.length } : 'null')
+            console.warn('Full response data keys:', data ? Object.keys(data) : 'null')
           }
         } else {
           const errorText = await sessionResponse.text()
@@ -325,6 +348,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         }
       } catch (fallbackError: any) {
         console.error('❌ Fallback fetch error:', fallbackError?.message)
+        console.error('Error stack:', fallbackError?.stack)
       }
     }
     
