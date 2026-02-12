@@ -60,6 +60,11 @@ export async function apiRequest<T>(
   if (sessionToken) {
     const separator = url.includes('?') ? '&' : '?'
     url += `${separator}_token=${encodeURIComponent(sessionToken)}`
+    console.log('🔗 Added _token query parameter to URL')
+    console.log('🔗 URL (first 100 chars):', url.substring(0, 100))
+  } else {
+    console.warn('⚠️ No session token found - cannot add _token query parameter')
+    console.warn('⚠️ localStorage.getItem result:', localStorage.getItem('better-auth-session-token'))
   }
   
   // Build headers

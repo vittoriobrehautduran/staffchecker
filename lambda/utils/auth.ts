@@ -82,9 +82,16 @@ export async function getBetterAuthUserIdFromRequest(event: APIGatewayProxyEvent
       const headers: Record<string, string> = {}
       
       // Check query parameters first (workaround for API Gateway REST API stripping headers)
+      console.log('Query string parameters:', JSON.stringify(event.queryStringParameters || {}))
+      console.log('Multi-value query string parameters:', JSON.stringify(event.multiValueQueryStringParameters || {}))
       const queryToken = event.queryStringParameters?._token || 
                         event.multiValueQueryStringParameters?._token?.[0] ||
                         ''
+      if (queryToken) {
+        console.log('Found _token query parameter, length:', queryToken.length, 'first 20 chars:', queryToken.substring(0, 20))
+      } else {
+        console.log('No _token query parameter found')
+      }
       
       // Prioritize Authorization header (token-based auth) over cookies
       // This works better for cross-origin requests and mobile browsers

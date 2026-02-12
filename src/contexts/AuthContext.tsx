@@ -224,6 +224,20 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       throw new Error(result.error.message || 'Inloggning misslyckades')
     }
 
+    // Try to extract token from signIn response immediately (before cookies are set)
+    // This is critical for mobile Safari which blocks cookies
+    const signInData = (result as any)?.data || result
+    if (signInData?.session?.token) {
+      localStorage.setItem('better-auth-session-token', signInData.session.token)
+      console.log('✅ Stored session token from signIn response (token)')
+    } else if (signInData?.session?.id) {
+      localStorage.setItem('better-auth-session-token', signInData.session.id)
+      console.log('✅ Stored session ID as token from signIn response')
+    } else if (signInData?.token) {
+      localStorage.setItem('better-auth-session-token', signInData.token)
+      console.log('✅ Stored token from signIn response')
+    }
+
     // Wait a moment for cookies to be set
     // Mobile Safari needs more time for cookies to be set
     const isMobile = /iPhone|iPad|iPod|Android/i.test(navigator.userAgent)
