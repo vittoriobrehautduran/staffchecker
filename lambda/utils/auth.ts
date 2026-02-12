@@ -81,6 +81,11 @@ export async function getBetterAuthUserIdFromRequest(event: APIGatewayProxyEvent
     if (auth?.api && typeof (auth.api as any).getSession === 'function') {
       const headers: Record<string, string> = {}
       
+      // Check query parameters first (workaround for API Gateway REST API stripping headers)
+      const queryToken = event.queryStringParameters?._token || 
+                        event.multiValueQueryStringParameters?._token?.[0] ||
+                        ''
+      
       // Prioritize Authorization header (token-based auth) over cookies
       // This works better for cross-origin requests and mobile browsers
       // API Gateway may send headers in different cases, check both
@@ -98,14 +103,19 @@ export async function getBetterAuthUserIdFromRequest(event: APIGatewayProxyEvent
                         event.multiValueHeaders?.['x-auth-token']?.[0] ||
                         ''
       
-      // Use X-Auth-Token if Authorization is missing (API Gateway REST API quirk)
-      const tokenToUse = authHeader ? authHeader : (xAuthToken ? `Bearer ${xAuthToken}` : '')
+      // Use query parameter if headers are missing (API Gateway REST API strips headers)
+      // Priority: Authorization header > X-Auth-Token header > query parameter
+      const tokenToUse = authHeader ? authHeader : 
+                        (xAuthToken ? `Bearer ${xAuthToken}` : 
+                        (queryToken ? `Bearer ${queryToken}` : ''))
       
       if (tokenToUse) {
         if (authHeader) {
           console.log('Authorization header received:', authHeader.substring(0, 50) + '...')
         } else if (xAuthToken) {
           console.log('X-Auth-Token header received (Authorization was stripped by API Gateway):', xAuthToken.substring(0, 50) + '...')
+        } else if (queryToken) {
+          console.log('Token from query parameter (headers were stripped by API Gateway):', queryToken.substring(0, 50) + '...')
         }
         
         // If it's a Bearer token, extract just the token part
@@ -123,7 +133,7 @@ export async function getBetterAuthUserIdFromRequest(event: APIGatewayProxyEvent
           headers['authorization'] = tokenToUse
         }
       } else {
-        console.log('No Authorization or X-Auth-Token header found in event.headers or event.multiValueHeaders')
+        console.log('No Authorization header, X-Auth-Token header, or _token query parameter found')
       }
       // Fallback to cookies if no Authorization header (for backward compatibility)
       if (cookieHeader && !headers['cookie']) {

@@ -16,6 +16,14 @@ function getCorsOrigin(event: APIGatewayProxyEvent): string {
 export const handler = async (
   event: APIGatewayProxyEvent
 ): Promise<APIGatewayProxyResult> => {
+  // Log all incoming requests
+  console.log('=== get-report Lambda called ===')
+  console.log('HTTP Method:', event.httpMethod)
+  console.log('Path:', event.path)
+  console.log('Resource:', event.resource)
+  console.log('Request ID:', event.requestContext?.requestId)
+  console.log('Headers received:', Object.keys(event.headers || {}))
+  
   // Helper to always return CORS headers
   const getCorsHeaders = (origin: string) => ({
     'Access-Control-Allow-Origin': origin,
@@ -33,6 +41,7 @@ export const handler = async (
 
   // Handle OPTIONS preflight requests
   if (event.httpMethod === 'OPTIONS') {
+    console.log('Handling OPTIONS preflight request')
     return {
       statusCode: 200,
       headers: {
@@ -49,6 +58,7 @@ export const handler = async (
   const httpMethod = event.httpMethod || 'GET'
   
   if (httpMethod !== 'GET') {
+    console.log('Method not allowed:', httpMethod)
     return {
       statusCode: 405,
       headers: getCorsHeaders(origin),
@@ -56,8 +66,11 @@ export const handler = async (
     }
   }
 
+  console.log('Processing GET request for get-report')
+  
   try {
     // Get user ID from Better Auth session
+    console.log('Attempting to get user ID from session...')
     let userId: number | null = null
     try {
       userId = await getUserIdFromBetterAuthSession(event)
@@ -150,8 +163,11 @@ export const handler = async (
       }),
     }
   } catch (error: any) {
-    console.error('Error in get-report:', error)
+    console.error('=== ERROR in get-report Lambda ===')
+    console.error('Error type:', error?.constructor?.name)
+    console.error('Error message:', error?.message)
     console.error('Error stack:', error?.stack)
+    console.error('Full error object:', JSON.stringify(error, Object.getOwnPropertyNames(error)))
     // Always return CORS headers even on error
     try {
       const errorOrigin = getCorsOrigin(event)
@@ -163,10 +179,11 @@ export const handler = async (
           error: process.env.NODE_ENV !== 'production' ? String(error) : undefined,
         }),
       }
-    } catch {
+    } catch (originError) {
+      console.error('Failed to get CORS origin in error handler:', originError)
       // Fallback if even getCorsOrigin fails
-    return {
-      statusCode: 500,
+      return {
+        statusCode: 500,
         headers: getCorsHeaders('https://main.d3jub8c52hgrc6.amplifyapp.com'),
         body: JSON.stringify({ 
           message: 'Internal server error',

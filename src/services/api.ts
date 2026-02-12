@@ -48,10 +48,19 @@ export async function apiRequest<T>(
 
   // Remove leading slash from endpoint if present, API_BASE_URL should include trailing slash or not
   const cleanEndpoint = endpoint.startsWith('/') ? endpoint.slice(1) : endpoint
-  const url = `${API_BASE_URL.replace(/\/$/, '')}/${cleanEndpoint}`
   
   // Get session token for Authorization header (works better for cross-origin)
   const sessionToken = getSessionToken()
+  
+  // Build URL with query parameters as fallback (API Gateway REST API strips headers)
+  let url = `${API_BASE_URL.replace(/\/$/, '')}/${cleanEndpoint}`
+  
+  // Add token as query parameter if we have it (workaround for API Gateway REST API header stripping)
+  // This is less secure but necessary since headers don't pass through
+  if (sessionToken) {
+    const separator = url.includes('?') ? '&' : '?'
+    url += `${separator}_token=${encodeURIComponent(sessionToken)}`
+  }
   
   // Build headers
   const headers: Record<string, string> = {
@@ -59,22 +68,11 @@ export async function apiRequest<T>(
     ...(options.headers as Record<string, string> || {}),
   }
   
-  // Add Authorization header if we have a token
-  // Backend will use this if cookies aren't available (mobile Safari)
-  // Using both Authorization and X-Auth-Token to test which one API Gateway passes through
+  // Still try headers (might work on desktop with cookies)
   if (sessionToken) {
     headers['Authorization'] = `Bearer ${sessionToken}`
-    headers['X-Auth-Token'] = sessionToken // Test with custom header
-    console.log('🔑 Sending Authorization header with session token')
-    console.log('🔍 Authorization header value (first 50 chars):', headers['Authorization'].substring(0, 50))
-    console.log('🔍 X-Auth-Token header value (first 50 chars):', headers['X-Auth-Token'].substring(0, 50))
-  } else {
-    console.warn('⚠️ No session token found - cookies may be blocked (mobile Safari)')
+    headers['X-Auth-Token'] = sessionToken
   }
-  
-  // Debug: Log all headers being sent
-  console.log('📤 All headers being sent:', Object.keys(headers))
-  console.log('📤 Authorization header present:', 'Authorization' in headers)
   
   try {
     const response = await fetch(url, {
