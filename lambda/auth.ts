@@ -227,7 +227,7 @@ export const handler = async (
             headers: Object.fromEntries(request.headers.entries()),
           })
           
-w          // Extract the session token from cookies, Authorization header, or query parameter
+          // Extract the session token from cookies, Authorization header, or query parameter
           // This allows the frontend to use it for cross-origin requests (mobile Safari)
           const cookies = request.headers.get('cookie') || ''
           let sessionToken = null
