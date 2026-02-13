@@ -8,6 +8,7 @@ import Register from '@/pages/Register'
 import VerifyEmail from '@/pages/VerifyEmail'
 import Report from '@/pages/Report'
 import Preview from '@/pages/Preview'
+import Debug from '@/pages/Debug'
 
 function ProtectedRoute({ children }: { children: React.ReactNode }) {
   const { isSignedIn, isLoading } = useAuth()
@@ -31,6 +32,7 @@ function App() {
         <Route path="/login" element={<Login />} />
         <Route path="/register" element={<Register />} />
         <Route path="/verify-email" element={<VerifyEmail />} />
+        <Route path="/debug" element={<Debug />} />
         <Route
           path="/report"
           element={
