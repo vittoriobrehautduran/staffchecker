@@ -297,33 +297,27 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     
     let sessionToken = null
     let userData = null
+    let sessionId = null
+    
+    // Extract user data first (always available)
+    userData = signInData?.user || (result as any)?.user || null
     
     // Try multiple ways to extract the token from signIn response
-    // Better Auth can return token in different places depending on configuration
-    if (signInData?.token && signInData.token.length > 50) {
-      sessionToken = signInData.token
-      console.log('✅ Found token in signInData.token')
-    } else if ((result as any)?.token && (result as any).token.length > 50) {
-      sessionToken = (result as any).token
-      console.log('✅ Found token in result.token')
-    } else if (signInData?.session?.token && signInData.session.token.length > 50) {
-      sessionToken = signInData.session.token
-      console.log('✅ Found token in signInData.session.token')
-    }
+    // Better Auth can return either a full token (>50 chars) or a session ID (32 chars)
+    const tokenFromSignIn = signInData?.token || (result as any)?.token || signInData?.session?.token
     
-    // If we found a token, store it immediately
-    if (sessionToken) {
-      localStorage.setItem('better-auth-session-token', sessionToken)
-      console.log('✅ Stored FULL session token directly from signIn response, length:', sessionToken.length)
-      userData = signInData?.user || (result as any)?.user || null
-    } else {
-      console.warn('⚠️ No token found in signIn response. Will try fallback methods.')
-      console.warn('⚠️ This usually means mobile Safari blocked cookies and Better Auth returned a different response structure.')
-      
-      // TEMPORARY: Show what we got on mobile
-      if (isMobile) {
-        const errorMsg = `Ingen token hittades i signIn-svaret.\n\nSvaret innehåller: ${debugInfo.signInDataKeys.join(', ')}\n\nKontrollera localStorage 'debug-signin-response' för mer info.`
-        console.error('📱 MOBILE ERROR:', errorMsg)
+    if (tokenFromSignIn) {
+      if (tokenFromSignIn.length > 50) {
+        // Full token received - use it directly
+        sessionToken = tokenFromSignIn
+        console.log('✅ Found FULL token in signIn response, length:', sessionToken.length)
+        localStorage.setItem('better-auth-session-token', sessionToken)
+      } else if (tokenFromSignIn.length === 32) {
+        // Session ID received - need to fetch full token from /session endpoint
+        sessionId = tokenFromSignIn
+        console.log('📋 Found session ID in signIn response (32 chars). Will fetch full token from /session endpoint.')
+      } else {
+        console.warn('⚠️ Unexpected token length from signIn:', tokenFromSignIn.length)
       }
     }
     
@@ -331,7 +325,55 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     const cookieDelay = isMobile ? 500 : 100
     await new Promise(resolve => setTimeout(resolve, cookieDelay))
 
-    // Fallback: If token not in signIn response, try Better Auth's $fetch
+    // If we have a session ID, fetch the full token from /session endpoint
+    // The Lambda will recognize the session ID and look up the full token from the database
+    if (!sessionToken && sessionId) {
+      try {
+        const apiBaseUrl = import.meta.env.VITE_API_BASE_URL?.trim() || ''
+        const authBaseUrl = apiBaseUrl.endsWith('/auth') ? apiBaseUrl : `${apiBaseUrl.replace(/\/+$/, '')}/auth`
+        const sessionUrl = `${authBaseUrl}/session?_token=${encodeURIComponent(sessionId)}`
+        
+        console.log(`📡 Fetching full token using session ID from: ${sessionUrl.substring(0, 80)}...`)
+        
+        const sessionResponse = await fetch(sessionUrl, {
+          method: 'GET',
+          credentials: 'include',
+          headers: {
+            'Content-Type': 'application/json',
+            'Authorization': `Bearer ${sessionId}`,
+          },
+        })
+        
+        console.log(`📡 Session endpoint response status: ${sessionResponse.status}`)
+        
+        if (sessionResponse.ok) {
+          const sessionData = await sessionResponse.json()
+          const data = (sessionData as any)?.data || sessionData
+          const session = data?.session || (sessionData as any)?.session
+          
+          if (session?.token && session.token.length > 50) {
+            sessionToken = session.token
+            localStorage.setItem('better-auth-session-token', sessionToken)
+            console.log('✅ Stored FULL session token from /session endpoint, length:', sessionToken.length)
+            
+            // Update user data if available
+            if (data?.user) {
+              userData = data.user
+            }
+          } else {
+            console.warn('⚠️ /session endpoint returned session but token is missing or too short')
+            console.warn('Session data:', JSON.stringify(session, null, 2).substring(0, 200))
+          }
+        } else {
+          const errorText = await sessionResponse.text()
+          console.error(`❌ /session endpoint failed: ${sessionResponse.status}`, errorText.substring(0, 200))
+        }
+      } catch (sessionError: any) {
+        console.error('❌ Error fetching full token from /session:', sessionError?.message)
+      }
+    }
+    
+    // Fallback: If we still don't have a token, try Better Auth's $fetch
     // This works on desktop but may fail on mobile Safari due to cookie blocking
     if (!sessionToken) {
       try {
@@ -342,9 +384,9 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         const data = (sessionData as any)?.data || sessionData
         
         if (data && typeof data === 'object') {
-          if ('user' in data) {
+          if ('user' in data && !userData) {
             userData = data.user
-          } else if ('email' in data) {
+          } else if ('email' in data && !userData) {
             userData = data
           }
         }
@@ -361,8 +403,8 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       }
     }
     
-    // Last resort: Try manual fetch to session endpoint
-    // This should work if cookies are blocked but we have the token from signIn
+    // Last resort: Try manual fetch to session endpoint without session ID
+    // This should work if cookies are set (desktop browsers)
     if (!sessionToken) {
       try {
         const apiBaseUrl = import.meta.env.VITE_API_BASE_URL?.trim() || ''
