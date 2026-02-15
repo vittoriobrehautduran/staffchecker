@@ -10,6 +10,8 @@ export default function Debug() {
     // Load all debug info from localStorage
     const signInResponse = localStorage.getItem('debug-signin-response')
     const signInFinal = localStorage.getItem('debug-signin-final')
+    const sessionResponse = localStorage.getItem('debug-session-response')
+    const sessionError = localStorage.getItem('debug-session-error')
     const sessionToken = localStorage.getItem('better-auth-session-token')
     
     // Get all localStorage items
@@ -27,6 +29,8 @@ export default function Debug() {
       setDebugInfo({
         signInResponse: signInResponse ? JSON.parse(signInResponse) : null,
         signInFinal: signInFinal ? JSON.parse(signInFinal) : null,
+        sessionResponse: sessionResponse ? JSON.parse(sessionResponse) : null,
+        sessionError: sessionError ? JSON.parse(sessionError) : null,
         sessionToken: sessionToken ? {
           length: sessionToken.length,
           preview: sessionToken.substring(0, 30) + '...',
@@ -41,6 +45,8 @@ export default function Debug() {
   const clearDebug = () => {
     localStorage.removeItem('debug-signin-response')
     localStorage.removeItem('debug-signin-final')
+    localStorage.removeItem('debug-session-response')
+    localStorage.removeItem('debug-session-error')
     window.location.reload()
   }
 
@@ -83,6 +89,20 @@ export default function Debug() {
                 <h3 className="font-semibold mb-2">Session Token Status</h3>
                 <pre className="bg-muted p-4 rounded-md text-xs overflow-auto">
                   {JSON.stringify(debugInfo?.sessionToken, null, 2) || 'No token found'}
+                </pre>
+              </div>
+
+              <div>
+                <h3 className="font-semibold mb-2">Session Endpoint Response</h3>
+                <pre className="bg-muted p-4 rounded-md text-xs overflow-auto max-h-64">
+                  {JSON.stringify(debugInfo?.sessionResponse, null, 2) || 'No data found'}
+                </pre>
+              </div>
+
+              <div>
+                <h3 className="font-semibold mb-2">Session Endpoint Error</h3>
+                <pre className="bg-muted p-4 rounded-md text-xs overflow-auto max-h-64">
+                  {JSON.stringify(debugInfo?.sessionError, null, 2) || 'No error found'}
                 </pre>
               </div>
 

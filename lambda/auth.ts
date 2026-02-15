@@ -229,8 +229,7 @@ export const handler = async (
           
           console.log('Better Auth getSession result:', sessionResult ? 'Got result' : 'No result')
           console.log('Session result keys:', sessionResult ? Object.keys(sessionResult) : 'null')
-          if (sessionResult?.session) {
-            console.log('Session object keys:', Object.keys(sessionResult.session))
+          if (sessionResult?.session) {            console.log('Session object keys:', Object.keys(sessionResult.session))
             console.log('Session ID:', sessionResult.session.id ? sessionResult.session.id.substring(0, 20) + '...' : 'NOT FOUND')
             console.log('Session token in result:', sessionResult.session.token ? 'FOUND (length: ' + sessionResult.session.token.length + ')' : 'NOT FOUND')
           }
@@ -350,6 +349,21 @@ export const handler = async (
             console.warn('⚠️ Session result exists but no token found to add to response')
           }
           
+          // CRITICAL: If we have a full token but no sessionResult (mobile Safari cookie blocking),
+          // create a response with the token so the frontend can use it
+          let responseBody = sessionResult
+          if (!sessionResult && sessionToken && sessionToken.length > 50) {
+            console.log('Creating session response with token (sessionResult was null, likely due to cookie blocking)')
+            responseBody = {
+              session: {
+                token: sessionToken,
+              },
+            }
+          } else if (!sessionResult && !sessionToken) {
+            // No session and no token - return null/empty response
+            responseBody = null
+          }
+          
           const origin = getCorsOrigin(event)
           
           return {
@@ -359,7 +373,7 @@ export const handler = async (
               'Access-Control-Allow-Origin': origin,
               'Access-Control-Allow-Credentials': 'true',
             },
-            body: JSON.stringify(sessionResult),
+            body: JSON.stringify(responseBody),
           }
         } catch (apiError: any) {
           console.error('Better Auth API getSession failed:', apiError?.message)

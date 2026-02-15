@@ -327,49 +327,121 @@ export function AuthProvider({ children }: { children: ReactNode }) {
 
     // If we have a session ID, fetch the full token from /session endpoint
     // The Lambda will recognize the session ID and look up the full token from the database
+    // Retry up to 3 times with delays - session might not be in DB immediately after signIn
     if (!sessionToken && sessionId) {
-      try {
-        const apiBaseUrl = import.meta.env.VITE_API_BASE_URL?.trim() || ''
-        const authBaseUrl = apiBaseUrl.endsWith('/auth') ? apiBaseUrl : `${apiBaseUrl.replace(/\/+$/, '')}/auth`
-        const sessionUrl = `${authBaseUrl}/session?_token=${encodeURIComponent(sessionId)}`
-        
-        console.log(`📡 Fetching full token using session ID from: ${sessionUrl.substring(0, 80)}...`)
-        
-        const sessionResponse = await fetch(sessionUrl, {
-          method: 'GET',
-          credentials: 'include',
-          headers: {
-            'Content-Type': 'application/json',
-            'Authorization': `Bearer ${sessionId}`,
-          },
-        })
-        
-        console.log(`📡 Session endpoint response status: ${sessionResponse.status}`)
-        
-        if (sessionResponse.ok) {
-          const sessionData = await sessionResponse.json()
-          const data = (sessionData as any)?.data || sessionData
-          const session = data?.session || (sessionData as any)?.session
+      let retries = 3
+      let lastError: any = null
+      
+      while (retries > 0 && !sessionToken) {
+        try {
+          // Wait a bit before retrying (session might be written asynchronously)
+          if (retries < 3) {
+            const delay = (4 - retries) * 500 // 500ms, 1000ms, 1500ms
+            console.log(`⏳ Waiting ${delay}ms before retry ${4 - retries}/3...`)
+            await new Promise(resolve => setTimeout(resolve, delay))
+          }
           
-          if (session?.token && session.token.length > 50) {
-            sessionToken = session.token
-            localStorage.setItem('better-auth-session-token', sessionToken)
-            console.log('✅ Stored FULL session token from /session endpoint, length:', sessionToken.length)
+          const apiBaseUrl = import.meta.env.VITE_API_BASE_URL?.trim() || ''
+          if (!apiBaseUrl) {
+            throw new Error('VITE_API_BASE_URL is not configured')
+          }
+          
+          const authBaseUrl = apiBaseUrl.endsWith('/auth') ? apiBaseUrl : `${apiBaseUrl.replace(/\/+$/, '')}/auth`
+          const sessionUrl = `${authBaseUrl}/session?_token=${encodeURIComponent(sessionId)}`
+          
+          console.log(`📡 Fetching full token using session ID (attempt ${4 - retries}/3): ${sessionUrl.substring(0, 80)}...`)
+          
+          const sessionResponse = await fetch(sessionUrl, {
+            method: 'GET',
+            credentials: 'include',
+            headers: {
+              'Content-Type': 'application/json',
+              'Authorization': `Bearer ${sessionId}`,
+            },
+          })
+          
+          console.log(`📡 Session endpoint response status: ${sessionResponse.status}`)
+          
+          // Check for network/CORS errors
+          if (!sessionResponse.ok && sessionResponse.status === 0) {
+            throw new Error('Network error: Request may have been blocked by CORS or network')
+          }
+          
+          if (sessionResponse.ok) {
+            const sessionData = await sessionResponse.json()
+            console.log('📥 /session endpoint response structure:', {
+              hasData: !!(sessionData as any)?.data,
+              hasSession: !!(sessionData as any)?.session,
+              sessionDataKeys: Object.keys(sessionData || {}),
+              sessionKeys: Object.keys((sessionData as any)?.session || {}),
+            })
             
-            // Update user data if available
-            if (data?.user) {
-              userData = data.user
+            const data = (sessionData as any)?.data || sessionData
+            const session = data?.session || (sessionData as any)?.session
+            
+            console.log('📥 Extracted session:', {
+              hasSession: !!session,
+              sessionKeys: session ? Object.keys(session) : [],
+              hasToken: !!session?.token,
+              tokenLength: session?.token?.length,
+            })
+            
+            if (session?.token && session.token.length > 50) {
+              sessionToken = session.token
+              localStorage.setItem('better-auth-session-token', sessionToken)
+              console.log('✅ Stored FULL session token from /session endpoint, length:', sessionToken.length)
+              
+              // Update user data if available
+              if (data?.user) {
+                userData = data.user
+              }
+              break // Success - exit retry loop
+            } else {
+              console.warn(`⚠️ /session endpoint returned session but token is missing or too short (attempt ${4 - retries}/3)`)
+              console.warn('Full response:', JSON.stringify(sessionData, null, 2).substring(0, 500))
+              // Store debug info for mobile
+              if (isMobile) {
+                localStorage.setItem('debug-session-response', JSON.stringify({
+                  sessionData,
+                  data,
+                  session,
+                  tokenLength: session?.token?.length,
+                  attempt: 4 - retries,
+                }, null, 2))
+              }
+              // Continue to retry
+              lastError = new Error('Token missing or too short in response')
             }
           } else {
-            console.warn('⚠️ /session endpoint returned session but token is missing or too short')
-            console.warn('Session data:', JSON.stringify(session, null, 2).substring(0, 200))
+            const errorText = await sessionResponse.text()
+            console.error(`❌ /session endpoint failed: ${sessionResponse.status} (attempt ${4 - retries}/3)`, errorText.substring(0, 200))
+            // Store error for mobile debugging
+            if (isMobile) {
+              localStorage.setItem('debug-session-error', JSON.stringify({
+                status: sessionResponse.status,
+                error: errorText.substring(0, 500),
+                attempt: 4 - retries,
+              }, null, 2))
+            }
+            lastError = new Error(`HTTP ${sessionResponse.status}: ${errorText.substring(0, 100)}`)
           }
-        } else {
-          const errorText = await sessionResponse.text()
-          console.error(`❌ /session endpoint failed: ${sessionResponse.status}`, errorText.substring(0, 200))
+        } catch (sessionError: any) {
+          console.error(`❌ Error fetching full token from /session (attempt ${4 - retries}/3):`, sessionError?.message)
+          lastError = sessionError
         }
-      } catch (sessionError: any) {
-        console.error('❌ Error fetching full token from /session:', sessionError?.message)
+        
+        retries--
+      }
+      
+      // If we still don't have a token after retries, log the final error
+      if (!sessionToken && lastError) {
+        console.error('❌ Failed to fetch full token after 3 attempts:', lastError.message)
+        if (isMobile) {
+          localStorage.setItem('debug-session-final-error', JSON.stringify({
+            error: lastError.message,
+            sessionId: sessionId.substring(0, 20) + '...',
+          }, null, 2))
+        }
       }
     }
     
