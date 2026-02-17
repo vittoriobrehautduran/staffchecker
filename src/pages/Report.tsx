@@ -50,6 +50,7 @@ export default function Report() {
   const loadingRef = useRef(false)
   const lastLoadedMonthRef = useRef<string | null>(null)
   const notificationTimeoutsRef = useRef<NodeJS.Timeout[]>([])
+  const isHandlingClickRef = useRef(false)
 
   if (!isSignedIn) {
     navigate('/login')
@@ -149,6 +150,18 @@ export default function Report() {
     }
   }, [currentDate, isSignedIn])
 
+  // Update entries when monthEntries changes for the selected date
+  useEffect(() => {
+    if (selectedDate && isModalOpen) {
+      const dateStr = format(selectedDate, 'yyyy-MM-dd')
+      const cachedData = monthEntries[dateStr]
+      if (cachedData) {
+        setEntries(cachedData.entries)
+        setReportStatus(cachedData.reportStatus)
+      }
+    }
+  }, [monthEntries, selectedDate, isModalOpen])
+
   // Notification cycle: show for 10s, fade out, wait 30s, repeat
   useEffect(() => {
     if (isLoadingEntries || !isSignedIn) {
@@ -222,8 +235,15 @@ export default function Report() {
   }, [currentDate])
 
   const handleDateSelect = async (selectInfo: DateSelectArg) => {
+    // Prevent double-clicks
+    if (isHandlingClickRef.current) return
+    isHandlingClickRef.current = true
+    
     const date = selectInfo.start
-    if (!date) return
+    if (!date) {
+      isHandlingClickRef.current = false
+      return
+    }
     
     const dateStr = format(date, 'yyyy-MM-dd')
 
@@ -238,42 +258,61 @@ export default function Report() {
         description: 'Du kan endast välja datum inom de senaste 6 månaderna eller nästa månad',
         variant: 'destructive',
       })
+      isHandlingClickRef.current = false
       return
     }
 
+    // Clear any visual selection immediately
+    if (calendarRef.current) {
+      calendarRef.current.getApi().unselect()
+    }
+    
+    // Set selected date and open modal IMMEDIATELY
     setSelectedDate(date)
     
+    // Reset click guard after a short delay
+    setTimeout(() => {
+      isHandlingClickRef.current = false
+    }, 300)
+    
+    // Try to use cached entries immediately for instant modal opening
+    if (monthEntries[dateStr]) {
+      setEntries(monthEntries[dateStr].entries)
+      setReportStatus(monthEntries[dateStr].reportStatus)
+      setIsModalOpen(true) // Open modal immediately with cached data
+    } else {
+      // No cached data - set empty entries and open modal immediately
+      setEntries([])
+      setReportStatus('draft')
+      setIsModalOpen(true) // Open modal immediately, will load data in background
+    }
+    
+    // Load entries in the background (after modal is already open)
     // If the selected date is in a different month, navigate to that month first
     const selectedMonth = format(date, 'yyyy-MM')
     const currentMonthKey = format(currentDate, 'yyyy-MM')
     if (selectedMonth !== currentMonthKey) {
       setCurrentDate(startOfMonth(date))
-      // Wait a bit for the calendar to update, then load entries
-      setTimeout(async () => {
-        await loadMonthEntries(startOfMonth(date))
-      }, 100)
-    }
-    
-    // Load entries for this date
-    if (monthEntries[dateStr]) {
-      setEntries(monthEntries[dateStr].entries)
-      setReportStatus(monthEntries[dateStr].reportStatus)
+      // Load month entries in background - entries will update automatically via state
+      loadMonthEntries(startOfMonth(date))
     } else {
-      // Load if not in cache
-      try {
-        const data = await apiRequest<EntriesResponse>(`/get-entries?date=${dateStr}`, {
+      // Same month - just load entries for this date if not cached
+      if (!monthEntries[dateStr]) {
+        // Load in background without blocking
+        apiRequest<EntriesResponse>(`/get-entries?date=${dateStr}`, {
           method: 'GET',
         })
-        setEntries(data?.entries || [])
-        setReportStatus(data?.reportStatus || 'draft')
-      } catch (error: any) {
-        console.error('Error loading entries:', error)
-        setEntries([])
-        setReportStatus('draft')
+          .then((data) => {
+            setEntries(data?.entries || [])
+            setReportStatus(data?.reportStatus || 'draft')
+          })
+          .catch((error: any) => {
+            console.error('Error loading entries:', error)
+            setEntries([])
+            setReportStatus('draft')
+          })
       }
     }
-
-    setIsModalOpen(true)
   }
 
   const handleEntrySaved = async () => {
@@ -463,19 +502,26 @@ export default function Report() {
               right: 'next today',
             }}
             height="100%"
-            selectable={false}
+            selectable={true}
             selectMirror={false}
+            unselectAuto={true}
             dayMaxEvents={2}
             moreLinkClick="popover"
             events={calendarEvents}
             select={handleDateSelect}
+            unselect={(ev) => {
+              // Immediately clear selection after handling
+              if (calendarRef.current) {
+                calendarRef.current.getApi().unselect()
+              }
+            }}
             datesSet={handleDatesSet}
             fixedWeekCount={false}
             showNonCurrentDates={false}
             initialDate={today}
-            selectMinDistance={5}
-            longPressDelay={100}
-            eventLongPressDelay={100}
+            selectMinDistance={0}
+            longPressDelay={0}
+            eventLongPressDelay={0}
             dayCellClassNames={(arg) => {
               const dateStr = format(arg.date, 'yyyy-MM-dd')
               const dayData = monthEntries[dateStr]
@@ -502,9 +548,10 @@ export default function Report() {
             eventClick={(info: EventClickArg) => {
               const eventDate = info.event.start
               if (eventDate) {
-                // Prevent default to avoid double-triggering on mobile
+                // Prevent default and stop propagation to avoid double-triggering
                 if (info.jsEvent) {
                   info.jsEvent.preventDefault()
+                  info.jsEvent.stopPropagation()
                 }
                 handleDateSelect({
                   start: eventDate,
