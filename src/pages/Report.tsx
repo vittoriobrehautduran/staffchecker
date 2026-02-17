@@ -211,8 +211,10 @@ export default function Report() {
 
     const handleScroll = () => {
       const currentScrollTop = container.scrollTop
-      // Only mark as scrolling if scroll position actually changed
-      if (Math.abs(currentScrollTop - lastScrollTop) > 2) {
+      const scrollDelta = Math.abs(currentScrollTop - lastScrollTop)
+      
+      // Only mark as scrolling if scroll position changed significantly (more than 3px)
+      if (scrollDelta > 3) {
         isScrollingRef.current = true
         lastScrollTop = currentScrollTop
         
@@ -226,11 +228,11 @@ export default function Report() {
           clearTimeout(scrollTimer)
         }
         
-        // Reset scrolling flag after scroll ends (200ms of no scrolling)
+        // Reset scrolling flag after scroll ends (250ms of no scrolling)
         scrollTimer = setTimeout(() => {
           isScrollingRef.current = false
           scrollTimer = null
-        }, 200)
+        }, 250)
       }
     }
 
@@ -321,8 +323,8 @@ export default function Report() {
     // Set selected date
     setSelectedDate(date)
     
-    // Open modal immediately if not scrolling, otherwise delay
-    const openModal = () => {
+    // Small delay to check if it was a scroll before opening modal
+    setTimeout(() => {
       // Check if scrolling was detected - if so, don't open modal
       if (isScrollingRef.current) {
         // Clear the selection visually
@@ -369,13 +371,7 @@ export default function Report() {
       }
       
       isHandlingClickRef.current = false
-    }
-    
-    // Small delay to check if it was a scroll (100ms instead of 300ms)
-    const openModalTimeout = setTimeout(openModal, 100)
-    
-    // Store timeout so we can clear it if needed
-    scrollTimeoutRef.current = openModalTimeout
+    }, 150) // Small delay to check for scrolling
   }
 
   const handleEntrySaved = async () => {
@@ -574,16 +570,7 @@ export default function Report() {
             dayMaxEvents={2}
             moreLinkClick="popover"
             events={calendarEvents}
-            select={(selectInfo) => {
-              // Prevent selection if scrolling
-              if (isScrollingRef.current) {
-                if (calendarRef.current) {
-                  calendarRef.current.getApi().unselect()
-                }
-                return
-              }
-              handleDateSelect(selectInfo)
-            }}
+            select={handleDateSelect}
             unselect={() => {
               // Immediately clear selection after handling
               if (calendarRef.current) {
@@ -641,82 +628,9 @@ export default function Report() {
               // Style the cell for better touch interaction
               const cell = arg.el
               if (cell) {
+                // Allow vertical scrolling without interfering with taps
                 cell.style.touchAction = 'pan-y'
                 ;(cell.style as any).webkitTapHighlightColor = 'transparent'
-                
-                // Track touch to detect scrolling vs tapping
-                let touchStartY = 0
-                let touchStartX = 0
-                let touchStartTime = 0
-                let hasMoved = false
-                
-                const handleTouchStart = (e: TouchEvent) => {
-                  if (e.touches[0]) {
-                    touchStartY = e.touches[0].clientY
-                    touchStartX = e.touches[0].clientX
-                    touchStartTime = Date.now()
-                    hasMoved = false
-                    // Don't reset scrolling flag here - let it persist briefly to catch rapid scrolls
-                    lastTouchStartRef.current = {
-                      x: touchStartX,
-                      y: touchStartY,
-                      time: touchStartTime
-                    }
-                  }
-                }
-                
-                const handleTouchMove = (e: TouchEvent) => {
-                  if (e.touches[0] && lastTouchStartRef.current) {
-                    const deltaY = Math.abs(e.touches[0].clientY - touchStartY)
-                    const deltaX = Math.abs(e.touches[0].clientX - touchStartX)
-                    // If moved more than 5px in any direction, it's a scroll (lower threshold for faster detection)
-                    if (deltaY > 5 || deltaX > 5) {
-                      hasMoved = true
-                      isScrollingRef.current = true
-                      // Immediately clear any selection
-                      if (calendarRef.current) {
-                        calendarRef.current.getApi().unselect()
-                      }
-                      // Clear any pending timeouts
-                      if (scrollTimeoutRef.current) {
-                        clearTimeout(scrollTimeoutRef.current)
-                      }
-                    }
-                  }
-                }
-                
-                const handleTouchEnd = () => {
-                  const touchDuration = Date.now() - touchStartTime
-                  // If it was a quick tap (< 150ms) with minimal movement, clear scroll flag quickly
-                  if (!hasMoved && touchDuration < 150) {
-                    // Clear scrolling flag immediately for taps
-                    isScrollingRef.current = false
-                    if (scrollTimeoutRef.current) {
-                      clearTimeout(scrollTimeoutRef.current)
-                      scrollTimeoutRef.current = null
-                    }
-                  } else if (hasMoved) {
-                    // It was a scroll - keep scrolling flag active longer
-                    if (scrollTimeoutRef.current) {
-                      clearTimeout(scrollTimeoutRef.current)
-                    }
-                    scrollTimeoutRef.current = setTimeout(() => {
-                      isScrollingRef.current = false
-                    }, 300) // Longer timeout for scrolls
-                  }
-                  
-                  // Reset tracking variables
-                  setTimeout(() => {
-                    hasMoved = false
-                    touchStartY = 0
-                    touchStartX = 0
-                    touchStartTime = 0
-                  }, 50)
-                }
-                
-                cell.addEventListener('touchstart', handleTouchStart, { passive: true })
-                cell.addEventListener('touchmove', handleTouchMove, { passive: true })
-                cell.addEventListener('touchend', handleTouchEnd, { passive: true })
               }
             }}
             dayHeaderFormat={{ weekday: 'short' }}
