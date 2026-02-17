@@ -3,12 +3,13 @@
 // Or custom domain: https://api.yourapp.com
 const API_BASE_URL = import.meta.env.VITE_API_BASE_URL || ''
 
-// Get Cognito access token from localStorage
-// Cognito stores tokens automatically, but we need to get the access token for API calls
+// Get Cognito ID token from localStorage
+// We use ID token instead of access token because it contains user attributes (email, name, etc.)
+// which are needed for user creation in Lambda functions
 async function getAccessToken(): Promise<string | null> {
   try {
     // Check localStorage first (set after login)
-    const storedToken = localStorage.getItem('cognito-access-token')
+    const storedToken = localStorage.getItem('cognito-id-token')
     if (storedToken) {
       return storedToken
     }
@@ -17,15 +18,18 @@ async function getAccessToken(): Promise<string | null> {
     const { fetchAuthSession } = await import('aws-amplify/auth')
     const session = await fetchAuthSession()
     
-    if (session.tokens?.accessToken) {
-      const token = session.tokens.accessToken.toString()
-      localStorage.setItem('cognito-access-token', token)
+    // Use ID token instead of access token - it has user attributes
+    if (session.tokens?.idToken) {
+      const token = typeof session.tokens.idToken === 'string' 
+        ? session.tokens.idToken 
+        : session.tokens.idToken.toString()
+      localStorage.setItem('cognito-id-token', token)
       return token
     }
     
     return null
   } catch (error) {
-    console.error('Error getting access token:', error)
+    console.error('Error getting ID token:', error)
     return null
   }
 }
@@ -90,13 +94,15 @@ export async function apiRequest<T>(
       // Handle 401 Unauthorized - token might be expired
       if (response.status === 401) {
         // Clear stored token and try to refresh
-        localStorage.removeItem('cognito-access-token')
+        localStorage.removeItem('cognito-id-token')
         const { fetchAuthSession } = await import('aws-amplify/auth')
         const session = await fetchAuthSession()
-        if (session.tokens?.accessToken) {
-          // Retry with new token
-          const newToken = session.tokens.accessToken.toString()
-          localStorage.setItem('cognito-access-token', newToken)
+        if (session.tokens?.idToken) {
+          // Retry with new ID token
+          const newToken = typeof session.tokens.idToken === 'string'
+            ? session.tokens.idToken
+            : session.tokens.idToken.toString()
+          localStorage.setItem('cognito-id-token', newToken)
           headers['Authorization'] = `Bearer ${newToken}`
           url = url.replace(/_token=[^&]*/, `_token=${encodeURIComponent(newToken)}`)
           const retryResponse = await fetch(url, { ...options, headers, credentials: 'omit' })

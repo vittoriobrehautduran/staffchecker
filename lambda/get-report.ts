@@ -69,8 +69,8 @@ export const handler = async (
   console.log('Processing GET request for get-report')
   
   try {
-    // Get user ID from Better Auth session
-    console.log('Attempting to get user ID from session...')
+    // Get user ID from Cognito session
+    console.log('Attempting to get user ID from Cognito session...')
     let userId: number | null = null
     try {
       userId = await getUserIdFromCognitoSession(event)

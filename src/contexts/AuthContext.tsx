@@ -55,19 +55,22 @@ export function AuthProvider({ children }: { children: ReactNode }) {
 
         setUser(userData)
         
-        // Store access token in localStorage for API calls
-        if (session.tokens.accessToken) {
-          localStorage.setItem('cognito-access-token', session.tokens.accessToken.toString())
+        // Store ID token in localStorage for API calls (has user attributes like email)
+        if (session.tokens.idToken) {
+          const token = typeof session.tokens.idToken === 'string'
+            ? session.tokens.idToken
+            : session.tokens.idToken.toString()
+          localStorage.setItem('cognito-id-token', token)
         }
       } else {
         setUser(null)
-        localStorage.removeItem('cognito-access-token')
+        localStorage.removeItem('cognito-id-token')
       }
     } catch (error: any) {
       // User not authenticated
       if (error.name === 'UserUnauthenticatedException') {
         setUser(null)
-        localStorage.removeItem('cognito-access-token')
+        localStorage.removeItem('cognito-id-token')
       } else {
         console.error('Error fetching user:', error)
       }
@@ -160,12 +163,12 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     try {
       await cognitoSignOut()
       setUser(null)
-      localStorage.removeItem('cognito-access-token')
+      localStorage.removeItem('cognito-id-token')
     } catch (error: any) {
       console.error('Sign out error:', error)
       // Clear local state even if sign out fails
       setUser(null)
-      localStorage.removeItem('cognito-access-token')
+      localStorage.removeItem('cognito-id-token')
     }
   }
 

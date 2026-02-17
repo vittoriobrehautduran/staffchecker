@@ -80,12 +80,17 @@ function decodeToken(token: string): any {
 // Extract Cognito user ID from request
 export async function getCognitoUserIdFromRequest(event: APIGatewayProxyEvent): Promise<string | null> {
   try {
+    console.log('getCognitoUserIdFromRequest: Starting')
+    console.log('COGNITO_USER_POOL_ID:', COGNITO_USER_POOL_ID ? 'Set' : 'Missing')
+    console.log('COGNITO_REGION:', COGNITO_REGION)
+    
     // Check Authorization header
     const authHeader = event.headers?.Authorization || event.headers?.authorization || ''
     let token: string | null = null
 
     if (authHeader.startsWith('Bearer ')) {
       token = authHeader.substring(7)
+      console.log('Token found in Authorization header, length:', token.length)
     }
 
     // Check query parameter (fallback for API Gateway REST API)
@@ -93,10 +98,15 @@ export async function getCognitoUserIdFromRequest(event: APIGatewayProxyEvent): 
       token = event.queryStringParameters?._token || 
               event.multiValueQueryStringParameters?._token?.[0] || 
               null
+      if (token) {
+        console.log('Token found in query parameter, length:', token.length)
+      }
     }
 
     if (!token) {
       console.log('No token found in request')
+      console.log('Headers:', JSON.stringify(event.headers))
+      console.log('Query params:', JSON.stringify(event.queryStringParameters))
       return null
     }
 
@@ -106,6 +116,12 @@ export async function getCognitoUserIdFromRequest(event: APIGatewayProxyEvent): 
       console.error('Failed to decode token')
       return null
     }
+    
+    console.log('Token decoded successfully. Payload keys:', Object.keys(payload))
+    console.log('Token sub:', payload.sub)
+    console.log('Token email:', payload.email)
+    console.log('Token iss:', payload.iss)
+    console.log('Token aud:', payload.aud)
 
     // Verify token expiration
     const now = Math.floor(Date.now() / 1000)
@@ -122,9 +138,22 @@ export async function getCognitoUserIdFromRequest(event: APIGatewayProxyEvent): 
     }
 
     // Verify token audience matches client ID
+    // ID tokens have 'aud' set to client ID, access tokens have 'client_id'
     const clientId = process.env.COGNITO_CLIENT_ID
-    if (clientId && payload.aud !== clientId && payload.client_id !== clientId) {
-      console.warn('Token audience mismatch, but continuing')
+    const tokenUse = payload.token_use || 'access'
+    
+    if (clientId) {
+      if (tokenUse === 'id') {
+        // ID token: audience should be client ID
+        if (payload.aud !== clientId) {
+          console.warn(`Token audience mismatch for ID token: ${payload.aud}, expected ${clientId}`)
+        }
+      } else {
+        // Access token: has client_id field
+        if (payload.client_id !== clientId && payload.aud !== clientId) {
+          console.warn('Token audience mismatch for access token, but continuing')
+        }
+      }
     }
 
     // Extract user ID from token
@@ -166,7 +195,7 @@ export async function getUserIdFromCognitoSession(event: APIGatewayProxyEvent): 
       return result[0].id
     }
 
-    // Fallback: Try to get email from token and look up by email
+    // Fallback: Try to get email and name from token and create/lookup user
     const authHeader = event.headers?.Authorization || event.headers?.authorization || ''
     const token = authHeader.startsWith('Bearer ') ? authHeader.substring(7) : 
                   event.queryStringParameters?._token || null
@@ -174,6 +203,8 @@ export async function getUserIdFromCognitoSession(event: APIGatewayProxyEvent): 
     if (token) {
       const payload = decodeToken(token)
       const email = payload?.email
+      const givenName = payload?.given_name || payload?.['given_name'] || ''
+      const familyName = payload?.family_name || payload?.['family_name'] || ''
       
       if (email) {
         console.log(`getUserIdFromCognitoSession: Trying fallback lookup by email: ${email}`)
@@ -192,6 +223,41 @@ export async function getUserIdFromCognitoSession(event: APIGatewayProxyEvent): 
           `
           console.log(`getUserIdFromCognitoSession: Found user by email, updated cognito_user_id`)
           return emailResult[0].id
+        } else {
+          // User doesn't exist, create it
+          // Note: We need name and last_name which are NOT NULL
+          const firstName = givenName || 'User'
+          const lastName = familyName || 'Unknown'
+          
+          console.log(`getUserIdFromCognitoSession: Creating new user for Cognito user: ${cognitoUserId}`)
+          try {
+            const newUser = await sql`
+              INSERT INTO users (cognito_user_id, email, name, last_name)
+              VALUES (${cognitoUserId}, ${email.toLowerCase().trim()}, ${firstName}, ${lastName})
+              RETURNING id
+            `
+            console.log(`getUserIdFromCognitoSession: Created new user with ID: ${newUser[0].id}`)
+            return newUser[0].id
+          } catch (insertError: any) {
+            console.error('Error creating new user:', insertError?.message)
+            // If there's a race condition and another Lambda created the user, try fetching again
+            if (insertError.code === '23505') { // Unique violation
+              const retryResult = await sql`
+                SELECT id FROM users WHERE cognito_user_id = ${cognitoUserId} OR email = ${email.toLowerCase().trim()} LIMIT 1
+              `
+              if (retryResult && retryResult.length > 0) {
+                // Update with cognito_user_id if missing
+                if (!retryResult[0].cognito_user_id) {
+                  await sql`
+                    UPDATE users SET cognito_user_id = ${cognitoUserId} WHERE id = ${retryResult[0].id}
+                  `
+                }
+                console.log('User found after retry, ID:', retryResult[0].id)
+                return retryResult[0].id
+              }
+            }
+            return null
+          }
         }
       }
     }
