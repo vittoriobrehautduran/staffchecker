@@ -54,8 +54,6 @@ export default function Report() {
   const isHandlingClickRef = useRef(false)
   const isScrollingRef = useRef(false)
   const scrollTimeoutRef = useRef<NodeJS.Timeout | null>(null)
-  const touchStartTimeRef = useRef<number>(0)
-  const touchStartYRef = useRef<number>(0)
   const lastTouchStartRef = useRef<{ x: number; y: number; time: number } | null>(null)
 
   if (!isSignedIn) {
