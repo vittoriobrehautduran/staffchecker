@@ -3,37 +3,31 @@
 // Or custom domain: https://api.yourapp.com
 const API_BASE_URL = import.meta.env.VITE_API_BASE_URL || ''
 
-// Get session token from localStorage or cookies
-// This is needed for mobile Safari which blocks cross-origin cookies
-function getSessionToken(): string | null {
-  // First check localStorage (set after login)
-  const storedToken = localStorage.getItem('better-auth-session-token')
-  if (storedToken) {
-    console.log('✅ Found session token in localStorage')
-    return storedToken
-  }
-  
-  // Fallback: try to extract from cookies (works on same-origin)
-  const cookies = document.cookie.split(';')
-  console.log('🔍 Checking cookies for session token. Available cookies:', cookies.length)
-  
-  for (const cookie of cookies) {
-    const [name, value] = cookie.trim().split('=')
-    const cookieName = name?.substring(0, 50) || 'unnamed'
-    console.log('🔍 Checking cookie:', cookieName)
+// Get Cognito access token from localStorage
+// Cognito stores tokens automatically, but we need to get the access token for API calls
+async function getAccessToken(): Promise<string | null> {
+  try {
+    // Check localStorage first (set after login)
+    const storedToken = localStorage.getItem('cognito-access-token')
+    if (storedToken) {
+      return storedToken
+    }
     
-    // Better Auth uses __Secure-better-auth.session_token or better-auth.session_token
-    if (name && (name.includes('better-auth.session_token') || name.includes('session_token'))) {
-      const token = decodeURIComponent(value)
-      console.log('✅ Found session token in cookie:', cookieName, '- storing in localStorage')
-      localStorage.setItem('better-auth-session-token', token)
+    // Try to get fresh token from Amplify
+    const { fetchAuthSession } = await import('aws-amplify/auth')
+    const session = await fetchAuthSession()
+    
+    if (session.tokens?.accessToken) {
+      const token = session.tokens.accessToken.toString()
+      localStorage.setItem('cognito-access-token', token)
       return token
     }
+    
+    return null
+  } catch (error) {
+    console.error('Error getting access token:', error)
+    return null
   }
-  
-  console.warn('⚠️ No session token found in localStorage or cookies')
-  console.warn('⚠️ This will cause authentication to fail on mobile Safari')
-  return null
 }
 
 export async function apiRequest<T>(
@@ -46,25 +40,19 @@ export async function apiRequest<T>(
     )
   }
 
-  // Remove leading slash from endpoint if present, API_BASE_URL should include trailing slash or not
+  // Remove leading slash from endpoint if present
   const cleanEndpoint = endpoint.startsWith('/') ? endpoint.slice(1) : endpoint
   
-  // Get session token for Authorization header (works better for cross-origin)
-  const sessionToken = getSessionToken()
+  // Get Cognito access token for Authorization header
+  const accessToken = await getAccessToken()
   
-  // Build URL with query parameters as fallback (API Gateway REST API strips headers)
+  // Build URL
   let url = `${API_BASE_URL.replace(/\/$/, '')}/${cleanEndpoint}`
   
-  // Add token as query parameter if we have it (workaround for API Gateway REST API header stripping)
-  // This is less secure but necessary since headers don't pass through
-  if (sessionToken) {
+  // Add token as query parameter as fallback (for API Gateway REST API)
+  if (accessToken) {
     const separator = url.includes('?') ? '&' : '?'
-    url += `${separator}_token=${encodeURIComponent(sessionToken)}`
-    console.log('🔗 Added _token query parameter to URL')
-    console.log('🔗 URL (first 100 chars):', url.substring(0, 100))
-  } else {
-    console.warn('⚠️ No session token found - cannot add _token query parameter')
-    console.warn('⚠️ localStorage.getItem result:', localStorage.getItem('better-auth-session-token'))
+    url += `${separator}_token=${encodeURIComponent(accessToken)}`
   }
   
   // Build headers
@@ -73,17 +61,16 @@ export async function apiRequest<T>(
     ...(options.headers as Record<string, string> || {}),
   }
   
-  // Still try headers (might work on desktop with cookies)
-  if (sessionToken) {
-    headers['Authorization'] = `Bearer ${sessionToken}`
-    headers['X-Auth-Token'] = sessionToken
+  // Add Authorization header with Cognito access token
+  if (accessToken) {
+    headers['Authorization'] = `Bearer ${accessToken}`
   }
   
   try {
     const response = await fetch(url, {
       ...options,
       headers,
-      credentials: 'include', // Still try cookies first (works on desktop)
+      credentials: 'omit', // Cognito uses tokens, not cookies
     })
 
     if (!response.ok) {
@@ -98,6 +85,26 @@ export async function apiRequest<T>(
           .map(([field]) => field)
           .join(', ')
         throw new Error(`${error.message}. Saknade fält: ${missing}`)
+      }
+      
+      // Handle 401 Unauthorized - token might be expired
+      if (response.status === 401) {
+        // Clear stored token and try to refresh
+        localStorage.removeItem('cognito-access-token')
+        const { fetchAuthSession } = await import('aws-amplify/auth')
+        const session = await fetchAuthSession()
+        if (session.tokens?.accessToken) {
+          // Retry with new token
+          const newToken = session.tokens.accessToken.toString()
+          localStorage.setItem('cognito-access-token', newToken)
+          headers['Authorization'] = `Bearer ${newToken}`
+          url = url.replace(/_token=[^&]*/, `_token=${encodeURIComponent(newToken)}`)
+          const retryResponse = await fetch(url, { ...options, headers, credentials: 'omit' })
+          if (retryResponse.ok) {
+            return retryResponse.json()
+          }
+        }
+        throw new Error('Sessionen har gått ut. Logga in igen.')
       }
       
       throw new Error(error.message || `API-förfrågan misslyckades: ${response.statusText}`)

@@ -45,34 +45,16 @@ export default function VerifyEmail() {
   // Countdown timer
   useEffect(() => {
     if (timeLeft <= 0) {
-      // Time's up - delete unverified account and redirect
-      const deleteAndRedirect = async () => {
-        try {
-          const apiBaseUrl = import.meta.env.VITE_API_BASE_URL
-          if (apiBaseUrl && email) {
-            await fetch(`${apiBaseUrl}/delete-unverified-user`, {
-              method: 'POST',
-              headers: {
-                'Content-Type': 'application/json',
-              },
-              credentials: 'include',
-              body: JSON.stringify({ email }),
-            })
-          }
-        } catch (error) {
-          console.error('Error deleting unverified account:', error)
-        } finally {
-          localStorage.removeItem('pending_verification_email')
-          localStorage.removeItem('registration_timestamp')
-          toast({
-            title: 'Tiden gick ut',
-            description: 'Din verifieringstid har gått ut. Du kan registrera igen.',
-            variant: 'destructive',
-          })
-          navigate('/register')
-        }
-      }
-      deleteAndRedirect()
+      // Time's up - Cognito handles unverified users automatically
+      // Just clear local storage and redirect
+      localStorage.removeItem('pending_verification_email')
+      localStorage.removeItem('registration_timestamp')
+      toast({
+        title: 'Tiden gick ut',
+        description: 'Din verifieringstid har gått ut. Du kan registrera igen.',
+        variant: 'destructive',
+      })
+      navigate('/register')
       return
     }
 
@@ -102,11 +84,10 @@ export default function VerifyEmail() {
       })
       
       // Clear pending email and timestamp immediately after successful verification
-      // This prevents cleanup from deleting the verified account
       localStorage.removeItem('pending_verification_email')
       localStorage.removeItem('registration_timestamp')
       
-      // Session will be updated automatically by Better Auth
+      // Session will be updated automatically by Cognito
       navigate('/report')
     } catch (error: any) {
       console.error('Verification error:', error)

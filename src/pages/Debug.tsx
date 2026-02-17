@@ -12,7 +12,7 @@ export default function Debug() {
     const signInFinal = localStorage.getItem('debug-signin-final')
     const sessionResponse = localStorage.getItem('debug-session-response')
     const sessionError = localStorage.getItem('debug-session-error')
-    const sessionToken = localStorage.getItem('better-auth-session-token')
+    const sessionToken = localStorage.getItem('cognito-access-token')
     
     // Get all localStorage items
     const allStorage: Record<string, string> = {}

@@ -1,6 +1,6 @@
 import { APIGatewayProxyEvent, APIGatewayProxyResult } from 'aws-lambda'
 import { sql } from './utils/database'
-import { getUserIdFromBetterAuthSession } from './utils/auth'
+import { getUserIdFromCognitoSession } from './utils/cognito-auth'
 
 // Helper function to get CORS origin from request
 function getCorsOrigin(event: APIGatewayProxyEvent): string {
@@ -58,7 +58,7 @@ export const handler = async (
     // Get user ID from Better Auth session
     let userId: number | null = null
     try {
-      userId = await getUserIdFromBetterAuthSession(event)
+      userId = await getUserIdFromCognitoSession(event)
     } catch (authError: any) {
       console.error('Error getting user ID from session:', authError?.message || authError)
       return {

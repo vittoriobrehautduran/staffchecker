@@ -1,6 +1,6 @@
 import { APIGatewayProxyEvent, APIGatewayProxyResult } from 'aws-lambda'
 import { sql } from './utils/database'
-import { getUserIdFromBetterAuthSession } from './utils/auth'
+import { getUserIdFromCognitoSession } from './utils/cognito-auth'
 import { SESClient, SendEmailCommand } from '@aws-sdk/client-ses'
 
 const sesClient = new SESClient({
@@ -57,7 +57,7 @@ export const handler = async (
 
   try {
     // Get user ID from Better Auth session
-    const userId = await getUserIdFromBetterAuthSession(event)
+    const userId = await getUserIdFromCognitoSession(event)
     
     if (!userId) {
       return {
