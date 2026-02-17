@@ -38,6 +38,7 @@ export default function Report() {
   const navigate = useNavigate()
   const { toast } = useToast()
   const calendarRef = useRef<FullCalendar>(null)
+  const calendarContainerRef = useRef<HTMLDivElement>(null)
   const today = new Date()
   const [currentDate, setCurrentDate] = useState(startOfMonth(today))
   const [selectedDate, setSelectedDate] = useState<Date | undefined>(undefined)
@@ -51,6 +52,11 @@ export default function Report() {
   const lastLoadedMonthRef = useRef<string | null>(null)
   const notificationTimeoutsRef = useRef<NodeJS.Timeout[]>([])
   const isHandlingClickRef = useRef(false)
+  const isScrollingRef = useRef(false)
+  const scrollTimeoutRef = useRef<NodeJS.Timeout | null>(null)
+  const touchStartTimeRef = useRef<number>(0)
+  const touchStartYRef = useRef<number>(0)
+  const lastTouchStartRef = useRef<{ x: number; y: number; time: number } | null>(null)
 
   if (!isSignedIn) {
     navigate('/login')
@@ -197,6 +203,47 @@ export default function Report() {
     }
   }, [isLoadingEntries, isSignedIn])
 
+  // Detect scrolling to prevent date selection during scroll
+  useEffect(() => {
+    const container = calendarContainerRef.current
+    if (!container) return
+
+    let scrollTimer: NodeJS.Timeout | null = null
+    let lastScrollTop = container.scrollTop
+
+    const handleScroll = () => {
+      const currentScrollTop = container.scrollTop
+      // Only mark as scrolling if scroll position actually changed
+      if (Math.abs(currentScrollTop - lastScrollTop) > 5) {
+        isScrollingRef.current = true
+        lastScrollTop = currentScrollTop
+        
+        // Clear any existing timeout
+        if (scrollTimer) {
+          clearTimeout(scrollTimer)
+        }
+        
+        // Reset scrolling flag after scroll ends (150ms of no scrolling)
+        scrollTimer = setTimeout(() => {
+          isScrollingRef.current = false
+          scrollTimer = null
+        }, 150)
+      }
+    }
+
+    container.addEventListener('scroll', handleScroll, { passive: true })
+    
+    return () => {
+      container.removeEventListener('scroll', handleScroll)
+      if (scrollTimer) {
+        clearTimeout(scrollTimer)
+      }
+      if (scrollTimeoutRef.current) {
+        clearTimeout(scrollTimeoutRef.current)
+      }
+    }
+  }, [])
+
   // Enable next button only if we can go one month forward
   useEffect(() => {
     const updateNextButton = () => {
@@ -237,6 +284,7 @@ export default function Report() {
   const handleDateSelect = async (selectInfo: DateSelectArg) => {
     // Prevent double-clicks
     if (isHandlingClickRef.current) return
+    
     isHandlingClickRef.current = true
     
     const date = selectInfo.start
@@ -267,52 +315,64 @@ export default function Report() {
       calendarRef.current.getApi().unselect()
     }
     
-    // Set selected date and open modal IMMEDIATELY
+    // Set selected date
     setSelectedDate(date)
     
-    // Reset click guard after a short delay
-    setTimeout(() => {
-      isHandlingClickRef.current = false
-    }, 300)
-    
-    // Try to use cached entries immediately for instant modal opening
-    if (monthEntries[dateStr]) {
-      setEntries(monthEntries[dateStr].entries)
-      setReportStatus(monthEntries[dateStr].reportStatus)
-      setIsModalOpen(true) // Open modal immediately with cached data
-    } else {
-      // No cached data - set empty entries and open modal immediately
-      setEntries([])
-      setReportStatus('draft')
-      setIsModalOpen(true) // Open modal immediately, will load data in background
-    }
-    
-    // Load entries in the background (after modal is already open)
-    // If the selected date is in a different month, navigate to that month first
-    const selectedMonth = format(date, 'yyyy-MM')
-    const currentMonthKey = format(currentDate, 'yyyy-MM')
-    if (selectedMonth !== currentMonthKey) {
-      setCurrentDate(startOfMonth(date))
-      // Load month entries in background - entries will update automatically via state
-      loadMonthEntries(startOfMonth(date))
-    } else {
-      // Same month - just load entries for this date if not cached
-      if (!monthEntries[dateStr]) {
-        // Load in background without blocking
-        apiRequest<EntriesResponse>(`/get-entries?date=${dateStr}`, {
-          method: 'GET',
-        })
-          .then((data) => {
-            setEntries(data?.entries || [])
-            setReportStatus(data?.reportStatus || 'draft')
-          })
-          .catch((error: any) => {
-            console.error('Error loading entries:', error)
-            setEntries([])
-            setReportStatus('draft')
-          })
+    // Open modal immediately if not scrolling, otherwise delay
+    const openModal = () => {
+      // Check if scrolling was detected - if so, don't open modal
+      if (isScrollingRef.current) {
+        // Clear the selection visually
+        if (calendarRef.current) {
+          calendarRef.current.getApi().unselect()
+        }
+        isHandlingClickRef.current = false
+        return
       }
+      
+      // Try to use cached entries
+      if (monthEntries[dateStr]) {
+        setEntries(monthEntries[dateStr].entries)
+        setReportStatus(monthEntries[dateStr].reportStatus)
+      } else {
+        setEntries([])
+        setReportStatus('draft')
+      }
+      setIsModalOpen(true)
+      
+      // Load entries in the background if not cached
+      if (!monthEntries[dateStr]) {
+        // If the selected date is in a different month, navigate to that month first
+        const selectedMonth = format(date, 'yyyy-MM')
+        const currentMonthKey = format(currentDate, 'yyyy-MM')
+        if (selectedMonth !== currentMonthKey) {
+          setCurrentDate(startOfMonth(date))
+          loadMonthEntries(startOfMonth(date))
+        } else {
+          // Same month - load entries for this date
+          apiRequest<EntriesResponse>(`/get-entries?date=${dateStr}`, {
+            method: 'GET',
+          })
+            .then((data) => {
+              if (isModalOpen && format(selectedDate || new Date(), 'yyyy-MM-dd') === dateStr) {
+                setEntries(data?.entries || [])
+                setReportStatus(data?.reportStatus || 'draft')
+              }
+            })
+            .catch((error) => {
+              console.error('Error loading entries:', error)
+            })
+        }
+      }
+      
+      isHandlingClickRef.current = false
     }
+    
+    // Small delay to check if it was a scroll (100ms instead of 300ms)
+    const openModalTimeout = setTimeout(openModal, 100)
+    
+    // Store timeout so we can clear it if needed
+    scrollTimeoutRef.current = openModalTimeout
   }
 
   const handleEntrySaved = async () => {
@@ -489,7 +549,10 @@ export default function Report() {
       {/* Calendar with premium container */}
       <div className="flex-1 overflow-hidden p-2 sm:p-3 md:p-4 lg:p-6">
         <div className="h-full w-full bg-white rounded-2xl shadow-2xl border border-slate-200/50 overflow-hidden">
-          <div className="h-full p-3 sm:p-4 md:p-6">
+          <div 
+            ref={calendarContainerRef}
+            className="h-full p-3 sm:p-4 md:p-6"
+          >
             <FullCalendar
             ref={calendarRef}
             plugins={[dayGridPlugin, interactionPlugin]}
@@ -508,7 +571,16 @@ export default function Report() {
             dayMaxEvents={2}
             moreLinkClick="popover"
             events={calendarEvents}
-            select={handleDateSelect}
+            select={(selectInfo) => {
+              // Prevent selection if scrolling
+              if (isScrollingRef.current) {
+                if (calendarRef.current) {
+                  calendarRef.current.getApi().unselect()
+                }
+                return
+              }
+              handleDateSelect(selectInfo)
+            }}
             unselect={() => {
               // Immediately clear selection after handling
               if (calendarRef.current) {
@@ -563,70 +635,79 @@ export default function Report() {
               }
             }}
             dayCellDidMount={(arg) => {
-              // Ensure touch events work on mobile Safari
+              // Style the cell for better touch interaction
               const cell = arg.el
               if (cell) {
-                cell.style.touchAction = 'manipulation'
-                // Use type assertion for vendor-specific property
+                cell.style.touchAction = 'pan-y'
                 ;(cell.style as any).webkitTapHighlightColor = 'transparent'
                 
-                // Track touch start position and time to distinguish scroll from tap
-                let touchStartX = 0
+                // Track touch to detect scrolling vs tapping
                 let touchStartY = 0
+                let touchStartX = 0
                 let touchStartTime = 0
-                let isScrolling = false
+                let hasMoved = false
                 
                 const handleTouchStart = (e: TouchEvent) => {
-                  const touch = e.touches[0]
-                  touchStartX = touch.clientX
-                  touchStartY = touch.clientY
-                  touchStartTime = Date.now()
-                  isScrolling = false
+                  if (e.touches[0]) {
+                    touchStartY = e.touches[0].clientY
+                    touchStartX = e.touches[0].clientX
+                    touchStartTime = Date.now()
+                    hasMoved = false
+                    isScrollingRef.current = false
+                    lastTouchStartRef.current = {
+                      x: touchStartX,
+                      y: touchStartY,
+                      time: touchStartTime
+                    }
+                  }
                 }
                 
                 const handleTouchMove = (e: TouchEvent) => {
-                  // If finger moved more than 10px, it's a scroll, not a tap
-                  if (e.touches[0]) {
-                    const deltaX = Math.abs(e.touches[0].clientX - touchStartX)
+                  if (e.touches[0] && lastTouchStartRef.current) {
                     const deltaY = Math.abs(e.touches[0].clientY - touchStartY)
-                    if (deltaX > 10 || deltaY > 10) {
-                      isScrolling = true
+                    const deltaX = Math.abs(e.touches[0].clientX - touchStartX)
+                    // If moved more than 10px in any direction, it's a scroll
+                    if (deltaY > 10 || deltaX > 10) {
+                      hasMoved = true
+                      isScrollingRef.current = true
+                      // Immediately clear any selection
+                      if (calendarRef.current) {
+                        calendarRef.current.getApi().unselect()
+                      }
                     }
                   }
                 }
                 
-                const handleTouchEnd = (e: TouchEvent) => {
+                const handleTouchEnd = () => {
                   const touchDuration = Date.now() - touchStartTime
-                  const deltaX = Math.abs(e.changedTouches[0].clientX - touchStartX)
-                  const deltaY = Math.abs(e.changedTouches[0].clientY - touchStartY)
-                  
-                  // Only trigger if it was a tap (not a scroll) and quick (< 300ms)
-                  if (!isScrolling && touchDuration < 300 && deltaX < 10 && deltaY < 10) {
-                    e.preventDefault()
-                    e.stopPropagation()
-                    const date = arg.date
-                    if (date) {
-                      handleDateSelect({
-                        start: date,
-                        end: date,
-                        allDay: false,
-                        jsEvent: e as any,
-                        view: arg.view,
-                      } as DateSelectArg)
+                  // If it was a quick tap (< 200ms) with minimal movement, clear scroll flag
+                  if (!hasMoved && touchDuration < 200) {
+                    // Clear scrolling flag after a tiny delay to allow select to fire
+                    setTimeout(() => {
+                      isScrollingRef.current = false
+                    }, 50)
+                  } else if (hasMoved) {
+                    // It was a scroll - keep scrolling flag active
+                    if (scrollTimeoutRef.current) {
+                      clearTimeout(scrollTimeoutRef.current)
                     }
+                    scrollTimeoutRef.current = setTimeout(() => {
+                      isScrollingRef.current = false
+                    }, 200)
                   }
                   
                   // Reset
-                  isScrolling = false
-                  touchStartX = 0
-                  touchStartY = 0
-                  touchStartTime = 0
+                  setTimeout(() => {
+                    hasMoved = false
+                    touchStartY = 0
+                    touchStartX = 0
+                    touchStartTime = 0
+                  }, 100)
                 }
                 
-                // Use touch events instead of click for better mobile support
                 cell.addEventListener('touchstart', handleTouchStart, { passive: true })
                 cell.addEventListener('touchmove', handleTouchMove, { passive: true })
-                cell.addEventListener('touchend', handleTouchEnd, { passive: false })
+                cell.addEventListener('touchend', handleTouchEnd, { passive: true })
               }
             }}
             dayHeaderFormat={{ weekday: 'short' }}
