@@ -370,7 +370,7 @@ export default function Report() {
       }
       
       isHandlingClickRef.current = false
-    }, 150) // Small delay to check for scrolling
+    }, 50) // Reduced delay - FullCalendar's selectLongPressDelay handles the timing
   }
 
   const handleEntrySaved = async () => {
@@ -550,6 +550,10 @@ export default function Report() {
           <div 
             ref={calendarContainerRef}
             className="h-full p-3 sm:p-4 md:p-6"
+            style={{
+              WebkitOverflowScrolling: 'touch',
+              overflowY: 'auto',
+            } as React.CSSProperties}
           >
             <FullCalendar
             ref={calendarRef}
@@ -569,16 +573,7 @@ export default function Report() {
             dayMaxEvents={2}
             moreLinkClick="popover"
             events={calendarEvents}
-            select={(selectInfo) => {
-              // Check if scrolling is happening - if so, prevent selection
-              if (isScrollingRef.current) {
-                if (calendarRef.current) {
-                  calendarRef.current.getApi().unselect()
-                }
-                return
-              }
-              handleDateSelect(selectInfo)
-            }}
+            select={handleDateSelect}
             unselect={() => {
               // Immediately clear selection after handling
               if (calendarRef.current) {
@@ -589,9 +584,11 @@ export default function Report() {
             fixedWeekCount={false}
             showNonCurrentDates={false}
             initialDate={today}
-            selectMinDistance={0}
-            longPressDelay={0}
-            eventLongPressDelay={0}
+            selectMinDistance={5}
+            selectLongPressDelay={100}
+            longPressDelay={300}
+            eventLongPressDelay={300}
+            dragScroll={false}
             dayCellClassNames={(arg) => {
               const dateStr = format(arg.date, 'yyyy-MM-dd')
               const dayData = monthEntries[dateStr]
@@ -633,71 +630,15 @@ export default function Report() {
               }
             }}
             dayCellDidMount={(arg) => {
-              // Style the cell for better touch interaction
+              // Optimize cell for mobile touch interaction
               const cell = arg.el
               if (cell) {
-                // Allow vertical scrolling without interfering with taps
+                // Allow vertical scrolling, prevent horizontal panning
                 cell.style.touchAction = 'pan-y'
+                // Remove tap highlight for cleaner interaction
                 ;(cell.style as any).webkitTapHighlightColor = 'transparent'
-                
-                // Track touch movement to detect scrolling early
-                let touchStartY = 0
-                let touchStartTime = 0
-                let hasMoved = false
-                
-                const handleTouchStart = (e: TouchEvent) => {
-                  if (e.touches[0]) {
-                    touchStartY = e.touches[0].clientY
-                    touchStartTime = Date.now()
-                    hasMoved = false
-                  }
-                }
-                
-                const handleTouchMove = (e: TouchEvent) => {
-                  if (e.touches[0]) {
-                    const deltaY = Math.abs(e.touches[0].clientY - touchStartY)
-                    // If moved more than 8px vertically, it's a scroll
-                    if (deltaY > 8) {
-                      hasMoved = true
-                      isScrollingRef.current = true
-                      // Clear any selection immediately
-                      if (calendarRef.current) {
-                        calendarRef.current.getApi().unselect()
-                      }
-                      // Keep scroll flag active
-                      if (scrollTimeoutRef.current) {
-                        clearTimeout(scrollTimeoutRef.current)
-                      }
-                      scrollTimeoutRef.current = setTimeout(() => {
-                        isScrollingRef.current = false
-                      }, 300)
-                    }
-                  }
-                }
-                
-                const handleTouchEnd = () => {
-                  const touchDuration = Date.now() - touchStartTime
-                  // If it was a quick tap (< 200ms) with no movement, clear scroll flag
-                  if (!hasMoved && touchDuration < 200) {
-                    // Clear scrolling flag immediately for taps
-                    isScrollingRef.current = false
-                    if (scrollTimeoutRef.current) {
-                      clearTimeout(scrollTimeoutRef.current)
-                      scrollTimeoutRef.current = null
-                    }
-                  }
-                  
-                  // Reset after a short delay
-                  setTimeout(() => {
-                    hasMoved = false
-                    touchStartY = 0
-                    touchStartTime = 0
-                  }, 100)
-                }
-                
-                cell.addEventListener('touchstart', handleTouchStart, { passive: true })
-                cell.addEventListener('touchmove', handleTouchMove, { passive: true })
-                cell.addEventListener('touchend', handleTouchEnd, { passive: true })
+                // Improve scrolling performance on iOS
+                ;(cell.style as any).webkitOverflowScrolling = 'touch'
               }
             }}
             dayHeaderFormat={{ weekday: 'short' }}
