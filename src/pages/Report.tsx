@@ -212,20 +212,25 @@ export default function Report() {
     const handleScroll = () => {
       const currentScrollTop = container.scrollTop
       // Only mark as scrolling if scroll position actually changed
-      if (Math.abs(currentScrollTop - lastScrollTop) > 5) {
+      if (Math.abs(currentScrollTop - lastScrollTop) > 2) {
         isScrollingRef.current = true
         lastScrollTop = currentScrollTop
+        
+        // Clear any selection immediately when scrolling
+        if (calendarRef.current) {
+          calendarRef.current.getApi().unselect()
+        }
         
         // Clear any existing timeout
         if (scrollTimer) {
           clearTimeout(scrollTimer)
         }
         
-        // Reset scrolling flag after scroll ends (150ms of no scrolling)
+        // Reset scrolling flag after scroll ends (200ms of no scrolling)
         scrollTimer = setTimeout(() => {
           isScrollingRef.current = false
           scrollTimer = null
-        }, 150)
+        }, 200)
       }
     }
 
@@ -651,7 +656,7 @@ export default function Report() {
                     touchStartX = e.touches[0].clientX
                     touchStartTime = Date.now()
                     hasMoved = false
-                    isScrollingRef.current = false
+                    // Don't reset scrolling flag here - let it persist briefly to catch rapid scrolls
                     lastTouchStartRef.current = {
                       x: touchStartX,
                       y: touchStartY,
@@ -664,13 +669,17 @@ export default function Report() {
                   if (e.touches[0] && lastTouchStartRef.current) {
                     const deltaY = Math.abs(e.touches[0].clientY - touchStartY)
                     const deltaX = Math.abs(e.touches[0].clientX - touchStartX)
-                    // If moved more than 10px in any direction, it's a scroll
-                    if (deltaY > 10 || deltaX > 10) {
+                    // If moved more than 5px in any direction, it's a scroll (lower threshold for faster detection)
+                    if (deltaY > 5 || deltaX > 5) {
                       hasMoved = true
                       isScrollingRef.current = true
                       // Immediately clear any selection
                       if (calendarRef.current) {
                         calendarRef.current.getApi().unselect()
+                      }
+                      // Clear any pending timeouts
+                      if (scrollTimeoutRef.current) {
+                        clearTimeout(scrollTimeoutRef.current)
                       }
                     }
                   }
@@ -678,29 +687,31 @@ export default function Report() {
                 
                 const handleTouchEnd = () => {
                   const touchDuration = Date.now() - touchStartTime
-                  // If it was a quick tap (< 200ms) with minimal movement, clear scroll flag
-                  if (!hasMoved && touchDuration < 200) {
-                    // Clear scrolling flag after a tiny delay to allow select to fire
-                    setTimeout(() => {
-                      isScrollingRef.current = false
-                    }, 50)
+                  // If it was a quick tap (< 150ms) with minimal movement, clear scroll flag quickly
+                  if (!hasMoved && touchDuration < 150) {
+                    // Clear scrolling flag immediately for taps
+                    isScrollingRef.current = false
+                    if (scrollTimeoutRef.current) {
+                      clearTimeout(scrollTimeoutRef.current)
+                      scrollTimeoutRef.current = null
+                    }
                   } else if (hasMoved) {
-                    // It was a scroll - keep scrolling flag active
+                    // It was a scroll - keep scrolling flag active longer
                     if (scrollTimeoutRef.current) {
                       clearTimeout(scrollTimeoutRef.current)
                     }
                     scrollTimeoutRef.current = setTimeout(() => {
                       isScrollingRef.current = false
-                    }, 200)
+                    }, 300) // Longer timeout for scrolls
                   }
                   
-                  // Reset
+                  // Reset tracking variables
                   setTimeout(() => {
                     hasMoved = false
                     touchStartY = 0
                     touchStartX = 0
                     touchStartTime = 0
-                  }, 100)
+                  }, 50)
                 }
                 
                 cell.addEventListener('touchstart', handleTouchStart, { passive: true })
