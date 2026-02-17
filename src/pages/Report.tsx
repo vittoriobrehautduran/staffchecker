@@ -509,7 +509,7 @@ export default function Report() {
             moreLinkClick="popover"
             events={calendarEvents}
             select={handleDateSelect}
-            unselect={(ev) => {
+            unselect={() => {
               // Immediately clear selection after handling
               if (calendarRef.current) {
                 calendarRef.current.getApi().unselect()
