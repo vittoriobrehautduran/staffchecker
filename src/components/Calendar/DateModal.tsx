@@ -72,8 +72,8 @@ export function DateModal({
   onEntryDeleted,
   reportStatus,
 }: DateModalProps) {
-  const [timeFrom, setTimeFrom] = useState('')
-  const [timeTo, setTimeTo] = useState('')
+  const [timeFrom, setTimeFrom] = useState('12:00')
+  const [timeTo, setTimeTo] = useState('12:00')
   const [workType, setWorkType] = useState<'cafe' | 'coaching' | 'administration' | 'cleaning' | 'annat' | ''>('')
   const [annatSpec, setAnnatSpec] = useState('')
   const [comment, setComment] = useState('')
@@ -89,8 +89,8 @@ export function DateModal({
   }, [open, date])
 
   const resetForm = () => {
-    setTimeFrom('')
-    setTimeTo('')
+    setTimeFrom('12:00')
+    setTimeTo('12:00')
     setWorkType('')
     setAnnatSpec('')
     setComment('')
@@ -373,14 +373,14 @@ export function DateModal({
                 <Label htmlFor="timeFrom">Från</Label>
                 <Select
                   value={timeFrom}
-                  onValueChange={setTimeFrom}
+                  onValueChange={(value) => setTimeFrom(value)}
                   required
                   disabled={isSubmitting || reportStatus === 'submitted'}
                 >
-                  <SelectTrigger id="timeFrom">
+                  <SelectTrigger id="timeFrom" className="h-10 text-base">
                     <SelectValue placeholder="Välj tid" />
                   </SelectTrigger>
-                  <SelectContent className="max-h-[200px]">
+                  <SelectContent className="max-h-[300px]">
                     {TIME_OPTIONS.map((time) => (
                       <SelectItem key={time} value={time}>
                         {time}
@@ -393,14 +393,14 @@ export function DateModal({
                 <Label htmlFor="timeTo">Till</Label>
                 <Select
                   value={timeTo}
-                  onValueChange={setTimeTo}
+                  onValueChange={(value) => setTimeTo(value)}
                   required
                   disabled={isSubmitting || reportStatus === 'submitted'}
                 >
-                  <SelectTrigger id="timeTo">
+                  <SelectTrigger id="timeTo" className="h-10 text-base">
                     <SelectValue placeholder="Välj tid" />
                   </SelectTrigger>
-                  <SelectContent className="max-h-[200px]">
+                  <SelectContent className="max-h-[300px]">
                     {TIME_OPTIONS.map((time) => (
                       <SelectItem key={time} value={time}>
                         {time}

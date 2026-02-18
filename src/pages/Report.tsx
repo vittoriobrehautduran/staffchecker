@@ -1,7 +1,7 @@
 import { useState, useRef, useEffect } from 'react'
 import { useAuth } from '@/contexts/AuthContext'
 import { useNavigate } from 'react-router-dom'
-import { format, startOfMonth, endOfMonth, eachDayOfInterval, addMonths } from 'date-fns'
+import { format, startOfMonth, endOfMonth, eachDayOfInterval, addMonths, getWeek } from 'date-fns'
 import Calendar from 'react-calendar'
 import 'react-calendar/dist/Calendar.css'
 import './Report.css'
@@ -394,12 +394,12 @@ export default function Report() {
         </div>
         
         {!isLoadingEntries && (
-          <div className={`absolute inset-0 h-full flex items-center gap-3 text-amber-700 transition-opacity duration-500 ${
+          <div className={`absolute inset-0 h-full flex items-center justify-center text-amber-700 transition-opacity duration-500 ${
             showNotification 
               ? 'opacity-100 bg-amber-50/80 border-amber-200/50 backdrop-blur-sm z-10' 
               : 'opacity-0 z-0'
           }`}>
-            <p className="text-sm sm:text-base font-medium">
+            <p className="text-sm sm:text-base font-medium px-4">
               Glöm inte att lämna in rapporten i slutet av månaden
             </p>
           </div>
@@ -421,7 +421,7 @@ export default function Report() {
               tileContent={tileContent}
               tileClassName={tileClassName}
               className="w-full border-0 flex-1"
-              showWeekNumbers={false}
+              showWeekNumbers={true}
             />
           </div>
         </div>

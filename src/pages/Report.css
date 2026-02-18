@@ -94,6 +94,73 @@
   font-size: 11px;
 }
 
+/* Week numbers styling */
+.react-calendar__month-view__weekNumbers {
+  display: flex !important;
+  flex-direction: column !important;
+  padding-right: 12px !important;
+  background: transparent !important;
+  border: none !important;
+  box-shadow: none !important;
+  gap: 4px !important;
+  margin: 0 !important;
+}
+
+.react-calendar__month-view__weekNumbers__weekNumber {
+  display: flex !important;
+  align-items: center !important;
+  justify-content: center !important;
+  font-size: 12px !important;
+  font-weight: 500 !important;
+  color: #70757a !important;
+  padding: 0 !important;
+  margin: 0 !important;
+  min-height: 106px !important;
+  height: 106px !important;
+  width: 100% !important;
+  cursor: default !important;
+  background: transparent !important;
+  background-color: transparent !important;
+  border: none !important;
+  border-width: 0 !important;
+  border-style: none !important;
+  border-color: transparent !important;
+  box-shadow: none !important;
+  border-radius: 0 !important;
+  text-align: center !important;
+  line-height: 1 !important;
+  position: relative !important;
+  box-sizing: border-box !important;
+  outline: none !important;
+  -webkit-appearance: none !important;
+  appearance: none !important;
+}
+
+.react-calendar__month-view__weekNumbers__weekNumber::before,
+.react-calendar__month-view__weekNumbers__weekNumber::after {
+  display: none !important;
+  content: none !important;
+}
+
+.react-calendar__month-view__weekNumbers__weekNumber:hover {
+  color: #202124 !important;
+  background: transparent !important;
+  box-shadow: none !important;
+  border: none !important;
+  transform: none !important;
+}
+
+/* Prevent week numbers from inheriting tile styles */
+.react-calendar__month-view__weekNumbers__weekNumber.react-calendar__tile,
+.react-calendar__month-view__weekNumbers__weekNumber[class*="tile"] {
+  border: none !important;
+  box-shadow: none !important;
+  background: transparent !important;
+  border-radius: 0 !important;
+  padding: 0 !important;
+  margin: 0 !important;
+}
+
 .react-calendar__month-view__days {
   display: grid !important;
   grid-template-columns: repeat(7, 1fr);
@@ -139,19 +206,19 @@
 }
 
 .react-calendar__tile--active {
-  background-color: #1a73e8 !important;
-  color: white !important;
+  background-color: #e3f2fd !important;
+  color: #1976d2 !important;
   font-weight: 600;
-  border-color: #1557b0 !important;
-  box-shadow: 0 4px 12px rgba(26, 115, 232, 0.4), 0 2px 4px rgba(26, 115, 232, 0.3) !important;
+  border-color: #90caf9 !important;
+  box-shadow: 0 2px 6px rgba(25, 118, 210, 0.2), 0 1px 3px rgba(25, 118, 210, 0.15) !important;
   transform: translateY(-1px);
 }
 
 .react-calendar__tile--active:enabled:hover {
-  background-color: #1765cc !important;
-  border-color: #1557b0 !important;
+  background-color: #bbdefb !important;
+  border-color: #64b5f6 !important;
   transform: translateY(-2px);
-  box-shadow: 0 6px 16px rgba(26, 115, 232, 0.5), 0 3px 6px rgba(26, 115, 232, 0.4) !important;
+  box-shadow: 0 4px 10px rgba(25, 118, 210, 0.25), 0 2px 4px rgba(25, 118, 210, 0.2) !important;
 }
 
 .react-calendar__tile--now {
@@ -228,6 +295,11 @@
     padding: 6px 2px;
   }
   
+  .react-calendar__month-view__weekNumbers__weekNumber {
+    min-height: 100px !important;
+    height: 100px !important;
+  }
+  
 }
 
 @media (min-width: 1024px) {
@@ -239,6 +311,11 @@
   
   .react-calendar__navigation__label {
     font-size: 24px !important;
+  }
+  
+  .react-calendar__month-view__weekNumbers__weekNumber {
+    min-height: 120px !important;
+    height: 120px !important;
   }
 }
 
