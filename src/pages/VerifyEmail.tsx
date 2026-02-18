@@ -11,7 +11,7 @@ export default function VerifyEmail() {
   const [code, setCode] = useState('')
   const [email, setEmail] = useState('')
   const [isLoading, setIsLoading] = useState(false)
-  const [timeLeft, setTimeLeft] = useState(120) // 2 minutes in seconds
+  const [timeLeft, setTimeLeft] = useState(600) // 10 minutes in seconds
   const { verifyEmail, resendVerificationCode } = useAuth()
   const navigate = useNavigate()
   const { toast } = useToast()
@@ -25,16 +25,16 @@ export default function VerifyEmail() {
       // Get registration timestamp from localStorage
       const registrationTime = localStorage.getItem('registration_timestamp')
       const now = Date.now()
-      const twoMinutes = 2 * 60 * 1000 // 2 minutes in milliseconds
+      const tenMinutes = 10 * 60 * 1000 // 10 minutes in milliseconds
       
       if (registrationTime) {
         const elapsed = now - parseInt(registrationTime, 10)
-        const remaining = Math.max(0, twoMinutes - elapsed)
+        const remaining = Math.max(0, tenMinutes - elapsed)
         setTimeLeft(Math.floor(remaining / 1000))
       } else {
-        // If no timestamp, set it now and start from 2 minutes
+        // If no timestamp, set it now and start from 10 minutes
         localStorage.setItem('registration_timestamp', now.toString())
-        setTimeLeft(120)
+        setTimeLeft(600)
       }
     } else {
       // If no pending email, redirect to register
