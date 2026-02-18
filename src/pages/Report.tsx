@@ -354,7 +354,7 @@ export default function Report() {
   const maxDate = endOfMonth(addMonths(today, 1))
 
   return (
-    <div className="h-screen flex flex-col bg-gradient-to-br from-slate-50 via-blue-50/30 to-slate-50 overflow-hidden">
+    <div className="min-h-screen bg-gradient-to-br from-slate-50 via-blue-50/30 to-slate-50">
       {/* Premium header with shadow */}
       <div className="flex-shrink-0 px-3 sm:px-4 md:px-6 py-3 sm:py-4 border-b border-slate-200/60 bg-white/80 backdrop-blur-sm shadow-sm">
         <div className="flex items-center justify-between gap-2 sm:gap-4">
@@ -407,23 +407,21 @@ export default function Report() {
       </div>
       
       {/* Calendar container */}
-      <div className="flex-1 overflow-auto p-0">
-        <div className="min-h-full w-full bg-white p-2 sm:p-4 md:p-6 lg:p-8 flex items-start justify-center">
-          <div className="w-full max-w-7xl flex flex-col">
-            <Calendar
-              onChange={handleDateClick}
-              value={selectedDate}
-              onActiveStartDateChange={handleActiveStartDateChange}
-              activeStartDate={currentDate}
-              minDate={minDate}
-              maxDate={maxDate}
-              locale="sv-SE"
-              tileContent={tileContent}
-              tileClassName={tileClassName}
-              className="w-full border-0"
-              showWeekNumbers={true}
-            />
-          </div>
+      <div className="w-full bg-white p-2 sm:p-4 md:p-6 lg:p-8 flex items-start justify-center">
+        <div className="w-full max-w-7xl flex flex-col">
+          <Calendar
+            onChange={handleDateClick}
+            value={selectedDate}
+            onActiveStartDateChange={handleActiveStartDateChange}
+            activeStartDate={currentDate}
+            minDate={minDate}
+            maxDate={maxDate}
+            locale="sv-SE"
+            tileContent={tileContent}
+            tileClassName={tileClassName}
+            className="w-full border-0"
+            showWeekNumbers={true}
+          />
         </div>
       </div>
 
