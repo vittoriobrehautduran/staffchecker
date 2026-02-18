@@ -9,7 +9,7 @@ import {
   DropdownMenuSeparator,
   DropdownMenuTrigger,
 } from '@/components/ui/dropdown-menu'
-import { LogOut, Calendar, Eye, Clock, Settings } from 'lucide-react'
+import { LogOut, Calendar, Eye, Settings } from 'lucide-react'
 import { SettingsDialog } from './SettingsDialog'
 
 export function Header() {
@@ -32,9 +32,11 @@ export function Header() {
         <div className="flex items-center justify-between">
           <div className="flex items-center gap-6">
             <div className="flex items-center gap-2">
-              <div className="p-2 rounded-lg bg-gradient-to-br from-blue-500 to-indigo-600 shadow-md">
-                <Clock className="h-5 w-5 text-white" />
-              </div>
+              <img 
+                src="/logo.jpg" 
+                alt="Spånga TBK Logo" 
+                className="h-10 w-10 object-contain"
+              />
               <h1 className="text-xl font-bold bg-gradient-to-r from-blue-600 to-indigo-600 bg-clip-text text-transparent">
                 Staff Checker
               </h1>
