@@ -408,8 +408,8 @@ export default function Report() {
       
       {/* Calendar container */}
       <div className="flex-1 overflow-auto p-0">
-        <div className="h-full w-full bg-white overflow-hidden p-2 sm:p-4 md:p-6 lg:p-8 flex items-start justify-center">
-          <div className="w-full max-w-7xl h-full flex flex-col">
+        <div className="min-h-full w-full bg-white p-2 sm:p-4 md:p-6 lg:p-8 flex items-start justify-center">
+          <div className="w-full max-w-7xl flex flex-col">
             <Calendar
               onChange={handleDateClick}
               value={selectedDate}
@@ -420,7 +420,7 @@ export default function Report() {
               locale="sv-SE"
               tileContent={tileContent}
               tileClassName={tileClassName}
-              className="w-full border-0 flex-1"
+              className="w-full border-0"
               showWeekNumbers={true}
             />
           </div>
