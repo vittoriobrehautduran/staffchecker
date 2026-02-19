@@ -133,6 +133,8 @@ async function setAllFunctionEnvironments() {
     `${PROJECT_NAME}-delete-entry`,
     `${PROJECT_NAME}-get-entries`,
     `${PROJECT_NAME}-get-report`,
+    `${PROJECT_NAME}-get-user-info`,
+    `${PROJECT_NAME}-revert-report`,
     `${PROJECT_NAME}-submit-report`,
     `${PROJECT_NAME}-update-entry`,
   ]

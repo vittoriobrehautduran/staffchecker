@@ -8,6 +8,7 @@ import Register from '@/pages/Register'
 import VerifyEmail from '@/pages/VerifyEmail'
 import Report from '@/pages/Report'
 import Preview from '@/pages/Preview'
+import Admin from '@/pages/Admin'
 import Debug from '@/pages/Debug'
 
 function ProtectedRoute({ children }: { children: React.ReactNode }) {
@@ -46,6 +47,14 @@ function App() {
           element={
             <ProtectedRoute>
               <Preview />
+            </ProtectedRoute>
+          }
+        />
+        <Route
+          path="/admin"
+          element={
+            <ProtectedRoute>
+              <Admin />
             </ProtectedRoute>
           }
         />

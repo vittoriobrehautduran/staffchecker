@@ -9,7 +9,7 @@ import {
   DropdownMenuSeparator,
   DropdownMenuTrigger,
 } from '@/components/ui/dropdown-menu'
-import { LogOut, Calendar, Eye, Settings } from 'lucide-react'
+import { LogOut, Calendar, Eye, Settings, Shield } from 'lucide-react'
 import { SettingsDialog } from './SettingsDialog'
 
 export function Header() {
@@ -60,6 +60,17 @@ export function Header() {
                 <Eye className="h-4 w-4 mr-2" />
                 Förhandsvisa
               </Button>
+              {user?.isAdmin && (
+                <Button
+                  variant="ghost"
+                  size="sm"
+                  onClick={() => navigate('/admin')}
+                  className="hover:bg-blue-50 dark:hover:bg-gray-800 transition-colors"
+                >
+                  <Shield className="h-4 w-4 mr-2" />
+                  Admin
+                </Button>
+              )}
             </nav>
           </div>
           <div className="flex items-center gap-2">

@@ -270,3 +270,33 @@ export async function getUserIdFromCognitoSession(event: APIGatewayProxyEvent): 
   }
 }
 
+// Check if a user is an admin
+export async function isUserAdmin(userId: number): Promise<boolean> {
+  try {
+    const result = await sql`
+      SELECT is_admin FROM users 
+      WHERE id = ${userId} AND is_admin = true
+      LIMIT 1
+    `
+    return result && result.length > 0
+  } catch (error: any) {
+    console.error('Error checking admin status:', error?.message)
+    return false
+  }
+}
+
+// Get user ID and check if admin from request
+export async function getAdminUserIdFromRequest(event: APIGatewayProxyEvent): Promise<number | null> {
+  const userId = await getUserIdFromCognitoSession(event)
+  if (!userId) {
+    return null
+  }
+  
+  const isAdmin = await isUserAdmin(userId)
+  if (!isAdmin) {
+    return null
+  }
+  
+  return userId
+}
+

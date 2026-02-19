@@ -7,6 +7,7 @@ interface User {
   email: string
   name: string | null
   emailVerified: boolean
+  isAdmin?: boolean
 }
 
 interface AuthContextType {
@@ -51,6 +52,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
           email: userAttributes?.email || currentUser.username,
           name: userAttributes?.name || `${userAttributes?.['given_name'] || ''} ${userAttributes?.['family_name'] || ''}`.trim() || null,
           emailVerified: userAttributes?.email_verified || false,
+          isAdmin: false, // Will be fetched from API
         }
 
         setUser(userData)
@@ -61,6 +63,18 @@ export function AuthProvider({ children }: { children: ReactNode }) {
             ? session.tokens.idToken
             : session.tokens.idToken.toString()
           localStorage.setItem('cognito-id-token', token)
+        }
+
+        // Fetch admin status from backend
+        try {
+          const { apiRequest } = await import('@/services/api')
+          const userInfo = await apiRequest<{ isAdmin: boolean }>('/get-user-info')
+          if (userInfo && typeof userInfo.isAdmin === 'boolean') {
+            setUser({ ...userData, isAdmin: userInfo.isAdmin })
+          }
+        } catch (apiError) {
+          // If API call fails, user is not admin (default)
+          console.log('Could not fetch admin status, defaulting to false')
         }
       } else {
         setUser(null)
