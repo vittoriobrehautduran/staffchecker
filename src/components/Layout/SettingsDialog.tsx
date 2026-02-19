@@ -11,7 +11,7 @@ import {
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
-import { Eye, EyeOff, Lock } from 'lucide-react'
+import { Eye, EyeOff, Lock, User, Mail } from 'lucide-react'
 
 interface SettingsDialogProps {
   open: boolean
@@ -19,7 +19,7 @@ interface SettingsDialogProps {
 }
 
 export function SettingsDialog({ open, onOpenChange }: SettingsDialogProps) {
-  const { changePassword } = useAuth()
+  const { changePassword, user } = useAuth()
   const { toast } = useToast()
   const [currentPassword, setCurrentPassword] = useState('')
   const [newPassword, setNewPassword] = useState('')
@@ -100,9 +100,37 @@ export function SettingsDialog({ open, onOpenChange }: SettingsDialogProps) {
         <DialogHeader>
           <DialogTitle>Inställningar</DialogTitle>
           <DialogDescription>
-            Ändra ditt lösenord
+            Hantera ditt konto och ändra lösenord
           </DialogDescription>
         </DialogHeader>
+        
+        {/* User Information Section */}
+        <div className="space-y-4 pb-4 border-b">
+          <div className="space-y-2">
+            <Label className="text-sm font-medium flex items-center gap-2 text-muted-foreground">
+              <User className="h-4 w-4" />
+              Namn
+            </Label>
+            <div className="px-3 py-2 bg-muted rounded-md text-sm">
+              {user?.name || 'Ej angivet'}
+            </div>
+          </div>
+          
+          <div className="space-y-2">
+            <Label className="text-sm font-medium flex items-center gap-2 text-muted-foreground">
+              <Mail className="h-4 w-4" />
+              E-postadress
+            </Label>
+            <div className="px-3 py-2 bg-muted rounded-md text-sm">
+              {user?.email || 'Ej angivet'}
+            </div>
+          </div>
+        </div>
+
+        {/* Password Change Section */}
+        <div className="pt-4">
+          <h3 className="text-sm font-semibold mb-4">Ändra lösenord</h3>
+        </div>
         
         <form onSubmit={handleSubmit} className="space-y-4">
           <div className="space-y-2">

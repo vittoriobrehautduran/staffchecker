@@ -191,15 +191,43 @@ export const handler = async (
       annat: 'Annat',
     }
 
-    let emailBody = `Timrapport för ${monthName} ${year}\n\n`
-    emailBody += `Anställd: ${user.name} ${user.last_name}\n`
-    emailBody += `E-post: ${user.email}\n`
-    if (user.personnummer) {
-      emailBody += `Personnummer: ${user.personnummer}\n`
-    }
-    emailBody += '\n'
-    emailBody += `Timmar:\n`
-    emailBody += `${'='.repeat(50)}\n\n`
+    // Calculate total hours
+    const totalHours = entries.reduce((sum, entry) => {
+      const fromTime = entry.time_from.substring(0, 5)
+      const toTime = entry.time_to.substring(0, 5)
+      const from = new Date(`2000-01-01T${fromTime}`)
+      const to = new Date(`2000-01-01T${toTime}`)
+      return sum + (to.getTime() - from.getTime()) / (1000 * 60 * 60)
+    }, 0)
+
+    // Generate HTML email body
+    let htmlBody = `
+<!DOCTYPE html>
+<html lang="sv">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Timrapport - ${monthName} ${year}</title>
+</head>
+<body style="font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, 'Helvetica Neue', Arial, sans-serif; line-height: 1.6; color: #333; max-width: 800px; margin: 0 auto; padding: 20px; background-color: #f5f5f5;">
+  <div style="background-color: #ffffff; border-radius: 8px; padding: 30px; box-shadow: 0 2px 4px rgba(0,0,0,0.1);">
+    <h1 style="color: #1a73e8; margin-top: 0; margin-bottom: 10px; font-size: 28px; border-bottom: 3px solid #1a73e8; padding-bottom: 10px;">
+      Timrapport
+    </h1>
+    <p style="color: #666; font-size: 18px; margin-top: 5px; margin-bottom: 30px;">
+      ${monthName} ${year}
+    </p>
+    
+    <div style="background-color: #f8f9fa; border-left: 4px solid #1a73e8; padding: 15px; margin-bottom: 30px; border-radius: 4px;">
+      <p style="margin: 5px 0;"><strong style="color: #333;">Anställd:</strong> <span style="color: #1a73e8;">${user.name} ${user.last_name}</span></p>
+      <p style="margin: 5px 0;"><strong style="color: #333;">E-post:</strong> ${user.email}</p>
+      ${user.personnummer ? `<p style="margin: 5px 0;"><strong style="color: #333;">Personnummer:</strong> ${user.personnummer}</p>` : ''}
+    </div>
+
+    <h2 style="color: #333; font-size: 20px; margin-top: 30px; margin-bottom: 15px; border-bottom: 2px solid #e0e0e0; padding-bottom: 8px;">
+      Tidsregistreringar
+    </h2>
+`
 
     Object.keys(entriesByDate).sort().forEach(dateStr => {
       const dateEntries = entriesByDate[dateStr]
@@ -211,7 +239,105 @@ export const handler = async (
         day: 'numeric' 
       })
       
-      emailBody += `${dateFormatted}\n`
+      let dateTotal = 0
+      dateEntries.forEach(entry => {
+        const fromTime = entry.time_from.substring(0, 5)
+        const toTime = entry.time_to.substring(0, 5)
+        const from = new Date(`2000-01-01T${fromTime}`)
+        const to = new Date(`2000-01-01T${toTime}`)
+        const hours = (to.getTime() - from.getTime()) / (1000 * 60 * 60)
+        dateTotal += hours
+      })
+
+      htmlBody += `
+    <div style="margin-bottom: 25px; border: 1px solid #e0e0e0; border-radius: 6px; overflow: hidden;">
+      <div style="background-color: #1a73e8; color: white; padding: 12px 15px; font-weight: 600; font-size: 16px;">
+        ${dateFormatted}
+      </div>
+      <div style="padding: 15px;">
+        <table style="width: 100%; border-collapse: collapse;">
+`
+
+      dateEntries.forEach(entry => {
+        const fromTime = entry.time_from.substring(0, 5)
+        const toTime = entry.time_to.substring(0, 5)
+        const from = new Date(`2000-01-01T${fromTime}`)
+        const to = new Date(`2000-01-01T${toTime}`)
+        const hours = (to.getTime() - from.getTime()) / (1000 * 60 * 60)
+
+        htmlBody += `
+          <tr style="border-bottom: 1px solid #f0f0f0;">
+            <td style="padding: 10px 0; width: 140px;">
+              <strong style="color: #333;">${fromTime} - ${toTime}</strong>
+            </td>
+            <td style="padding: 10px 0; width: 80px;">
+              <span style="background-color: #e3f2fd; color: #1976d2; padding: 4px 8px; border-radius: 4px; font-weight: 600; font-size: 13px;">
+                ${hours.toFixed(1)}h
+              </span>
+            </td>
+            <td style="padding: 10px 0;">
+              <span style="color: #666;">${workTypeLabels[entry.work_type]}${entry.work_type === 'annat' && entry.annat_specification ? ` - ${entry.annat_specification}` : ''}</span>
+            </td>
+          </tr>
+`
+        if (entry.comment) {
+          htmlBody += `
+          <tr>
+            <td colspan="3" style="padding: 5px 0 10px 0;">
+              <span style="color: #888; font-style: italic; font-size: 14px;">💬 ${entry.comment}</span>
+            </td>
+          </tr>
+`
+        }
+      })
+
+      htmlBody += `
+        </table>
+        <div style="margin-top: 12px; padding-top: 12px; border-top: 2px solid #e0e0e0;">
+          <strong style="color: #333; font-size: 15px;">Totalt för dagen: <span style="color: #1a73e8;">${dateTotal.toFixed(1)} timmar</span></strong>
+        </div>
+      </div>
+    </div>
+`
+    })
+
+    htmlBody += `
+    <div style="background-color: #1a73e8; color: white; padding: 20px; border-radius: 6px; margin-top: 30px; text-align: center;">
+      <p style="margin: 0; font-size: 24px; font-weight: 600;">
+        Totalt för månaden: ${totalHours.toFixed(1)} timmar
+      </p>
+    </div>
+  </div>
+  
+  <p style="text-align: center; color: #888; font-size: 12px; margin-top: 20px;">
+    Detta är en automatisk timrapport från Staff Checker
+  </p>
+</body>
+</html>
+`
+
+    // Plain text version for email clients that don't support HTML
+    let textBody = `Timrapport för ${monthName} ${year}\n\n`
+    textBody += `Anställd: ${user.name} ${user.last_name}\n`
+    textBody += `E-post: ${user.email}\n`
+    if (user.personnummer) {
+      textBody += `Personnummer: ${user.personnummer}\n`
+    }
+    textBody += '\n'
+    textBody += `Timmar:\n`
+    textBody += `${'='.repeat(50)}\n\n`
+
+    Object.keys(entriesByDate).sort().forEach(dateStr => {
+      const dateEntries = entriesByDate[dateStr]
+      const date = new Date(dateStr)
+      const dateFormatted = date.toLocaleDateString('sv-SE', { 
+        weekday: 'long', 
+        year: 'numeric', 
+        month: 'long', 
+        day: 'numeric' 
+      })
+      
+      textBody += `${dateFormatted}\n`
       
       let dateTotal = 0
       dateEntries.forEach(entry => {
@@ -222,28 +348,20 @@ export const handler = async (
         const hours = (to.getTime() - from.getTime()) / (1000 * 60 * 60)
         dateTotal += hours
 
-        emailBody += `  ${fromTime} - ${toTime} (${hours.toFixed(1)}h) - ${workTypeLabels[entry.work_type]}`
+        textBody += `  ${fromTime} - ${toTime} (${hours.toFixed(1)}h) - ${workTypeLabels[entry.work_type]}`
         if (entry.work_type === 'annat' && entry.annat_specification) {
-          emailBody += ` - ${entry.annat_specification}`
+          textBody += ` - ${entry.annat_specification}`
         }
-        emailBody += '\n'
+        textBody += '\n'
         if (entry.comment) {
-          emailBody += `    Kommentar: ${entry.comment}\n`
+          textBody += `    Kommentar: ${entry.comment}\n`
         }
       })
       
-      emailBody += `  Totalt för dagen: ${dateTotal.toFixed(1)} timmar\n\n`
+      textBody += `  Totalt för dagen: ${dateTotal.toFixed(1)} timmar\n\n`
     })
 
-    const totalHours = entries.reduce((sum, entry) => {
-      const fromTime = entry.time_from.substring(0, 5)
-      const toTime = entry.time_to.substring(0, 5)
-      const from = new Date(`2000-01-01T${fromTime}`)
-      const to = new Date(`2000-01-01T${toTime}`)
-      return sum + (to.getTime() - from.getTime()) / (1000 * 60 * 60)
-    }, 0)
-
-    emailBody += `Totalt för månaden: ${totalHours.toFixed(1)} timmar\n`
+    textBody += `Totalt för månaden: ${totalHours.toFixed(1)} timmar\n`
 
     // Send email via AWS SES
     const bossEmail = process.env.BOSS_EMAIL_ADDRESS
@@ -260,8 +378,12 @@ export const handler = async (
               Charset: 'UTF-8',
             },
             Body: {
+              Html: {
+                Data: htmlBody,
+                Charset: 'UTF-8',
+              },
               Text: {
-                Data: emailBody,
+                Data: textBody,
                 Charset: 'UTF-8',
               },
             },
