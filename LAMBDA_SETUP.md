@@ -10,7 +10,7 @@ Go to each Lambda function in AWS Console → Configuration → Environment vari
 - `BETTER_AUTH_URL` - Your API Gateway URL (set this after creating API Gateway)
 
 ### Functions That Send Email (`submit-report`, `auto-submit-reports`):
-- `AWS_SES_REGION` - `eu-north-1`
+- `SES_REGION` - `eu-north-1`
 - `AWS_SES_ACCESS_KEY_ID` - Your AWS access key
 - `AWS_SES_SECRET_ACCESS_KEY` - Your AWS secret key
 - `BOSS_EMAIL_ADDRESS` - Email where reports are sent

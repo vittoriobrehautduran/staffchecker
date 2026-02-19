@@ -25,7 +25,7 @@ No longer needed:
 
 Still needed:
 - `DATABASE_URL`
-- `AWS_SES_REGION`, `AWS_SES_ACCESS_KEY_ID`, `AWS_SES_SECRET_ACCESS_KEY` (for email sending)
+- `SES_REGION`, `AWS_SES_ACCESS_KEY_ID`, `AWS_SES_SECRET_ACCESS_KEY` (for email sending)
 - `BOSS_EMAIL_ADDRESS`
 
 ## Testing

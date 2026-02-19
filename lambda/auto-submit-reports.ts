@@ -3,7 +3,7 @@ import { sql } from './utils/database'
 import { SESClient, SendEmailCommand } from '@aws-sdk/client-ses'
 
 const sesClient = new SESClient({
-  region: process.env.AWS_SES_REGION || 'eu-north-1',
+  region: process.env.SES_REGION || 'eu-north-1',
   credentials: {
     accessKeyId: process.env.AWS_SES_ACCESS_KEY_ID || '',
     secretAccessKey: process.env.AWS_SES_SECRET_ACCESS_KEY || '',

@@ -110,7 +110,7 @@ For each function in `lambda/`:
    - `DATABASE_URL`
    - `BETTER_AUTH_SECRET`
    - `BETTER_AUTH_URL`
-   - `AWS_SES_REGION`
+   - `SES_REGION`
    - `AWS_SES_ACCESS_KEY_ID`
    - `AWS_SES_SECRET_ACCESS_KEY`
    - `BOSS_EMAIL_ADDRESS`

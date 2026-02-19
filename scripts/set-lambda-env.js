@@ -72,7 +72,7 @@ const commonEnvVars = {
 
 // Environment variables for email functions (SES for reports)
 const emailEnvVars = {
-  AWS_SES_REGION: process.env.AWS_SES_REGION || 'eu-north-1',
+  SES_REGION: process.env.SES_REGION || 'eu-north-1',
   AWS_SES_ACCESS_KEY_ID: process.env.AWS_SES_ACCESS_KEY_ID,
   AWS_SES_SECRET_ACCESS_KEY: process.env.AWS_SES_SECRET_ACCESS_KEY,
   BOSS_EMAIL_ADDRESS: process.env.BOSS_EMAIL_ADDRESS,

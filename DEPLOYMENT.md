@@ -25,7 +25,7 @@
 #### Backend Variables (for Netlify Functions - NOT exposed to browser):
 - `CLERK_SECRET_KEY` = `sk_live_...` (your production secret key)
 - `DATABASE_URL` = `postgresql://user:password@host/database?sslmode=require` (your Neon connection string)
-- `AWS_SES_REGION` = `eu-north-1` (or your AWS region)
+- `SES_REGION` = `eu-north-1` (or your AWS region)
 - `AWS_SES_ACCESS_KEY_ID` = `...` (your AWS access key)
 - `AWS_SES_SECRET_ACCESS_KEY` = `...` (your AWS secret key)
 - `BOSS_EMAIL_ADDRESS` = `boss@example.com` (email where reports are sent)

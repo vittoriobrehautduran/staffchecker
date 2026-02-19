@@ -378,7 +378,7 @@ When a report is submitted (manually or automatically), the following data is se
   - `DATABASE_URL` (Neon connection string, server-side only - Lambda)
   - `BETTER_AUTH_SECRET` (Better Auth secret - Lambda)
   - `BETTER_AUTH_URL` (Better Auth base URL - Lambda)
-  - `AWS_SES_REGION` (Lambda)
+  - `SES_REGION` (Lambda)
   - `AWS_SES_ACCESS_KEY_ID` (Lambda)
   - `AWS_SES_SECRET_ACCESS_KEY` (Lambda)
   - `BOSS_EMAIL_ADDRESS` (Lambda)

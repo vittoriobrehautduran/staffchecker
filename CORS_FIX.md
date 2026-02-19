@@ -39,14 +39,14 @@ Go to each Lambda function and verify these environment variables are set:
 - `BETTER_AUTH_SECRET` - Generate with: `openssl rand -base64 32`
 - `BETTER_AUTH_URL` - Your Amplify frontend URL (e.g., `https://yourapp.amplifyapp.com`)
 - `SES_FROM_EMAIL` or `AWS_SES_FROM_EMAIL` - Verified sender email address in AWS SES (for email verification)
-- `SES_REGION` or `AWS_SES_REGION` - AWS region for SES (defaults to `eu-north-1` if not set)
+- `SES_REGION` - AWS region for SES (defaults to `eu-north-1` if not set)
   - Note: `AWS_REGION` is reserved by Lambda and cannot be set as an environment variable
 
 **For other Lambda functions:**
 - `DATABASE_URL`
 - `BETTER_AUTH_SECRET`
 - `BETTER_AUTH_URL`
-- `AWS_SES_REGION` (for functions that send email)
+- `SES_REGION` (for functions that send email)
 - `AWS_SES_ACCESS_KEY_ID`
 - `AWS_SES_SECRET_ACCESS_KEY`
 - `BOSS_EMAIL_ADDRESS`

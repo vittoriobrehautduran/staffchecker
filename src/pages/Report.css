@@ -21,15 +21,15 @@
 }
 
 .react-calendar__navigation button {
-  min-width: 40px;
-  height: 40px;
+  min-width: 48px;
+  height: 48px;
   background: transparent;
-  font-size: 20px;
-  font-weight: 500;
-  color: #5f6368;
+  font-size: 28px;
+  font-weight: 600;
+  color: #202124;
   border: none;
   cursor: pointer;
-  padding: 8px;
+  padding: 10px;
   border-radius: 50%;
   transition: all 0.2s cubic-bezier(0.4, 0, 0.2, 1);
   display: flex;
@@ -38,7 +38,9 @@
 }
 
 .react-calendar__navigation button:hover {
-  background-color: #f1f3f4;
+  background-color: #e8eaed;
+  color: #1a73e8;
+  transform: scale(1.1);
 }
 
 .react-calendar__navigation button:enabled:active {
@@ -270,10 +272,12 @@
   }
   
   .react-calendar__navigation button {
-    min-width: 36px;
-    height: 36px;
-    font-size: 18px;
-    padding: 6px;
+    min-width: 44px;
+    height: 44px;
+    font-size: 24px;
+    font-weight: 600;
+    color: #202124;
+    padding: 8px;
   }
   
   .react-calendar__navigation__label {

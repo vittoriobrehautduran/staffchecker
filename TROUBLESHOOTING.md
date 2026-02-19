@@ -45,7 +45,7 @@ Varje Lambda-funktion behöver följande miljövariabler:
 - `DATABASE_URL` - Din Neon databas-URL
 - `BETTER_AUTH_SECRET` - Generera med: `openssl rand -base64 32`
 - `BETTER_AUTH_URL` - Din Amplify frontend URL (t.ex. `https://yourapp.amplifyapp.com`)
-- `AWS_SES_REGION` - t.ex. `eu-north-1`
+- `SES_REGION` - t.ex. `eu-north-1`
 - `AWS_SES_ACCESS_KEY_ID` - Ditt AWS access key
 - `AWS_SES_SECRET_ACCESS_KEY` - Ditt AWS secret key
 - `BOSS_EMAIL_ADDRESS` - E-postadress för rapporter
@@ -109,7 +109,7 @@ VITE_API_BASE_URL=https://abc123.execute-api.eu-north-1.amazonaws.com/prod
 DATABASE_URL=postgresql://user:pass@host/db?sslmode=require
 BETTER_AUTH_SECRET=your-secret-here
 BETTER_AUTH_URL=https://yourapp.amplifyapp.com
-AWS_SES_REGION=eu-north-1
+SES_REGION=eu-north-1
 AWS_SES_ACCESS_KEY_ID=your-key
 AWS_SES_SECRET_ACCESS_KEY=your-secret
 BOSS_EMAIL_ADDRESS=boss@example.com
