@@ -272,222 +272,252 @@ export function DateModal({
 
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
-      <DialogContent className="max-w-2xl max-h-[90vh] overflow-y-auto">
-        <DialogHeader>
-          <DialogTitle>{dateStr}</DialogTitle>
-          <DialogDescription>
+      <DialogContent className="w-[95vw] max-w-3xl max-h-[95vh] overflow-y-auto p-0 sm:p-6">
+        <div className="p-4 sm:p-6">
+          <DialogHeader className="mb-6">
+            <DialogTitle className="text-2xl sm:text-3xl font-bold text-gray-900 dark:text-gray-100">
+              {dateStr}
+            </DialogTitle>
+            <DialogDescription className="text-base sm:text-lg mt-2">
+              {entries.length > 0 && (
+                <span className="font-semibold text-blue-600 dark:text-blue-400">
+                  Totalt: {totalHours.toFixed(1)} timmar
+                </span>
+              )}
+            </DialogDescription>
+          </DialogHeader>
+
+          <div className="space-y-6 sm:space-y-8">
+            {/* Existing Entries */}
             {entries.length > 0 && (
-              <span className="font-semibold">Totalt: {totalHours.toFixed(1)} timmar</span>
-            )}
-          </DialogDescription>
-        </DialogHeader>
-
-        <div className="space-y-6">
-          {/* Existing Entries */}
-          {entries.length > 0 && (
-            <div className="space-y-3">
-              <h3 className="font-semibold">Befintliga poster</h3>
-              <div className="grid gap-3">
-                {entries.map((entry) => (
-                  <Card key={entry.id}>
-                    <CardContent className="p-4">
-                      <div className="flex items-start justify-between">
-                        <div className="flex-1">
-                          <div className="flex items-center gap-2 mb-2">
-                            <span className="font-semibold">
-                              {entry.time_from.substring(0, 5)} - {entry.time_to.substring(0, 5)}
-                            </span>
-                            <span className="text-muted-foreground">
-                              ({calculateHours(entry.time_from.substring(0, 5), entry.time_to.substring(0, 5)).toFixed(1)}h)
-                            </span>
-                          </div>
-                          <div className="space-y-1">
-                            <p className="font-medium">{workTypeLabels[entry.work_type]}</p>
-                            {entry.work_type === 'annat' && entry.annat_specification && (
-                              <p className="text-sm text-muted-foreground">
-                                {entry.annat_specification}
+              <div className="space-y-4">
+                <h3 className="text-lg sm:text-xl font-bold text-gray-900 dark:text-gray-100">
+                  Befintliga poster
+                </h3>
+                <div className="grid gap-4">
+                  {entries.map((entry) => (
+                    <Card key={entry.id} className="border-2 shadow-md hover:shadow-lg transition-shadow">
+                      <CardContent className="p-4 sm:p-5">
+                        <div className="flex items-start justify-between gap-4">
+                          <div className="flex-1 min-w-0">
+                            <div className="flex flex-wrap items-center gap-2 sm:gap-3 mb-3">
+                              <span className="text-lg sm:text-xl font-bold text-gray-900 dark:text-gray-100">
+                                {entry.time_from.substring(0, 5)} - {entry.time_to.substring(0, 5)}
+                              </span>
+                              <span className="px-2 py-1 bg-blue-100 dark:bg-blue-900 text-blue-700 dark:text-blue-300 rounded-md text-sm sm:text-base font-semibold">
+                                {calculateHours(entry.time_from.substring(0, 5), entry.time_to.substring(0, 5)).toFixed(1)}h
+                              </span>
+                            </div>
+                            <div className="space-y-2">
+                              <p className="text-base sm:text-lg font-semibold text-gray-800 dark:text-gray-200">
+                                {workTypeLabels[entry.work_type]}
                               </p>
-                            )}
-                            {entry.comment && (
-                              <p className="text-sm text-muted-foreground">{entry.comment}</p>
+                              {entry.work_type === 'annat' && entry.annat_specification && (
+                                <p className="text-sm sm:text-base text-gray-600 dark:text-gray-400 bg-gray-50 dark:bg-gray-800 p-2 rounded">
+                                  {entry.annat_specification}
+                                </p>
+                              )}
+                              {entry.comment && (
+                                <p className="text-sm sm:text-base text-gray-600 dark:text-gray-400 italic">
+                                  💬 {entry.comment}
+                                </p>
+                              )}
+                            </div>
+                          </div>
+                          <div className="flex gap-2 shrink-0">
+                            {pendingDeleteId === entry.id ? (
+                              <>
+                                <Button
+                                  variant="destructive"
+                                  size="sm"
+                                  onClick={() => handleDeleteConfirm(entry.id)}
+                                  className="text-sm px-3 py-2 h-auto"
+                                >
+                                  Ja, ta bort
+                                </Button>
+                                <Button
+                                  variant="outline"
+                                  size="sm"
+                                  onClick={handleDeleteCancel}
+                                  className="text-sm px-3 py-2 h-auto"
+                                >
+                                  Avbryt
+                                </Button>
+                              </>
+                            ) : (
+                              <>
+                                <Button
+                                  variant="ghost"
+                                  size="icon"
+                                  onClick={() => handleEdit(entry)}
+                                  disabled={reportStatus === 'submitted'}
+                                  title={reportStatus === 'submitted' ? 'Rapport redan skickad' : 'Redigera'}
+                                  className="h-10 w-10"
+                                >
+                                  <Edit2 className="h-5 w-5" />
+                                </Button>
+                                <Button
+                                  variant="ghost"
+                                  size="icon"
+                                  onClick={() => handleDeleteClick(entry.id)}
+                                  disabled={reportStatus === 'submitted'}
+                                  title={reportStatus === 'submitted' ? 'Rapport redan skickad' : 'Ta bort'}
+                                  className="h-10 w-10"
+                                >
+                                  <Trash2 className="h-5 w-5 text-red-500" />
+                                </Button>
+                              </>
                             )}
                           </div>
                         </div>
-                        <div className="flex gap-2">
-                          {pendingDeleteId === entry.id ? (
-                            <>
-                              <Button
-                                variant="destructive"
-                                size="sm"
-                                onClick={() => handleDeleteConfirm(entry.id)}
-                              >
-                                Ja, ta bort
-                              </Button>
-                              <Button
-                                variant="outline"
-                                size="sm"
-                                onClick={handleDeleteCancel}
-                              >
-                                Avbryt
-                              </Button>
-                            </>
-                          ) : (
-                            <>
-                          <Button
-                            variant="ghost"
-                            size="icon"
-                            onClick={() => handleEdit(entry)}
-                            disabled={reportStatus === 'submitted'}
-                            title={reportStatus === 'submitted' ? 'Rapport redan skickad' : 'Redigera'}
-                          >
-                            <Edit2 className="h-4 w-4" />
-                          </Button>
-                          <Button
-                            variant="ghost"
-                            size="icon"
-                                onClick={() => handleDeleteClick(entry.id)}
-                            disabled={reportStatus === 'submitted'}
-                            title={reportStatus === 'submitted' ? 'Rapport redan skickad' : 'Ta bort'}
-                          >
-                                <Trash2 className="h-4 w-4 text-red-500" />
-                          </Button>
-                            </>
-                          )}
-                        </div>
-                      </div>
-                    </CardContent>
-                  </Card>
-                ))}
+                      </CardContent>
+                    </Card>
+                  ))}
+                </div>
               </div>
-            </div>
-          )}
+            )}
 
-          {/* Add/Edit Form */}
-          <form onSubmit={handleSubmit} className="space-y-4 border-t pt-4">
-            <h3 className="font-semibold">
-              {editingEntry ? 'Redigera post' : 'Lägg till ny post'}
-            </h3>
+            {/* Add/Edit Form */}
+            <form onSubmit={handleSubmit} className="space-y-5 sm:space-y-6 border-t border-gray-200 dark:border-gray-700 pt-6">
+              <h3 className="text-lg sm:text-xl font-bold text-gray-900 dark:text-gray-100">
+                {editingEntry ? 'Redigera post' : 'Lägg till ny post'}
+              </h3>
 
-            <div className="grid grid-cols-2 gap-4">
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 sm:gap-5">
+                <div className="space-y-2">
+                  <Label htmlFor="timeFrom" className="text-base sm:text-lg font-semibold">
+                    Från
+                  </Label>
+                  <Select
+                    value={timeFrom}
+                    onValueChange={(value) => setTimeFrom(value)}
+                    required
+                    disabled={isSubmitting || reportStatus === 'submitted'}
+                  >
+                    <SelectTrigger id="timeFrom" className="h-12 sm:h-14 text-base sm:text-lg">
+                      <SelectValue placeholder="Välj tid" />
+                    </SelectTrigger>
+                    <SelectContent className="max-h-[300px]">
+                      {TIME_OPTIONS.map((time) => (
+                        <SelectItem key={time} value={time} className="text-base">
+                          {time}
+                        </SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
+                </div>
+                <div className="space-y-2">
+                  <Label htmlFor="timeTo" className="text-base sm:text-lg font-semibold">
+                    Till
+                  </Label>
+                  <Select
+                    value={timeTo}
+                    onValueChange={(value) => setTimeTo(value)}
+                    required
+                    disabled={isSubmitting || reportStatus === 'submitted'}
+                  >
+                    <SelectTrigger id="timeTo" className="h-12 sm:h-14 text-base sm:text-lg">
+                      <SelectValue placeholder="Välj tid" />
+                    </SelectTrigger>
+                    <SelectContent className="max-h-[300px]">
+                      {TIME_OPTIONS.map((time) => (
+                        <SelectItem key={time} value={time} className="text-base">
+                          {time}
+                        </SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
+                </div>
+              </div>
+
               <div className="space-y-2">
-                <Label htmlFor="timeFrom">Från</Label>
+                <Label htmlFor="workType" className="text-base sm:text-lg font-semibold">
+                  Arbete
+                </Label>
                 <Select
-                  value={timeFrom}
-                  onValueChange={(value) => setTimeFrom(value)}
+                  value={workType}
+                  onValueChange={(value) => {
+                    setWorkType(value as typeof workType)
+                    if (value !== 'annat') {
+                      setAnnatSpec('')
+                    }
+                  }}
                   required
                   disabled={isSubmitting || reportStatus === 'submitted'}
                 >
-                  <SelectTrigger id="timeFrom" className="h-10 text-base">
-                    <SelectValue placeholder="Välj tid" />
+                  <SelectTrigger className="h-12 sm:h-14 text-base sm:text-lg">
+                    <SelectValue placeholder="Välj arbets typ" />
                   </SelectTrigger>
-                  <SelectContent className="max-h-[300px]">
-                    {TIME_OPTIONS.map((time) => (
-                      <SelectItem key={time} value={time}>
-                        {time}
-                      </SelectItem>
-                    ))}
+                  <SelectContent>
+                    <SelectItem value="cafe" className="text-base">Cafe</SelectItem>
+                    <SelectItem value="coaching" className="text-base">Coaching</SelectItem>
+                    <SelectItem value="administration" className="text-base">Administration</SelectItem>
+                    <SelectItem value="cleaning" className="text-base">Städning</SelectItem>
+                    <SelectItem value="annat" className="text-base">Annat</SelectItem>
                   </SelectContent>
                 </Select>
               </div>
-              <div className="space-y-2">
-                <Label htmlFor="timeTo">Till</Label>
-                <Select
-                  value={timeTo}
-                  onValueChange={(value) => setTimeTo(value)}
-                  required
-                  disabled={isSubmitting || reportStatus === 'submitted'}
-                >
-                  <SelectTrigger id="timeTo" className="h-10 text-base">
-                    <SelectValue placeholder="Välj tid" />
-                  </SelectTrigger>
-                  <SelectContent className="max-h-[300px]">
-                    {TIME_OPTIONS.map((time) => (
-                      <SelectItem key={time} value={time}>
-                        {time}
-                      </SelectItem>
-                    ))}
-                  </SelectContent>
-                </Select>
-              </div>
-            </div>
 
-            <div className="space-y-2">
-              <Label htmlFor="workType">Arbete</Label>
-              <Select
-                value={workType}
-                onValueChange={(value) => {
-                  setWorkType(value as typeof workType)
-                  if (value !== 'annat') {
-                    setAnnatSpec('')
-                  }
-                }}
-                required
-                disabled={isSubmitting || reportStatus === 'submitted'}
-              >
-                <SelectTrigger>
-                  <SelectValue placeholder="Välj arbets typ" />
-                </SelectTrigger>
-                <SelectContent>
-                  <SelectItem value="cafe">Cafe</SelectItem>
-                  <SelectItem value="coaching">Coaching</SelectItem>
-                  <SelectItem value="administration">Administration</SelectItem>
-                  <SelectItem value="cleaning">Städning</SelectItem>
-                  <SelectItem value="annat">Annat</SelectItem>
-                </SelectContent>
-              </Select>
-            </div>
+              {workType === 'annat' && (
+                <div className="space-y-2">
+                  <Label htmlFor="annatSpec" className="text-base sm:text-lg font-semibold">
+                    Specifikation (Annat)
+                  </Label>
+                  <Input
+                    id="annatSpec"
+                    type="text"
+                    value={annatSpec}
+                    onChange={(e: React.ChangeEvent<HTMLInputElement>) => setAnnatSpec(e.target.value)}
+                    placeholder="Beskriv vad du arbetade med"
+                    required
+                    disabled={isSubmitting || reportStatus === 'submitted'}
+                    className="h-12 sm:h-14 text-base sm:text-lg"
+                  />
+                </div>
+              )}
 
-            {workType === 'annat' && (
               <div className="space-y-2">
-                <Label htmlFor="annatSpec">Specifikation (Annat)</Label>
-                <Input
-                  id="annatSpec"
-                  type="text"
-                  value={annatSpec}
-                  onChange={(e: React.ChangeEvent<HTMLInputElement>) => setAnnatSpec(e.target.value)}
-                  placeholder="Beskriv vad du arbetade med"
-                  required
+                <Label htmlFor="comment" className="text-base sm:text-lg font-semibold">
+                  Övrig kommentar
+                </Label>
+                <Textarea
+                  id="comment"
+                  value={comment}
+                  onChange={(e) => setComment(e.target.value)}
+                  placeholder="Valfri kommentar"
                   disabled={isSubmitting || reportStatus === 'submitted'}
+                  className="min-h-[100px] sm:min-h-[120px] text-base sm:text-lg"
                 />
               </div>
-            )}
 
-            <div className="space-y-2">
-              <Label htmlFor="comment">Övrig kommentar</Label>
-              <Textarea
-                id="comment"
-                value={comment}
-                onChange={(e) => setComment(e.target.value)}
-                placeholder="Valfri kommentar"
-                disabled={isSubmitting || reportStatus === 'submitted'}
-              />
-            </div>
-
-            <div className="flex gap-2">
-              <Button 
-                type="submit" 
-                disabled={isSubmitting || reportStatus === 'submitted'}
-              >
-                {isSubmitting
-                  ? 'Sparar...'
-                  : reportStatus === 'submitted'
-                  ? 'Rapport redan skickad'
-                  : editingEntry
-                  ? 'Uppdatera post'
-                  : 'Lägg till post'}
-              </Button>
-              {editingEntry && (
-                <Button
-                  type="button"
-                  variant="outline"
-                  onClick={resetForm}
+              <div className="flex flex-col sm:flex-row gap-3 pt-2">
+                <Button 
+                  type="submit" 
                   disabled={isSubmitting || reportStatus === 'submitted'}
+                  className="h-12 sm:h-14 text-base sm:text-lg font-semibold flex-1 sm:flex-none"
                 >
-                  Avbryt
+                  {isSubmitting
+                    ? 'Sparar...'
+                    : reportStatus === 'submitted'
+                    ? 'Rapport redan skickad'
+                    : editingEntry
+                    ? 'Uppdatera post'
+                    : 'Lägg till post'}
                 </Button>
-              )}
-            </div>
-          </form>
+                {editingEntry && (
+                  <Button
+                    type="button"
+                    variant="outline"
+                    onClick={resetForm}
+                    disabled={isSubmitting || reportStatus === 'submitted'}
+                    className="h-12 sm:h-14 text-base sm:text-lg font-semibold"
+                  >
+                    Avbryt
+                  </Button>
+                )}
+              </div>
+            </form>
+          </div>
         </div>
       </DialogContent>
     </Dialog>

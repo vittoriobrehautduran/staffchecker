@@ -1,5 +1,5 @@
 import { createContext, useContext, useState, useEffect, useRef, type ReactNode } from 'react'
-import { signIn as cognitoSignIn, signUp as cognitoSignUp, signOut as cognitoSignOut, getCurrentUser, fetchAuthSession, confirmSignUp, resendSignUpCode, updatePassword } from 'aws-amplify/auth'
+import { signIn as cognitoSignIn, signUp as cognitoSignUp, signOut as cognitoSignOut, getCurrentUser, fetchAuthSession, confirmSignUp, resendSignUpCode, updatePassword, signInWithRedirect } from 'aws-amplify/auth'
 import '@/lib/cognito-config'
 
 interface User {
@@ -22,6 +22,7 @@ interface AuthContextType {
     password: string
   }) => Promise<void>
   signOut: () => Promise<void>
+  signInWithOAuth: (provider: 'Google' | 'Facebook' | 'Apple') => Promise<void>
   verifyEmail: (code: string, email: string) => Promise<void>
   resendVerificationCode: (email: string) => Promise<string>
   changePassword: (currentPassword: string, newPassword: string) => Promise<void>
@@ -97,7 +98,27 @@ export function AuthProvider({ children }: { children: ReactNode }) {
 
   useEffect(() => {
     isMountedRef.current = true
-    fetchUser()
+    
+    // Check if we're returning from OAuth redirect
+    const urlParams = new URLSearchParams(window.location.search)
+    const code = urlParams.get('code')
+    const state = urlParams.get('state')
+    
+    if (code || state) {
+      // User is returning from OAuth redirect
+      // Amplify will automatically exchange the code for tokens
+      // Wait a bit for Amplify to process, then fetch user
+      setTimeout(() => {
+        fetchUser().then(() => {
+          // Clean up URL by removing OAuth parameters
+          const newUrl = window.location.pathname
+          window.history.replaceState({}, '', newUrl)
+        })
+      }, 500)
+    } else {
+      // Normal page load, fetch user immediately
+      fetchUser()
+    }
 
     // Listen for auth state changes
     const interval = setInterval(() => {
@@ -186,6 +207,18 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     }
   }
 
+  const signInWithOAuth = async (provider: 'Google' | 'Facebook' | 'Apple') => {
+    try {
+      await signInWithRedirect({
+        provider,
+        customState: window.location.pathname, // Save current path to return after OAuth
+      })
+    } catch (error: any) {
+      console.error('OAuth sign in error:', error)
+      throw new Error(`Inloggning med ${provider} misslyckades`)
+    }
+  }
+
   const verifyEmail = async (code: string, email: string) => {
     try {
       await confirmSignUp({
@@ -249,6 +282,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         signIn,
         signUp,
         signOut,
+        signInWithOAuth,
         verifyEmail,
         resendVerificationCode,
         changePassword,

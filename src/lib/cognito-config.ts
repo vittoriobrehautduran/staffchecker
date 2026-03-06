@@ -10,6 +10,19 @@ const cognitoConfig = {
       region: import.meta.env.VITE_AWS_REGION || 'eu-north-1',
       loginWith: {
         email: true,
+        oauth: {
+          domain: import.meta.env.VITE_COGNITO_DOMAIN || '',
+          scopes: ['openid', 'email', 'profile'],
+          redirectSignIn: [
+            import.meta.env.VITE_OAUTH_REDIRECT_SIGN_IN || 'http://localhost:5173',
+            'https://main.d3jub8c52hgrc6.amplifyapp.com',
+          ],
+          redirectSignOut: [
+            import.meta.env.VITE_OAUTH_REDIRECT_SIGN_OUT || 'http://localhost:5173',
+            'https://main.d3jub8c52hgrc6.amplifyapp.com',
+          ],
+          responseType: 'code',
+        },
       },
     },
   },
