@@ -10,12 +10,27 @@ import { apiRequest } from '@/services/api'
 import { calculateHours } from '@/utils/validation'
 import { ArrowLeft } from 'lucide-react'
 
+type EntryType = 'work' | 'leave' | 'compensation'
+type WorkType = 'cafe' | 'coaching_tennis' | 'coaching_bordtennis' | 'privat_traning' | 'administration' | 'cleaning' | 'annat'
+type LeaveType = 'semester' | 'tjanstledig' | 'sjukdom' | 'vard_av_barn' | 'annan_ledighet'
+type CompensationType = 'milersattning' | 'annan_ersattning'
+type SportType = 'tennis' | 'bordtennis'
+
 interface Entry {
   id: number
   date: string
-  time_from: string
-  time_to: string
-  work_type: 'cafe' | 'coaching' | 'administration' | 'cleaning' | 'annat'
+  entry_type: EntryType
+  time_from: string | null
+  time_to: string | null
+  work_type: WorkType | null
+  leave_type: LeaveType | null
+  compensation_type: CompensationType | null
+  student_count: number | null
+  sport_type: SportType | null
+  is_full_day_leave: boolean | null
+  mileage_km: number | null
+  compensation_amount: number | null
+  compensation_description: string | null
   annat_specification: string | null
   comment: string | null
 }
@@ -206,16 +221,34 @@ export default function Preview() {
 
   const sortedDates = Object.keys(entriesByDate).sort()
 
-  const workTypeLabels = {
+  const workTypeLabels: Record<WorkType, string> = {
     cafe: 'Cafe',
-    coaching: 'Coaching',
+    coaching_tennis: '🎾 Coaching (Tennis)',
+    coaching_bordtennis: '🏓 Coaching (Bordtennis)',
+    privat_traning: 'Privatträning',
     administration: 'Administration',
     cleaning: 'Städning',
     annat: 'Annat',
   }
 
+  const leaveTypeLabels: Record<LeaveType, string> = {
+    semester: 'Semester',
+    tjanstledig: 'Tjänstledig',
+    sjukdom: 'Sjukdom',
+    vard_av_barn: 'Vård av barn',
+    annan_ledighet: 'Annan ledighet',
+  }
+
+  const compensationTypeLabels: Record<CompensationType, string> = {
+    milersattning: 'Milersättning',
+    annan_ersattning: 'Annan ersättning',
+  }
+
   const totalHours = reportData.entries.reduce((sum, entry) => {
-    return sum + calculateHours(entry.time_from.substring(0, 5), entry.time_to.substring(0, 5))
+    if (entry.time_from && entry.time_to) {
+      return sum + calculateHours(entry.time_from.substring(0, 5), entry.time_to.substring(0, 5))
+    }
+    return sum
   }, 0)
 
   return (
@@ -264,8 +297,15 @@ export default function Preview() {
               <>
                 {sortedDates.map((dateStr) => {
                   const dateEntries = entriesByDate[dateStr]
+                  const dateWorkEntries = dateEntries.filter(e => e.entry_type === 'work')
+                  const dateLeaveEntries = dateEntries.filter(e => e.entry_type === 'leave')
+                  const dateCompensationEntries = dateEntries.filter(e => e.entry_type === 'compensation')
+                  
                   const dateTotal = dateEntries.reduce((sum, entry) => {
-                    return sum + calculateHours(entry.time_from.substring(0, 5), entry.time_to.substring(0, 5))
+                    if (entry.time_from && entry.time_to) {
+                      return sum + calculateHours(entry.time_from.substring(0, 5), entry.time_to.substring(0, 5))
+                    }
+                    return sum
                   }, 0)
 
                   return (
@@ -274,35 +314,141 @@ export default function Preview() {
                         <h3 className="font-semibold">
                           {format(new Date(dateStr), 'EEEE d MMMM yyyy', { locale: sv })}
                         </h3>
-                        <span className="text-sm text-muted-foreground">
-                          Totalt: {dateTotal.toFixed(1)} timmar
-                        </span>
+                        {dateTotal > 0 && (
+                          <span className="text-sm text-muted-foreground">
+                            Totalt: {dateTotal.toFixed(1)} timmar
+                          </span>
+                        )}
                       </div>
-                      <div className="space-y-2 ml-4">
-                        {dateEntries.map((entry) => {
-                          const hours = calculateHours(entry.time_from.substring(0, 5), entry.time_to.substring(0, 5))
-                          return (
-                            <div key={entry.id} className="text-sm">
-                              <span className="font-medium">
-                                {entry.time_from.substring(0, 5)} - {entry.time_to.substring(0, 5)}
-                              </span>
-                              {' '}
-                              <span className="text-muted-foreground">
-                                ({hours.toFixed(1)}h) - {workTypeLabels[entry.work_type]}
-                              </span>
-                              {entry.work_type === 'annat' && entry.annat_specification && (
-                                <span className="text-muted-foreground">
-                                  {' '}- {entry.annat_specification}
-                                </span>
-                              )}
-                              {entry.comment && (
-                                <div className="text-muted-foreground ml-6">
-                                  {entry.comment}
-                                </div>
-                              )}
+                      <div className="space-y-4 ml-4">
+                        {/* Work Entries */}
+                        {dateWorkEntries.length > 0 && (
+                          <div>
+                            <h4 className="text-sm font-semibold text-blue-700 dark:text-blue-400 mb-2">Arbete</h4>
+                            <div className="space-y-2">
+                              {dateWorkEntries.map((entry) => {
+                                if (!entry.time_from || !entry.time_to) return null
+                                const hours = calculateHours(entry.time_from.substring(0, 5), entry.time_to.substring(0, 5))
+                                return (
+                                  <div key={entry.id} className="text-sm">
+                                    <span className="font-medium">
+                                      {entry.time_from.substring(0, 5)} - {entry.time_to.substring(0, 5)}
+                                    </span>
+                                    {' '}
+                                    <span className="text-muted-foreground">
+                                      ({hours.toFixed(1)}h) - {entry.work_type && workTypeLabels[entry.work_type]}
+                                      {entry.work_type === 'privat_traning' && (
+                                        <>
+                                          {entry.student_count && (
+                                            <span> ({entry.student_count} {entry.student_count === 1 ? 'elev' : 'elever'})</span>
+                                          )}
+                                          {entry.sport_type && (
+                                            <span> - {entry.sport_type === 'tennis' ? '🎾 Tennis' : '🏓 Bordtennis'}</span>
+                                          )}
+                                        </>
+                                      )}
+                                    </span>
+                                    {entry.work_type === 'annat' && entry.annat_specification && (
+                                      <span className="text-muted-foreground">
+                                        {' '}- {entry.annat_specification}
+                                      </span>
+                                    )}
+                                    {entry.comment && (
+                                      <div className="text-muted-foreground ml-6">
+                                        {entry.comment}
+                                      </div>
+                                    )}
+                                  </div>
+                                )
+                              })}
                             </div>
-                          )
-                        })}
+                          </div>
+                        )}
+
+                        {/* Leave Entries */}
+                        {dateLeaveEntries.length > 0 && (
+                          <div>
+                            <h4 className="text-sm font-semibold text-green-700 dark:text-green-400 mb-2">Ledighet</h4>
+                            <div className="space-y-2">
+                              {dateLeaveEntries.map((entry) => {
+                                if (entry.is_full_day_leave) {
+                                  return (
+                                    <div key={entry.id} className="text-sm">
+                                      <span className="font-medium">Hela dagen</span>
+                                      {' '}
+                                      <span className="text-muted-foreground">
+                                        - {entry.leave_type && leaveTypeLabels[entry.leave_type]}
+                                      </span>
+                                      {entry.comment && (
+                                        <div className="text-muted-foreground ml-6">
+                                          {entry.comment}
+                                        </div>
+                                      )}
+                                    </div>
+                                  )
+                                }
+                                if (!entry.time_from || !entry.time_to) return null
+                                const hours = calculateHours(entry.time_from.substring(0, 5), entry.time_to.substring(0, 5))
+                                return (
+                                  <div key={entry.id} className="text-sm">
+                                    <span className="font-medium">
+                                      {entry.time_from.substring(0, 5)} - {entry.time_to.substring(0, 5)}
+                                    </span>
+                                    {' '}
+                                    <span className="text-muted-foreground">
+                                      ({hours.toFixed(1)}h) - {entry.leave_type && leaveTypeLabels[entry.leave_type]}
+                                    </span>
+                                    {entry.comment && (
+                                      <div className="text-muted-foreground ml-6">
+                                        {entry.comment}
+                                      </div>
+                                    )}
+                                  </div>
+                                )
+                              })}
+                            </div>
+                          </div>
+                        )}
+
+                        {/* Compensation Entries */}
+                        {dateCompensationEntries.length > 0 && (
+                          <div>
+                            <h4 className="text-sm font-semibold text-orange-700 dark:text-orange-400 mb-2">Ersättning</h4>
+                            <div className="space-y-2">
+                              {dateCompensationEntries.map((entry) => (
+                                <div key={entry.id} className="text-sm">
+                                  <span className="font-medium">
+                                    {entry.compensation_type && compensationTypeLabels[entry.compensation_type]}
+                                  </span>
+                                  {entry.compensation_type === 'milersattning' && entry.mileage_km && (
+                                    <span className="text-muted-foreground ml-2">
+                                      - {entry.mileage_km} km
+                                    </span>
+                                  )}
+                                  {entry.compensation_type === 'annan_ersattning' && (
+                                    <>
+                                      {entry.compensation_description && (
+                                        <span className="text-muted-foreground ml-2">
+                                          - {entry.compensation_description}
+                                        </span>
+                                      )}
+                                      {entry.compensation_amount && (
+                                        <span className="text-muted-foreground ml-2 font-semibold">
+                                          {entry.compensation_amount} SEK
+                                        </span>
+                                      )}
+                                    </>
+                                  )}
+                                  {entry.comment && (
+                                    <div className="text-muted-foreground ml-6">
+                                      {entry.comment}
+                                    </div>
+                                  )}
+                                </div>
+                              ))}
+                            </div>
+                          </div>
+                        )}
                       </div>
                     </div>
                   )

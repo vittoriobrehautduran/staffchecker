@@ -21,7 +21,7 @@ const cognitoConfig = {
             import.meta.env.VITE_OAUTH_REDIRECT_SIGN_OUT || 'http://localhost:5173',
             'https://main.d3jub8c52hgrc6.amplifyapp.com',
           ],
-          responseType: 'code',
+          responseType: 'code' as const,
         },
       },
     },

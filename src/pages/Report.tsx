@@ -10,12 +10,27 @@ import { DateModal } from '@/components/Calendar/DateModal'
 import { useToast } from '@/components/ui/use-toast'
 import { apiRequest } from '@/services/api'
 
+type EntryType = 'work' | 'leave' | 'compensation'
+type WorkType = 'cafe' | 'coaching_tennis' | 'coaching_bordtennis' | 'privat_traning' | 'administration' | 'cleaning' | 'annat'
+type LeaveType = 'semester' | 'tjanstledig' | 'sjukdom' | 'vard_av_barn' | 'annan_ledighet'
+type CompensationType = 'milersattning' | 'annan_ersattning'
+type SportType = 'tennis' | 'bordtennis'
+
 interface Entry {
   id: number
   date: string
-  time_from: string
-  time_to: string
-  work_type: 'cafe' | 'coaching' | 'administration' | 'cleaning' | 'annat'
+  entry_type: EntryType
+  time_from: string | null
+  time_to: string | null
+  work_type: WorkType | null
+  leave_type: LeaveType | null
+  compensation_type: CompensationType | null
+  student_count: number | null
+  sport_type: SportType | null
+  is_full_day_leave: boolean | null
+  mileage_km: number | null
+  compensation_amount: number | null
+  compensation_description: string | null
   annat_specification: string | null
   comment: string | null
 }
@@ -301,11 +316,14 @@ export default function Report() {
     }
 
     const totalHours = dayData.entries.reduce((sum, entry) => {
-      const from = entry.time_from.substring(0, 5)
-      const to = entry.time_to.substring(0, 5)
-      const hours = (parseInt(to.split(':')[0]) - parseInt(from.split(':')[0])) + 
-                   (parseInt(to.split(':')[1]) - parseInt(from.split(':')[1])) / 60
-      return sum + Math.max(0, hours)
+      if (entry.time_from && entry.time_to) {
+        const from = entry.time_from.substring(0, 5)
+        const to = entry.time_to.substring(0, 5)
+        const hours = (parseInt(to.split(':')[0]) - parseInt(from.split(':')[0])) + 
+                     (parseInt(to.split(':')[1]) - parseInt(from.split(':')[1])) / 60
+        return sum + Math.max(0, hours)
+      }
+      return sum
     }, 0)
 
     return (

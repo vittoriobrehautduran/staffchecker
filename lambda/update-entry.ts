@@ -63,9 +63,24 @@ export const handler = async (
     }
 
     const body = JSON.parse(event.body || '{}')
-    const { entryId, time_from, time_to, work_type, annat_specification, comment } = body
+    const { 
+      entryId, 
+      entry_type,
+      time_from, 
+      time_to, 
+      work_type,
+      leave_type,
+      compensation_type,
+      student_count,
+      is_full_day_leave,
+      mileage_km,
+      compensation_amount,
+      compensation_description,
+      annat_specification, 
+      comment 
+    } = body
 
-    if (!entryId || !time_from || !time_to || !work_type) {
+    if (!entryId || !entry_type) {
       return {
         statusCode: 400,
         headers: {
@@ -73,7 +88,7 @@ export const handler = async (
           'Access-Control-Allow-Origin': origin,
           'Access-Control-Allow-Credentials': 'true',
         },
-        body: JSON.stringify({ message: 'All required fields must be provided' }),
+        body: JSON.stringify({ message: 'Entry ID and entry_type are required' }),
       }
     }
 
@@ -114,14 +129,39 @@ export const handler = async (
     // Format date as yyyy-MM-dd for frontend compatibility
     const result = await sql`
       UPDATE entries
-      SET time_from = ${time_from}::time,
-          time_to = ${time_to}::time,
-          work_type = ${work_type},
+      SET entry_type = ${entry_type},
+          time_from = ${time_from || null}::time,
+          time_to = ${time_to || null}::time,
+          work_type = ${work_type || null},
+          leave_type = ${leave_type || null},
+          compensation_type = ${compensation_type || null},
+          student_count = ${student_count || null},
+          sport_type = ${body.sport_type || null},
+          is_full_day_leave = ${is_full_day_leave || false},
+          mileage_km = ${mileage_km || null},
+          compensation_amount = ${compensation_amount || null},
+          compensation_description = ${compensation_description || null},
           annat_specification = ${annat_specification || null},
           comment = ${comment || null},
           updated_at = CURRENT_TIMESTAMP
       WHERE id = ${entryId}
-      RETURNING id, TO_CHAR(date, 'YYYY-MM-DD') as date, time_from, time_to, work_type, annat_specification, comment
+      RETURNING 
+        id, 
+        TO_CHAR(date, 'YYYY-MM-DD') as date, 
+        entry_type,
+        time_from, 
+        time_to, 
+        work_type,
+        leave_type,
+        compensation_type,
+        student_count,
+        sport_type,
+        is_full_day_leave,
+        mileage_km,
+        compensation_amount,
+        compensation_description,
+        annat_specification, 
+        comment
     `
 
     return {

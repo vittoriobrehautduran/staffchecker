@@ -135,13 +135,23 @@ export const handler = async (
 
     // Get all entries for this report
     // Format date as yyyy-MM-dd for frontend compatibility
+    // Default entry_type to 'work' for backwards compatibility
     const entries = await sql`
       SELECT 
         id, 
         TO_CHAR(date, 'YYYY-MM-DD') as date,
+        COALESCE(entry_type, 'work') as entry_type,
         time_from, 
         time_to, 
-        work_type, 
+        work_type,
+        leave_type,
+        compensation_type,
+        student_count,
+        sport_type,
+        is_full_day_leave,
+        mileage_km,
+        compensation_amount,
+        compensation_description,
         annat_specification, 
         comment
       FROM entries

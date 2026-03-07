@@ -77,13 +77,91 @@ export const handler = async (
     }
 
     const body = JSON.parse(event.body || '{}')
-    const { date, time_from, time_to, work_type, annat_specification, comment } = body
+    const { 
+      date, 
+      entry_type, 
+      time_from, 
+      time_to, 
+      work_type, 
+      leave_type,
+      compensation_type,
+      student_count,
+      sport_type,
+      is_full_day_leave,
+      mileage_km,
+      compensation_amount,
+      compensation_description,
+      annat_specification, 
+      comment 
+    } = body
 
-    if (!date || !time_from || !time_to || !work_type) {
+    if (!date || !entry_type) {
       return {
         statusCode: 400,
         headers: getCorsHeaders(origin),
-        body: JSON.stringify({ message: 'All required fields must be provided' }),
+        body: JSON.stringify({ message: 'Date and entry_type are required' }),
+      }
+    }
+
+    // Validate based on entry_type
+    if (entry_type === 'work') {
+      if (!work_type || !time_from || !time_to) {
+        return {
+          statusCode: 400,
+          headers: getCorsHeaders(origin),
+          body: JSON.stringify({ message: 'Work entries require work_type, time_from, and time_to' }),
+        }
+      }
+      if (work_type === 'privat_traning' && !student_count) {
+        return {
+          statusCode: 400,
+          headers: getCorsHeaders(origin),
+          body: JSON.stringify({ message: 'Privatträning requires student_count' }),
+        }
+      }
+      if (work_type === 'annat' && !annat_specification) {
+        return {
+          statusCode: 400,
+          headers: getCorsHeaders(origin),
+          body: JSON.stringify({ message: 'Annat requires annat_specification' }),
+        }
+      }
+    } else if (entry_type === 'leave') {
+      if (!leave_type) {
+        return {
+          statusCode: 400,
+          headers: getCorsHeaders(origin),
+          body: JSON.stringify({ message: 'Leave entries require leave_type' }),
+        }
+      }
+      if (!is_full_day_leave && (!time_from || !time_to)) {
+        return {
+          statusCode: 400,
+          headers: getCorsHeaders(origin),
+          body: JSON.stringify({ message: 'Leave entries require time_from and time_to unless is_full_day_leave is true' }),
+        }
+      }
+    } else if (entry_type === 'compensation') {
+      if (!compensation_type) {
+        return {
+          statusCode: 400,
+          headers: getCorsHeaders(origin),
+          body: JSON.stringify({ message: 'Compensation entries require compensation_type' }),
+        }
+      }
+      if (compensation_type === 'milersattning' && !mileage_km) {
+        return {
+          statusCode: 400,
+          headers: getCorsHeaders(origin),
+          body: JSON.stringify({ message: 'Milersättning requires mileage_km' }),
+        }
+      }
+      if (compensation_type === 'annan_ersattning' && (!compensation_description || !compensation_amount)) {
+        return {
+          statusCode: 400,
+          headers: getCorsHeaders(origin),
+          body: JSON.stringify({ message: 'Annan ersättning requires compensation_description and compensation_amount' }),
+        }
       }
     }
 
@@ -121,9 +199,59 @@ export const handler = async (
     // Create entry
     // Format date as yyyy-MM-dd for frontend compatibility
     const result = await sql`
-      INSERT INTO entries (report_id, date, time_from, time_to, work_type, annat_specification, comment)
-      VALUES (${reportId}, ${date}::date, ${time_from}::time, ${time_to}::time, ${work_type}, ${annat_specification || null}, ${comment || null})
-      RETURNING id, TO_CHAR(date, 'YYYY-MM-DD') as date, time_from, time_to, work_type, annat_specification, comment
+      INSERT INTO entries (
+        report_id, 
+        date, 
+        entry_type,
+        time_from, 
+        time_to, 
+        work_type,
+        leave_type,
+        compensation_type,
+        student_count,
+        sport_type,
+        is_full_day_leave,
+        mileage_km,
+        compensation_amount,
+        compensation_description,
+        annat_specification, 
+        comment
+      )
+      VALUES (
+        ${reportId}, 
+        ${date}::date, 
+        ${entry_type},
+        ${time_from || null}::time, 
+        ${time_to || null}::time, 
+        ${work_type || null},
+        ${leave_type || null},
+        ${compensation_type || null},
+        ${student_count || null},
+        ${body.sport_type || null},
+        ${is_full_day_leave || false},
+        ${mileage_km || null},
+        ${compensation_amount || null},
+        ${compensation_description || null},
+        ${annat_specification || null}, 
+        ${comment || null}
+      )
+      RETURNING 
+        id, 
+        TO_CHAR(date, 'YYYY-MM-DD') as date, 
+        entry_type,
+        time_from, 
+        time_to, 
+        work_type,
+        leave_type,
+        compensation_type,
+        student_count,
+        sport_type,
+        is_full_day_leave,
+        mileage_km,
+        compensation_amount,
+        compensation_description,
+        annat_specification, 
+        comment
     `
 
     return {
