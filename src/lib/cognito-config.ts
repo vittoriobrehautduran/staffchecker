@@ -11,7 +11,7 @@ const cognitoConfig = {
       loginWith: {
         email: true,
         oauth: {
-          domain: import.meta.env.VITE_COGNITO_DOMAIN || '',
+          domain: import.meta.env.VITE_COGNITO_DOMAIN?.replace(/^https?:\/\//, '') || '',
           scopes: ['openid', 'email', 'profile'],
           redirectSignIn: [
             import.meta.env.VITE_OAUTH_REDIRECT_SIGN_IN || 'http://localhost:5173',

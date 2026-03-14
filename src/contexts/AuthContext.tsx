@@ -82,10 +82,16 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         localStorage.removeItem('cognito-id-token')
       }
     } catch (error: any) {
-      // User not authenticated
-      if (error.name === 'UserUnauthenticatedException') {
+      // User not authenticated - this is expected when no user is logged in
+      if (
+        error.name === 'UserUnauthenticatedException' ||
+        error.name === 'UserUnAuthenticatedException' ||
+        error.message?.includes('needs to be authenticated') ||
+        error.message?.includes('User needs to be authenticated')
+      ) {
         setUser(null)
         localStorage.removeItem('cognito-id-token')
+        // Don't log this error - it's expected when user is not logged in
       } else {
         console.error('Error fetching user:', error)
       }
@@ -117,7 +123,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       }, 500)
     } else {
       // Normal page load, fetch user immediately
-      fetchUser()
+    fetchUser()
     }
 
     // Listen for auth state changes
@@ -207,15 +213,47 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     }
   }
 
-  const signInWithOAuth = async (provider: 'Google' | 'Facebook' | 'Apple') => {
+  const signInWithOAuth = async (provider: 'Google' | 'Facebook' | 'Apple' = 'Google') => {
+    const cognitoDomain = import.meta.env.VITE_COGNITO_DOMAIN
+    
+    if (!cognitoDomain) {
+      throw new Error('OAuth är inte konfigurerat. VITE_COGNITO_DOMAIN saknas i miljövariablerna.')
+    }
+
+    // Clean domain - remove https:// if present
+    const cleanDomain = cognitoDomain.replace(/^https?:\/\//, '')
+    
+    console.log('Attempting OAuth sign in with:', {
+      provider,
+      domain: cleanDomain,
+      userPoolId: import.meta.env.VITE_COGNITO_USER_POOL_ID,
+      clientId: import.meta.env.VITE_COGNITO_CLIENT_ID,
+    })
+
     try {
       await signInWithRedirect({
         provider,
         customState: window.location.pathname, // Save current path to return after OAuth
       })
+      // signInWithRedirect will redirect the page, so execution stops here
     } catch (error: any) {
       console.error('OAuth sign in error:', error)
-      throw new Error(`Inloggning med ${provider} misslyckades`)
+      console.error('Error details:', {
+        name: error.name,
+        message: error.message,
+        stack: error.stack,
+      })
+      
+      let errorMessage = `Inloggning med ${provider} misslyckades`
+      if (error.message) {
+        errorMessage = error.message
+      } else if (error.name === 'InvalidParameterException') {
+        errorMessage = 'OAuth-providern är inte konfigurerad i AWS Cognito'
+      } else if (error.message?.includes('scope')) {
+        errorMessage = 'OAuth-scopes är inte korrekt konfigurerade. Kontrollera AWS Cognito-inställningar.'
+      }
+      
+      throw new Error(errorMessage)
     }
   }
 
