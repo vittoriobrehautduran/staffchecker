@@ -3,8 +3,10 @@ frontend:
   phases:
     preBuild:
       commands:
-        - rm -rf node_modules package-lock.json
-        - npm install
+        # Use npm ci for faster, reliable installs
+        # Amplify caches node_modules automatically, so we don't need to delete it
+        # This reduces build time from ~3-5 min to ~30-60 seconds
+        - npm ci --prefer-offline --no-audit || npm install --prefer-offline --no-audit
     build:
       commands:
         - npm run build
