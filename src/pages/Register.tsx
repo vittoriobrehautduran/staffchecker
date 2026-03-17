@@ -1,5 +1,5 @@
-import { useState } from 'react'
-import { useNavigate } from 'react-router-dom'
+import { useState, useEffect } from 'react'
+import { useNavigate, useSearchParams } from 'react-router-dom'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
@@ -9,6 +9,8 @@ import { useAuth } from '@/contexts/AuthContext'
 import { Mail, User, Lock, UserPlus, Eye, EyeOff } from 'lucide-react'
 import { LoadingSpinner, PremiumLoadingOverlay } from '@/components/ui/loading-spinner'
 
+const API_BASE_URL = import.meta.env.VITE_API_BASE_URL || ''
+
 export default function Register() {
   const [email, setEmail] = useState('')
   const [firstName, setFirstName] = useState('')
@@ -16,9 +18,69 @@ export default function Register() {
   const [password, setPassword] = useState('')
   const [showPassword, setShowPassword] = useState(false)
   const [isLoading, setIsLoading] = useState(false)
+  const [isValidatingToken, setIsValidatingToken] = useState(true)
+  const [searchParams] = useSearchParams()
   const { signUp } = useAuth()
   const navigate = useNavigate()
   const { toast } = useToast()
+
+  // Validate registration token on mount
+  useEffect(() => {
+    const validateToken = async () => {
+      const token = searchParams.get('token')
+      
+      if (!token) {
+        toast({
+          title: 'Registrering inte tillgänglig',
+          description: 'Du måste skanna QR-koden i personalrummet för att registrera dig.',
+          variant: 'destructive',
+        })
+        navigate('/login')
+        return
+      }
+
+      try {
+        if (!API_BASE_URL) {
+          throw new Error('API URL not configured')
+        }
+
+        const response = await fetch(`${API_BASE_URL}/validate-registration-token?token=${encodeURIComponent(token)}`, {
+          method: 'GET',
+          headers: {
+            'Content-Type': 'application/json',
+          },
+        })
+
+        if (!response.ok) {
+          throw new Error('Token validation failed')
+        }
+
+        const data = await response.json()
+
+        if (!data.valid) {
+          toast({
+            title: 'Ogiltig registreringslänk',
+            description: 'Länken är ogiltig eller har gått ut. Skanna QR-koden igen i personalrummet.',
+            variant: 'destructive',
+          })
+          navigate('/login')
+          return
+        }
+
+        setIsValidatingToken(false)
+      } catch (error) {
+        console.error('Error validating token:', error)
+        toast({
+          title: 'Fel vid validering',
+          description: 'Kunde inte verifiera registreringslänken. Försök igen.',
+          variant: 'destructive',
+        })
+        navigate('/login')
+      }
+    }
+
+    validateToken()
+  }, [searchParams, navigate, toast])
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault()
@@ -79,6 +141,18 @@ export default function Register() {
     } finally {
       setIsLoading(false)
     }
+  }
+
+  // Show loading while validating token
+  if (isValidatingToken) {
+    return (
+      <div className="min-h-screen flex items-center justify-center p-4">
+        <div className="text-center">
+          <LoadingSpinner size="lg" />
+          <p className="mt-4 text-muted-foreground">Verifierar registreringslänk...</p>
+        </div>
+      </div>
+    )
   }
 
   return (

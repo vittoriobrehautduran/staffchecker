@@ -230,14 +230,7 @@ export default function Login() {
 
           <div className="mt-6 space-y-2 text-center text-sm">
             <div>
-              <span className="text-muted-foreground">Har du inget konto? </span>
-              <button
-                type="button"
-                onClick={() => navigate('/register')}
-                className="text-blue-600 dark:text-blue-400 hover:underline font-semibold transition-colors"
-              >
-                Registrera dig
-              </button>
+              <span className="text-muted-foreground">För att registrera dig, skanna QR-koden i personalrummet.</span>
             </div>
           </div>
         </CardContent>

@@ -78,8 +78,17 @@ const emailEnvVars = {
   BOSS_EMAIL_ADDRESS: process.env.BOSS_EMAIL_ADDRESS,
 }
 
+// Environment variables for registration functions
+const registrationEnvVars = {
+  FRONTEND_URL: process.env.FRONTEND_URL,
+  REGISTRATION_SECRET: process.env.REGISTRATION_SECRET,
+}
+
 // Functions that need email env vars for reports
 const emailFunctions = ['submit-report', 'auto-submit-reports']
+
+// Functions that need registration env vars
+const registrationFunctions = ['register-start']
 
 async function setFunctionEnvironment(functionName) {
   try {
@@ -100,6 +109,11 @@ async function setFunctionEnvironment(functionName) {
     const functionBaseName = functionName.replace(`${PROJECT_NAME}-`, '')
     if (emailFunctions.includes(functionBaseName)) {
       Object.assign(newEnvVars, emailEnvVars)
+    }
+    
+    // Add registration vars if needed
+    if (registrationFunctions.includes(functionBaseName)) {
+      Object.assign(newEnvVars, registrationEnvVars)
     }
     
     // Remove undefined values
@@ -134,9 +148,11 @@ async function setAllFunctionEnvironments() {
     `${PROJECT_NAME}-get-entries`,
     `${PROJECT_NAME}-get-report`,
     `${PROJECT_NAME}-get-user-info`,
+    `${PROJECT_NAME}-register-start`,
     `${PROJECT_NAME}-revert-report`,
     `${PROJECT_NAME}-submit-report`,
     `${PROJECT_NAME}-update-entry`,
+    `${PROJECT_NAME}-validate-registration-token`,
   ]
   
   console.log(`\n🔧 Setting environment variables for ${functions.length} Lambda functions...\n`)
