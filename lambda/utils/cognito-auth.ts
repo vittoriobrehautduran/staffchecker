@@ -195,7 +195,9 @@ export async function getUserIdFromCognitoSession(event: APIGatewayProxyEvent): 
       return result[0].id
     }
 
-    // Fallback: Try to get email and name from token and create/lookup user
+    // Fallback: Try to get email from token and link existing user
+    // IMPORTANT: We no longer auto-create users here.
+    // If the email is not already in the users table, we treat the user as unauthorized.
     const authHeader = event.headers?.Authorization || event.headers?.authorization || ''
     const token = authHeader.startsWith('Bearer ') ? authHeader.substring(7) : 
                   event.queryStringParameters?._token || null
@@ -223,42 +225,12 @@ export async function getUserIdFromCognitoSession(event: APIGatewayProxyEvent): 
           `
           console.log(`getUserIdFromCognitoSession: Found user by email, updated cognito_user_id`)
           return emailResult[0].id
-        } else {
-          // User doesn't exist, create it
-          // Note: We need name and last_name which are NOT NULL
-          const firstName = givenName || 'User'
-          const lastName = familyName || 'Unknown'
-          
-          console.log(`getUserIdFromCognitoSession: Creating new user for Cognito user: ${cognitoUserId}`)
-          try {
-            const newUser = await sql`
-              INSERT INTO users (cognito_user_id, email, name, last_name)
-              VALUES (${cognitoUserId}, ${email.toLowerCase().trim()}, ${firstName}, ${lastName})
-              RETURNING id
-            `
-            console.log(`getUserIdFromCognitoSession: Created new user with ID: ${newUser[0].id}`)
-            return newUser[0].id
-          } catch (insertError: any) {
-            console.error('Error creating new user:', insertError?.message)
-            // If there's a race condition and another Lambda created the user, try fetching again
-            if (insertError.code === '23505') { // Unique violation
-              const retryResult = await sql`
-                SELECT id FROM users WHERE cognito_user_id = ${cognitoUserId} OR email = ${email.toLowerCase().trim()} LIMIT 1
-              `
-              if (retryResult && retryResult.length > 0) {
-                // Update with cognito_user_id if missing
-                if (!retryResult[0].cognito_user_id) {
-                  await sql`
-                    UPDATE users SET cognito_user_id = ${cognitoUserId} WHERE id = ${retryResult[0].id}
-                  `
-                }
-                console.log('User found after retry, ID:', retryResult[0].id)
-                return retryResult[0].id
-              }
-            }
-            return null
-          }
         }
+        // If email is not found, we intentionally DO NOT create a new user.
+        console.warn(
+          'getUserIdFromCognitoSession: Email from Cognito token is not registered in users table. Treating as unauthorized.'
+        )
+        return null
       }
     }
 
