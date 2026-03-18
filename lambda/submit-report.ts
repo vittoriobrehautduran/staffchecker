@@ -16,7 +16,7 @@ function getCorsOrigin(event: APIGatewayProxyEvent): string {
   const requestOrigin = event.headers?.Origin || event.headers?.origin || '*'
   const allowedOrigins = [
     'http://localhost:5173',
-    'https://main.d3jub8c52hgrc6.amplifyapp.com',
+    'https://staffcheck.spangatbk.se',
   ]
   return allowedOrigins.includes(requestOrigin) ? requestOrigin : allowedOrigins[0]
 }

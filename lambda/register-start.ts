@@ -6,6 +6,7 @@ function getCorsHeaders(origin: string | null): Record<string, string> {
   const allowedOrigins = [
     'http://localhost:5173',
     'http://localhost:3000',
+    'https://staffcheck.spangatbk.se',
     process.env.FRONTEND_URL,
   ].filter(Boolean) as string[]
 
