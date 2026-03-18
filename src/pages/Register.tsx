@@ -44,12 +44,10 @@ export default function Register() {
           throw new Error('API URL not configured')
         }
 
-        const response = await fetch(`${API_BASE_URL}/validate-registration-token?token=${encodeURIComponent(token)}`, {
-          method: 'GET',
-          headers: {
-            'Content-Type': 'application/json',
-          },
-        })
+        // Simple GET without custom headers to avoid CORS preflight
+        const response = await fetch(
+          `${API_BASE_URL}/validate-registration-token?token=${encodeURIComponent(token)}`
+        )
 
         if (!response.ok) {
           throw new Error('Token validation failed')
