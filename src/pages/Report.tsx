@@ -315,6 +315,9 @@ export default function Report() {
       return null
     }
 
+    const hasLeave = dayData.entries.some(e => e.entry_type === 'leave')
+    const hasCompensation = dayData.entries.some(e => e.entry_type === 'compensation')
+
     const totalHours = dayData.entries.reduce((sum, entry) => {
       if (entry.time_from && entry.time_to) {
         const from = entry.time_from.substring(0, 5)
@@ -326,13 +329,22 @@ export default function Report() {
       return sum
     }, 0)
 
+    const badgeClassName = (() => {
+      if (dayData.reportStatus === 'submitted') {
+        return 'bg-gray-200 text-gray-700'
+      }
+      if (hasLeave) {
+        return 'bg-green-100 text-green-800'
+      }
+      if (hasCompensation) {
+        return 'bg-orange-100 text-orange-800'
+      }
+      return 'bg-blue-100 text-blue-700'
+    })()
+
     return (
       <div className="mt-2 text-center w-full">
-        <div className={`text-sm font-bold px-2 py-1 rounded-md ${
-          dayData.reportStatus === 'submitted' 
-            ? 'bg-gray-200 text-gray-700' 
-            : 'bg-blue-100 text-blue-700'
-        }`}>
+        <div className={`text-sm font-bold px-2 py-1 rounded-md ${badgeClassName}`}>
           {totalHours.toFixed(1)}h
         </div>
         {dayData.entries.length > 1 && (
@@ -362,7 +374,23 @@ export default function Report() {
     }
     
     if (dayData?.entries && dayData.entries.length > 0) {
-      classes.push(dayData.reportStatus === 'submitted' ? 'bg-gray-100' : 'bg-blue-50')
+      const hasLeave = dayData.entries.some(e => e.entry_type === 'leave')
+      const hasCompensation = dayData.entries.some(e => e.entry_type === 'compensation')
+      
+      // Color priority:
+      // - Submitted overrides with gray
+      // - Leave shows green
+      // - Compensation shows orange
+      // - Default work shows blue
+      if (dayData.reportStatus === 'submitted') {
+        classes.push('!bg-gray-100')
+      } else if (hasLeave) {
+        classes.push('!bg-green-50')
+      } else if (hasCompensation) {
+        classes.push('!bg-orange-50')
+      } else {
+        classes.push('!bg-blue-50')
+      }
     }
     
     return classes.join(' ')
