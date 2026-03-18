@@ -36,6 +36,13 @@
     font-feature-settings: "rlig" 1, "calt" 1;
   }
   
+  /* Prevent iOS Safari from auto-zooming inputs on focus */
+  input,
+  textarea,
+  select {
+    font-size: 16px;
+  }
+  
   /* Smooth scrolling */
   html {
     scroll-behavior: smooth;

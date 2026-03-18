@@ -148,6 +148,7 @@ async function setAllFunctionEnvironments() {
     `${PROJECT_NAME}-get-entries`,
     `${PROJECT_NAME}-get-report`,
     `${PROJECT_NAME}-get-user-info`,
+    `${PROJECT_NAME}-cognito-pre-signup`,
     `${PROJECT_NAME}-register-start`,
     `${PROJECT_NAME}-revert-report`,
     `${PROJECT_NAME}-submit-report`,

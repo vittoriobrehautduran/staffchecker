@@ -15,11 +15,11 @@ const cognitoConfig = {
           scopes: ['openid', 'email', 'profile'],
           redirectSignIn: [
             import.meta.env.VITE_OAUTH_REDIRECT_SIGN_IN || 'http://localhost:5173',
-            'https://main.d3jub8c52hgrc6.amplifyapp.com',
+            'https://staffcheck.spangatbk.se',
           ],
           redirectSignOut: [
             import.meta.env.VITE_OAUTH_REDIRECT_SIGN_OUT || 'http://localhost:5173',
-            'https://main.d3jub8c52hgrc6.amplifyapp.com',
+            'https://staffcheck.spangatbk.se',
           ],
           responseType: 'code' as const,
         },
