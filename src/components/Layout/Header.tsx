@@ -38,7 +38,7 @@ export function Header() {
                 className="h-10 w-10 object-contain"
               />
               <h1 className="text-xl font-bold bg-gradient-to-r from-blue-600 to-indigo-600 bg-clip-text text-transparent">
-                Staff Checker
+                Staffcheck
               </h1>
             </div>
             <nav className="hidden md:flex gap-1">

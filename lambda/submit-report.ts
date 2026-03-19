@@ -140,7 +140,20 @@ export const handler = async (
 
     // Get all entries for this report
     const entries = await sql`
-      SELECT date, time_from, time_to, work_type, annat_specification, comment
+      SELECT
+        date,
+        entry_type,
+        time_from,
+        time_to,
+        work_type,
+        leave_type,
+        compensation_type,
+        is_full_day_leave,
+        mileage_km,
+        compensation_amount,
+        compensation_description,
+        annat_specification,
+        comment
       FROM entries
       WHERE report_id = ${report.id}
       ORDER BY date, time_from
@@ -185,19 +198,56 @@ export const handler = async (
 
     const workTypeLabels: Record<string, string> = {
       cafe: 'Cafe',
-      coaching: 'Coaching',
+      coaching_tennis: 'Coaching (Tennis)',
+      coaching_bordtennis: 'Coaching (Bordtennis)',
+      privat_traning: 'Privatträning',
       administration: 'Administration',
       cleaning: 'Städning',
       annat: 'Annat',
     }
 
-    // Calculate total hours
-    const totalHours = entries.reduce((sum, entry) => {
+    const leaveTypeLabels: Record<string, string> = {
+      semester: 'Semester',
+      tjanstledig: 'Tjänstledig',
+      sjukdom: 'Sjukdom',
+      vard_av_barn: 'Vård av barn',
+      annan_ledighet: 'Annan ledighet',
+    }
+
+    const compensationTypeLabels: Record<string, string> = {
+      milersattning: 'Milersättning',
+      annan_ersattning: 'Annan ersättning',
+    }
+
+    // Return 0 for entries without a time interval (full-day leave and compensation).
+    const calculateEntryHours = (entry: any): number => {
+      if (!entry.time_from || !entry.time_to) {
+        return 0
+      }
       const fromTime = entry.time_from.substring(0, 5)
       const toTime = entry.time_to.substring(0, 5)
       const from = new Date(`2000-01-01T${fromTime}`)
       const to = new Date(`2000-01-01T${toTime}`)
-      return sum + (to.getTime() - from.getTime()) / (1000 * 60 * 60)
+      return (to.getTime() - from.getTime()) / (1000 * 60 * 60)
+    }
+
+    const totalWorkedHours = entries.reduce((sum, entry) => {
+      if (entry.entry_type !== 'work') return sum
+      return sum + calculateEntryHours(entry)
+    }, 0)
+
+    const totalLeaveHours = entries.reduce((sum, entry) => {
+      if (entry.entry_type !== 'leave') return sum
+      return sum + calculateEntryHours(entry)
+    }, 0)
+
+    const totalCompensationEntries = entries.filter(
+      (entry) => entry.entry_type === 'compensation'
+    ).length
+
+    const totalCompensationAmount = entries.reduce((sum, entry) => {
+      if (entry.entry_type !== 'compensation' || !entry.compensation_amount) return sum
+      return sum + Number(entry.compensation_amount)
     }, 0)
 
     // Generate HTML email body
@@ -241,12 +291,7 @@ export const handler = async (
       
       let dateTotal = 0
       dateEntries.forEach(entry => {
-        const fromTime = entry.time_from.substring(0, 5)
-        const toTime = entry.time_to.substring(0, 5)
-        const from = new Date(`2000-01-01T${fromTime}`)
-        const to = new Date(`2000-01-01T${toTime}`)
-        const hours = (to.getTime() - from.getTime()) / (1000 * 60 * 60)
-        dateTotal += hours
+        dateTotal += calculateEntryHours(entry)
       })
 
       htmlBody += `
@@ -259,13 +304,12 @@ export const handler = async (
 `
 
       dateEntries.forEach(entry => {
-        const fromTime = entry.time_from.substring(0, 5)
-        const toTime = entry.time_to.substring(0, 5)
-        const from = new Date(`2000-01-01T${fromTime}`)
-        const to = new Date(`2000-01-01T${toTime}`)
-        const hours = (to.getTime() - from.getTime()) / (1000 * 60 * 60)
+        const hours = calculateEntryHours(entry)
 
-        htmlBody += `
+        if (entry.entry_type === 'work') {
+          const fromTime = entry.time_from?.substring(0, 5) || '--:--'
+          const toTime = entry.time_to?.substring(0, 5) || '--:--'
+          htmlBody += `
           <tr style="border-bottom: 1px solid #f0f0f0;">
             <td style="padding: 10px 0; width: 140px;">
               <strong style="color: #333;">${fromTime} - ${toTime}</strong>
@@ -276,10 +320,55 @@ export const handler = async (
               </span>
             </td>
             <td style="padding: 10px 0;">
-              <span style="color: #666;">${workTypeLabels[entry.work_type]}${entry.work_type === 'annat' && entry.annat_specification ? ` - ${entry.annat_specification}` : ''}</span>
+              <span style="color: #666;">${workTypeLabels[entry.work_type] || 'Arbete'}${entry.work_type === 'annat' && entry.annat_specification ? ` - ${entry.annat_specification}` : ''}</span>
             </td>
           </tr>
 `
+        } else if (entry.entry_type === 'leave') {
+          const leaveLabel = leaveTypeLabels[entry.leave_type] || 'Ledighet'
+          const leaveTimeLabel = entry.is_full_day_leave
+            ? 'Hela dagen'
+            : `${entry.time_from?.substring(0, 5) || '--:--'} - ${entry.time_to?.substring(0, 5) || '--:--'}`
+          const leaveHoursLabel = entry.is_full_day_leave ? '-' : `${hours.toFixed(1)}h`
+          htmlBody += `
+          <tr style="border-bottom: 1px solid #f0f0f0;">
+            <td style="padding: 10px 0; width: 140px;">
+              <strong style="color: #333;">${leaveTimeLabel}</strong>
+            </td>
+            <td style="padding: 10px 0; width: 80px;">
+              <span style="background-color: #e8f5e9; color: #2e7d32; padding: 4px 8px; border-radius: 4px; font-weight: 600; font-size: 13px;">
+                ${leaveHoursLabel}
+              </span>
+            </td>
+            <td style="padding: 10px 0;">
+              <span style="color: #666;">${leaveLabel}</span>
+            </td>
+          </tr>
+`
+        } else if (entry.entry_type === 'compensation') {
+          const compensationLabel = compensationTypeLabels[entry.compensation_type] || 'Ersättning'
+          const compensationDetails =
+            entry.compensation_type === 'milersattning' && entry.mileage_km
+              ? `${entry.mileage_km} km`
+              : entry.compensation_type === 'annan_ersattning'
+                ? `${entry.compensation_description || ''}${entry.compensation_amount ? ` (${entry.compensation_amount} SEK)` : ''}`
+                : ''
+          htmlBody += `
+          <tr style="border-bottom: 1px solid #f0f0f0;">
+            <td style="padding: 10px 0; width: 140px;">
+              <strong style="color: #333;">Ersättning</strong>
+            </td>
+            <td style="padding: 10px 0; width: 80px;">
+              <span style="background-color: #fff3e0; color: #ef6c00; padding: 4px 8px; border-radius: 4px; font-weight: 600; font-size: 13px;">
+                -
+              </span>
+            </td>
+            <td style="padding: 10px 0;">
+              <span style="color: #666;">${compensationLabel}${compensationDetails ? ` - ${compensationDetails}` : ''}</span>
+            </td>
+          </tr>
+`
+        }
         if (entry.comment) {
           htmlBody += `
           <tr>
@@ -302,15 +391,16 @@ export const handler = async (
     })
 
     htmlBody += `
-    <div style="background-color: #1a73e8; color: white; padding: 20px; border-radius: 6px; margin-top: 30px; text-align: center;">
-      <p style="margin: 0; font-size: 24px; font-weight: 600;">
-        Totalt för månaden: ${totalHours.toFixed(1)} timmar
-      </p>
+    <div style="background-color: #f8f9fa; color: #333; padding: 20px; border-radius: 6px; margin-top: 30px;">
+      <p style="margin: 0 0 8px 0; font-size: 18px; font-weight: 600;">Månadssummering</p>
+      <p style="margin: 6px 0;"><strong>Arbetade timmar:</strong> ${totalWorkedHours.toFixed(1)} timmar</p>
+      <p style="margin: 6px 0;"><strong>Ledighetstimmar:</strong> ${totalLeaveHours.toFixed(1)} timmar</p>
+      <p style="margin: 6px 0;"><strong>Ersättning:</strong> ${totalCompensationEntries} poster${totalCompensationAmount > 0 ? ` (${totalCompensationAmount.toFixed(2)} SEK)` : ''}</p>
     </div>
   </div>
   
   <p style="text-align: center; color: #888; font-size: 12px; margin-top: 20px;">
-    Detta är en automatisk timrapport från Staff Checker
+    Detta är en automatisk timrapport från Staffcheck
   </p>
 </body>
 </html>
@@ -341,18 +431,34 @@ export const handler = async (
       
       let dateTotal = 0
       dateEntries.forEach(entry => {
-        const fromTime = entry.time_from.substring(0, 5)
-        const toTime = entry.time_to.substring(0, 5)
-        const from = new Date(`2000-01-01T${fromTime}`)
-        const to = new Date(`2000-01-01T${toTime}`)
-        const hours = (to.getTime() - from.getTime()) / (1000 * 60 * 60)
+        const hours = calculateEntryHours(entry)
         dateTotal += hours
 
-        textBody += `  ${fromTime} - ${toTime} (${hours.toFixed(1)}h) - ${workTypeLabels[entry.work_type]}`
-        if (entry.work_type === 'annat' && entry.annat_specification) {
-          textBody += ` - ${entry.annat_specification}`
+        if (entry.entry_type === 'work') {
+          const fromTime = entry.time_from?.substring(0, 5) || '--:--'
+          const toTime = entry.time_to?.substring(0, 5) || '--:--'
+          textBody += `  [Arbete] ${fromTime} - ${toTime} (${hours.toFixed(1)}h) - ${workTypeLabels[entry.work_type] || 'Arbete'}`
+          if (entry.work_type === 'annat' && entry.annat_specification) {
+            textBody += ` - ${entry.annat_specification}`
+          }
+          textBody += '\n'
+        } else if (entry.entry_type === 'leave') {
+          const leaveLabel = leaveTypeLabels[entry.leave_type] || 'Ledighet'
+          if (entry.is_full_day_leave) {
+            textBody += `  [Ledighet] Hela dagen - ${leaveLabel}\n`
+          } else {
+            const fromTime = entry.time_from?.substring(0, 5) || '--:--'
+            const toTime = entry.time_to?.substring(0, 5) || '--:--'
+            textBody += `  [Ledighet] ${fromTime} - ${toTime} (${hours.toFixed(1)}h) - ${leaveLabel}\n`
+          }
+        } else if (entry.entry_type === 'compensation') {
+          const compensationLabel = compensationTypeLabels[entry.compensation_type] || 'Ersättning'
+          if (entry.compensation_type === 'milersattning') {
+            textBody += `  [Ersättning] ${compensationLabel}${entry.mileage_km ? ` - ${entry.mileage_km} km` : ''}\n`
+          } else {
+            textBody += `  [Ersättning] ${compensationLabel}${entry.compensation_description ? ` - ${entry.compensation_description}` : ''}${entry.compensation_amount ? ` (${entry.compensation_amount} SEK)` : ''}\n`
+          }
         }
-        textBody += '\n'
         if (entry.comment) {
           textBody += `    Kommentar: ${entry.comment}\n`
         }
@@ -361,7 +467,10 @@ export const handler = async (
       textBody += `  Totalt för dagen: ${dateTotal.toFixed(1)} timmar\n\n`
     })
 
-    textBody += `Totalt för månaden: ${totalHours.toFixed(1)} timmar\n`
+    textBody += `Månadssummering:\n`
+    textBody += `- Arbetade timmar: ${totalWorkedHours.toFixed(1)} timmar\n`
+    textBody += `- Ledighetstimmar: ${totalLeaveHours.toFixed(1)} timmar\n`
+    textBody += `- Ersättning: ${totalCompensationEntries} poster${totalCompensationAmount > 0 ? ` (${totalCompensationAmount.toFixed(2)} SEK)` : ''}\n`
 
     // Send email via AWS SES
     const bossEmail = process.env.BOSS_EMAIL_ADDRESS

@@ -288,11 +288,30 @@ export default function Preview() {
     annan_ersattning: 'Annan ersättning',
   }
 
-  const totalHours = reportData.entries.reduce((sum, entry) => {
-    if (entry.time_from && entry.time_to) {
-      return sum + calculateHours(entry.time_from.substring(0, 5), entry.time_to.substring(0, 5))
+  // Keep worked and leave hours separate in monthly totals.
+  const totalWorkedHours = reportData.entries.reduce((sum, entry) => {
+    if (entry.entry_type !== 'work' || !entry.time_from || !entry.time_to) {
+      return sum
     }
-    return sum
+    return sum + calculateHours(entry.time_from.substring(0, 5), entry.time_to.substring(0, 5))
+  }, 0)
+
+  const totalLeaveHours = reportData.entries.reduce((sum, entry) => {
+    if (entry.entry_type !== 'leave' || !entry.time_from || !entry.time_to) {
+      return sum
+    }
+    return sum + calculateHours(entry.time_from.substring(0, 5), entry.time_to.substring(0, 5))
+  }, 0)
+
+  const totalCompensationEntries = reportData.entries.filter(
+    (entry) => entry.entry_type === 'compensation'
+  ).length
+
+  const totalCompensationAmount = reportData.entries.reduce((sum, entry) => {
+    if (entry.entry_type !== 'compensation' || !entry.compensation_amount) {
+      return sum
+    }
+    return sum + Number(entry.compensation_amount)
   }, 0)
 
   return (
@@ -501,10 +520,22 @@ export default function Preview() {
                   )
                 })}
 
-                <div className="border-t pt-4 mt-6">
+                <div className="border-t pt-4 mt-6 space-y-2">
+                  <h3 className="text-lg font-semibold">Totalt för månaden</h3>
                   <div className="flex items-center justify-between">
-                    <span className="text-lg font-semibold">Totalt för månaden:</span>
-                    <span className="text-lg font-semibold">{totalHours.toFixed(1)} timmar</span>
+                    <span className="text-base text-blue-700 dark:text-blue-400">Arbetade timmar:</span>
+                    <span className="text-base font-semibold">{totalWorkedHours.toFixed(1)} timmar</span>
+                  </div>
+                  <div className="flex items-center justify-between">
+                    <span className="text-base text-green-700 dark:text-green-400">Ledighetstimmar:</span>
+                    <span className="text-base font-semibold">{totalLeaveHours.toFixed(1)} timmar</span>
+                  </div>
+                  <div className="flex items-center justify-between">
+                    <span className="text-base text-orange-700 dark:text-orange-400">Ersättning:</span>
+                    <span className="text-base font-semibold">
+                      {totalCompensationEntries} poster
+                      {totalCompensationAmount > 0 ? ` (${totalCompensationAmount.toFixed(2)} SEK)` : ''}
+                    </span>
                   </div>
                 </div>
 

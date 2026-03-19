@@ -202,7 +202,7 @@ export const handler = async (
   </div>
   
   <p style="text-align: center; color: #888; font-size: 12px; margin-top: 20px;">
-    Detta är en automatisk timrapport från Staff Checker
+    Detta är en automatisk timrapport från Staffcheck
   </p>
 </body>
 </html>

@@ -1,4 +1,4 @@
-# Staff Checker
+# Staffcheck
 
 En applikation för att rapportera arbetade timmar för tennisklubbens anställda.
 

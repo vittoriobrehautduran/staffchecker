@@ -1,4 +1,4 @@
-# Staff Checker - Project Plan
+# Staffcheck - Project Plan
 
 ## Project Overview
 A web application for tennis club workers to report their monthly hours worked. Workers can log in, view a calendar, and enter their hours for each day they worked during the month.
