@@ -274,78 +274,55 @@ export const handler = async (
       ${user.personnummer ? `<p style="margin: 5px 0;"><strong style="color: #333;">Personnummer:</strong> ${user.personnummer}</p>` : ''}
     </div>
 
-    <h2 style="color: #333; font-size: 20px; margin-top: 30px; margin-bottom: 15px; border-bottom: 2px solid #e0e0e0; padding-bottom: 8px;">
-      Tidsregistreringar
+    <h2 style="color: #333; font-size: 18px; margin-top: 24px; margin-bottom: 10px; border-bottom: 1px solid #e0e0e0; padding-bottom: 6px;">
+      Poster
     </h2>
+    <table style="width: 100%; border-collapse: collapse; font-size: 14px;">
+      <thead>
+        <tr style="background-color: #f8f9fa;">
+          <th style="text-align: left; padding: 8px; border-bottom: 1px solid #e0e0e0;">Datum</th>
+          <th style="text-align: left; padding: 8px; border-bottom: 1px solid #e0e0e0;">Tid</th>
+          <th style="text-align: left; padding: 8px; border-bottom: 1px solid #e0e0e0;">Typ</th>
+          <th style="text-align: left; padding: 8px; border-bottom: 1px solid #e0e0e0;">Detaljer</th>
+          <th style="text-align: left; padding: 8px; border-bottom: 1px solid #e0e0e0;">Kommentar</th>
+        </tr>
+      </thead>
+      <tbody>
 `
 
     Object.keys(entriesByDate).sort().forEach(dateStr => {
       const dateEntries = entriesByDate[dateStr]
       const date = new Date(dateStr)
       const dateFormatted = date.toLocaleDateString('sv-SE', { 
-        weekday: 'long', 
-        year: 'numeric', 
-        month: 'long', 
+        year: 'numeric',
+        month: 'short',
         day: 'numeric' 
       })
-      
-      let dateTotal = 0
-      dateEntries.forEach(entry => {
-        dateTotal += calculateEntryHours(entry)
-      })
-
-      htmlBody += `
-    <div style="margin-bottom: 25px; border: 1px solid #e0e0e0; border-radius: 6px; overflow: hidden;">
-      <div style="background-color: #1a73e8; color: white; padding: 12px 15px; font-weight: 600; font-size: 16px;">
-        ${dateFormatted}
-      </div>
-      <div style="padding: 15px;">
-        <table style="width: 100%; border-collapse: collapse;">
-`
 
       dateEntries.forEach(entry => {
         const hours = calculateEntryHours(entry)
+        let typeLabel = 'Arbete'
+        let timeLabel = '-'
+        let detailsLabel = ''
 
         if (entry.entry_type === 'work') {
           const fromTime = entry.time_from?.substring(0, 5) || '--:--'
           const toTime = entry.time_to?.substring(0, 5) || '--:--'
-          htmlBody += `
-          <tr style="border-bottom: 1px solid #f0f0f0;">
-            <td style="padding: 10px 0; width: 140px;">
-              <strong style="color: #333;">${fromTime} - ${toTime}</strong>
-            </td>
-            <td style="padding: 10px 0; width: 80px;">
-              <span style="background-color: #e3f2fd; color: #1976d2; padding: 4px 8px; border-radius: 4px; font-weight: 600; font-size: 13px;">
-                ${hours.toFixed(1)}h
-              </span>
-            </td>
-            <td style="padding: 10px 0;">
-              <span style="color: #666;">${workTypeLabels[entry.work_type] || 'Arbete'}${entry.work_type === 'annat' && entry.annat_specification ? ` - ${entry.annat_specification}` : ''}</span>
-            </td>
-          </tr>
-`
+          typeLabel = 'Arbete'
+          timeLabel = `${fromTime} - ${toTime} (${hours.toFixed(1)}h)`
+          detailsLabel = `${workTypeLabels[entry.work_type] || 'Arbete'}${entry.work_type === 'annat' && entry.annat_specification ? ` - ${entry.annat_specification}` : ''}`
         } else if (entry.entry_type === 'leave') {
+          typeLabel = 'Ledighet'
           const leaveLabel = leaveTypeLabels[entry.leave_type] || 'Ledighet'
-          const leaveTimeLabel = entry.is_full_day_leave
+          timeLabel = entry.is_full_day_leave
             ? 'Hela dagen'
             : `${entry.time_from?.substring(0, 5) || '--:--'} - ${entry.time_to?.substring(0, 5) || '--:--'}`
-          const leaveHoursLabel = entry.is_full_day_leave ? '-' : `${hours.toFixed(1)}h`
-          htmlBody += `
-          <tr style="border-bottom: 1px solid #f0f0f0;">
-            <td style="padding: 10px 0; width: 140px;">
-              <strong style="color: #333;">${leaveTimeLabel}</strong>
-            </td>
-            <td style="padding: 10px 0; width: 80px;">
-              <span style="background-color: #e8f5e9; color: #2e7d32; padding: 4px 8px; border-radius: 4px; font-weight: 600; font-size: 13px;">
-                ${leaveHoursLabel}
-              </span>
-            </td>
-            <td style="padding: 10px 0;">
-              <span style="color: #666;">${leaveLabel}</span>
-            </td>
-          </tr>
-`
+          if (!entry.is_full_day_leave) {
+            timeLabel += ` (${hours.toFixed(1)}h)`
+          }
+          detailsLabel = leaveLabel
         } else if (entry.entry_type === 'compensation') {
+          typeLabel = 'Ersättning'
           const compensationLabel = compensationTypeLabels[entry.compensation_type] || 'Ersättning'
           const compensationDetails =
             entry.compensation_type === 'milersattning' && entry.mileage_km
@@ -353,49 +330,29 @@ export const handler = async (
               : entry.compensation_type === 'annan_ersattning'
                 ? `${entry.compensation_description || ''}${entry.compensation_amount ? ` (${entry.compensation_amount} SEK)` : ''}`
                 : ''
-          htmlBody += `
-          <tr style="border-bottom: 1px solid #f0f0f0;">
-            <td style="padding: 10px 0; width: 140px;">
-              <strong style="color: #333;">Ersättning</strong>
-            </td>
-            <td style="padding: 10px 0; width: 80px;">
-              <span style="background-color: #fff3e0; color: #ef6c00; padding: 4px 8px; border-radius: 4px; font-weight: 600; font-size: 13px;">
-                -
-              </span>
-            </td>
-            <td style="padding: 10px 0;">
-              <span style="color: #666;">${compensationLabel}${compensationDetails ? ` - ${compensationDetails}` : ''}</span>
-            </td>
-          </tr>
-`
+          detailsLabel = `${compensationLabel}${compensationDetails ? ` - ${compensationDetails}` : ''}`
         }
-        if (entry.comment) {
-          htmlBody += `
-          <tr>
-            <td colspan="3" style="padding: 5px 0 10px 0;">
-              <span style="color: #888; font-style: italic; font-size: 14px;">💬 ${entry.comment}</span>
-            </td>
-          </tr>
-`
-        }
-      })
 
-      htmlBody += `
-        </table>
-        <div style="margin-top: 12px; padding-top: 12px; border-top: 2px solid #e0e0e0;">
-          <strong style="color: #333; font-size: 15px;">Totalt för dagen: <span style="color: #1a73e8;">${dateTotal.toFixed(1)} timmar</span></strong>
-        </div>
-      </div>
-    </div>
+        htmlBody += `
+        <tr style="border-bottom: 1px solid #f0f0f0;">
+          <td style="padding: 8px; vertical-align: top;">${dateFormatted}</td>
+          <td style="padding: 8px; vertical-align: top;">${timeLabel}</td>
+          <td style="padding: 8px; vertical-align: top;">${typeLabel}</td>
+          <td style="padding: 8px; vertical-align: top;">${detailsLabel}</td>
+          <td style="padding: 8px; vertical-align: top; color: #666;">${entry.comment || ''}</td>
+        </tr>
 `
+      })
     })
 
     htmlBody += `
-    <div style="background-color: #f8f9fa; color: #333; padding: 20px; border-radius: 6px; margin-top: 30px;">
-      <p style="margin: 0 0 8px 0; font-size: 18px; font-weight: 600;">Månadssummering</p>
-      <p style="margin: 6px 0;"><strong>Arbetade timmar:</strong> ${totalWorkedHours.toFixed(1)} timmar</p>
-      <p style="margin: 6px 0;"><strong>Ledighetstimmar:</strong> ${totalLeaveHours.toFixed(1)} timmar</p>
-      <p style="margin: 6px 0;"><strong>Ersättning:</strong> ${totalCompensationEntries} poster${totalCompensationAmount > 0 ? ` (${totalCompensationAmount.toFixed(2)} SEK)` : ''}</p>
+      </tbody>
+    </table>
+    <div style="background-color: #f8f9fa; color: #333; padding: 16px; border-radius: 6px; margin-top: 16px;">
+      <p style="margin: 0 0 10px 0; font-size: 19px; font-weight: 700;">Månadssummering</p>
+      <p style="margin: 6px 0; font-size: 18px;"><strong>Arbetade timmar:</strong> ${totalWorkedHours.toFixed(1)} timmar</p>
+      <p style="margin: 6px 0; font-size: 18px;"><strong>Ledighetstimmar:</strong> ${totalLeaveHours.toFixed(1)} timmar</p>
+      <p style="margin: 6px 0; font-size: 18px;"><strong>Ersättning:</strong> ${totalCompensationEntries} poster${totalCompensationAmount > 0 ? ` (${totalCompensationAmount.toFixed(2)} SEK)` : ''}</p>
     </div>
   </div>
   
@@ -414,30 +371,24 @@ export const handler = async (
       textBody += `Personnummer: ${user.personnummer}\n`
     }
     textBody += '\n'
-    textBody += `Timmar:\n`
+    textBody += `Poster:\n`
     textBody += `${'='.repeat(50)}\n\n`
 
     Object.keys(entriesByDate).sort().forEach(dateStr => {
       const dateEntries = entriesByDate[dateStr]
       const date = new Date(dateStr)
       const dateFormatted = date.toLocaleDateString('sv-SE', { 
-        weekday: 'long', 
-        year: 'numeric', 
-        month: 'long', 
+        year: 'numeric',
+        month: 'short',
         day: 'numeric' 
       })
-      
-      textBody += `${dateFormatted}\n`
-      
-      let dateTotal = 0
       dateEntries.forEach(entry => {
         const hours = calculateEntryHours(entry)
-        dateTotal += hours
 
         if (entry.entry_type === 'work') {
           const fromTime = entry.time_from?.substring(0, 5) || '--:--'
           const toTime = entry.time_to?.substring(0, 5) || '--:--'
-          textBody += `  [Arbete] ${fromTime} - ${toTime} (${hours.toFixed(1)}h) - ${workTypeLabels[entry.work_type] || 'Arbete'}`
+          textBody += `- ${dateFormatted} | Arbete | ${fromTime}-${toTime} (${hours.toFixed(1)}h) | ${workTypeLabels[entry.work_type] || 'Arbete'}`
           if (entry.work_type === 'annat' && entry.annat_specification) {
             textBody += ` - ${entry.annat_specification}`
           }
@@ -445,26 +396,24 @@ export const handler = async (
         } else if (entry.entry_type === 'leave') {
           const leaveLabel = leaveTypeLabels[entry.leave_type] || 'Ledighet'
           if (entry.is_full_day_leave) {
-            textBody += `  [Ledighet] Hela dagen - ${leaveLabel}\n`
+            textBody += `- ${dateFormatted} | Ledighet | Hela dagen | ${leaveLabel}\n`
           } else {
             const fromTime = entry.time_from?.substring(0, 5) || '--:--'
             const toTime = entry.time_to?.substring(0, 5) || '--:--'
-            textBody += `  [Ledighet] ${fromTime} - ${toTime} (${hours.toFixed(1)}h) - ${leaveLabel}\n`
+            textBody += `- ${dateFormatted} | Ledighet | ${fromTime}-${toTime} (${hours.toFixed(1)}h) | ${leaveLabel}\n`
           }
         } else if (entry.entry_type === 'compensation') {
           const compensationLabel = compensationTypeLabels[entry.compensation_type] || 'Ersättning'
           if (entry.compensation_type === 'milersattning') {
-            textBody += `  [Ersättning] ${compensationLabel}${entry.mileage_km ? ` - ${entry.mileage_km} km` : ''}\n`
+            textBody += `- ${dateFormatted} | Ersättning | - | ${compensationLabel}${entry.mileage_km ? ` - ${entry.mileage_km} km` : ''}\n`
           } else {
-            textBody += `  [Ersättning] ${compensationLabel}${entry.compensation_description ? ` - ${entry.compensation_description}` : ''}${entry.compensation_amount ? ` (${entry.compensation_amount} SEK)` : ''}\n`
+            textBody += `- ${dateFormatted} | Ersättning | - | ${compensationLabel}${entry.compensation_description ? ` - ${entry.compensation_description}` : ''}${entry.compensation_amount ? ` (${entry.compensation_amount} SEK)` : ''}\n`
           }
         }
         if (entry.comment) {
           textBody += `    Kommentar: ${entry.comment}\n`
         }
       })
-      
-      textBody += `  Totalt för dagen: ${dateTotal.toFixed(1)} timmar\n\n`
     })
 
     textBody += `Månadssummering:\n`
