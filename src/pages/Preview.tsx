@@ -1,6 +1,6 @@
 import { useState, useEffect } from 'react'
 import { useAuth } from '@/contexts/AuthContext'
-import { useNavigate } from 'react-router-dom'
+import { useLocation, useNavigate } from 'react-router-dom'
 import { addMonths, format } from 'date-fns'
 import { sv } from 'date-fns/locale'
 import { Button } from '@/components/ui/button'
@@ -43,15 +43,42 @@ interface ReportData {
 }
 
 type ReportPeriod = 'current' | 'previous'
+type PreviewLocationState = {
+  reportMonthKey?: string
+}
+
+const toMonthKey = (year: number, month: number): string =>
+  `${year}-${month.toString().padStart(2, '0')}`
+
+// Parse "yyyy-MM" safely and return null when format is invalid.
+const parseMonthKey = (monthKey?: string): Date | null => {
+  if (!monthKey || !/^\d{4}-\d{2}$/.test(monthKey)) {
+    return null
+  }
+
+  const [yearPart, monthPart] = monthKey.split('-')
+  const year = Number(yearPart)
+  const monthIndex = Number(monthPart) - 1
+  const parsedDate = new Date(year, monthIndex, 1)
+
+  if (Number.isNaN(parsedDate.getTime())) {
+    return null
+  }
+
+  return parsedDate
+}
 
 export default function Preview() {
   const { isSignedIn } = useAuth()
   const navigate = useNavigate()
+  const location = useLocation()
   const { toast } = useToast()
   const [reportData, setReportData] = useState<ReportData | null>(null)
   const [isLoading, setIsLoading] = useState(true)
   const [isSubmitting, setIsSubmitting] = useState(false)
   const [selectedPeriod, setSelectedPeriod] = useState<ReportPeriod>('current')
+  const locationState = location.state as PreviewLocationState | null
+  const requestedMonth = parseMonthKey(locationState?.reportMonthKey)
 
   useEffect(() => {
     if (!isSignedIn) {
@@ -69,6 +96,18 @@ export default function Preview() {
 
     try {
       setIsLoading(true)
+
+      // If user came from a specific calendar month, show that exact month first.
+      if (requestedMonth) {
+        const month = requestedMonth.getMonth() + 1
+        const year = requestedMonth.getFullYear()
+        const data = await apiRequest<ReportData>(`/get-report?month=${month}&year=${year}`, {
+          method: 'GET',
+        })
+        setReportData(data)
+        setSelectedPeriod('current')
+        return
+      }
 
       const today = new Date()
       const lastMonthDate = addMonths(today, -1)
@@ -162,7 +201,11 @@ export default function Preview() {
         description: 'Din timrapport har skickats till chefen',
       })
 
-      navigate('/report')
+      navigate('/report', {
+        state: {
+          activeMonthKey: toMonthKey(reportData.year, reportData.month),
+        },
+      })
     } catch (error: any) {
       console.error('Error submitting report:', error)
       toast({
@@ -209,6 +252,7 @@ export default function Preview() {
   }
 
   const monthName = format(new Date(reportData.year, reportData.month - 1), 'MMMM yyyy', { locale: sv })
+  const activeMonthKey = toMonthKey(reportData.year, reportData.month)
   
   // Group entries by date
   const entriesByDate = reportData.entries.reduce((acc, entry) => {
@@ -255,7 +299,10 @@ export default function Preview() {
     <div className="min-h-screen bg-background p-4">
       <div className="container mx-auto max-w-4xl">
         <div className="mb-4">
-          <Button variant="ghost" onClick={() => navigate('/report')}>
+          <Button
+            variant="ghost"
+            onClick={() => navigate('/report', { state: { activeMonthKey } })}
+          >
             <ArrowLeft className="h-4 w-4 mr-2" />
             Tillbaka till kalender
           </Button>
@@ -475,7 +522,7 @@ export default function Preview() {
                   </Button>
                   <Button
                     variant="outline"
-                    onClick={() => navigate('/report')}
+                    onClick={() => navigate('/report', { state: { activeMonthKey } })}
                     disabled={isSubmitting}
                   >
                     Redigera

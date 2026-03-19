@@ -52,17 +52,32 @@ export async function apiRequest<T>(
   
   // Build URL
   let url = `${API_BASE_URL.replace(/\/$/, '')}/${cleanEndpoint}`
+  const requestMethod = (options.method || 'GET').toUpperCase()
+  const isGetRequest = requestMethod === 'GET'
   
   // Add token as query parameter as fallback (for API Gateway REST API)
   if (accessToken) {
     const separator = url.includes('?') ? '&' : '?'
     url += `${separator}_token=${encodeURIComponent(accessToken)}`
   }
+
+  // Add cache-busting query for GET requests.
+  // get-report currently has max-age caching, which can show stale entries right after save.
+  if (isGetRequest) {
+    const separator = url.includes('?') ? '&' : '?'
+    url += `${separator}_ts=${Date.now()}`
+  }
   
   // Build headers
   const headers: Record<string, string> = {
     'Content-Type': 'application/json',
     ...(options.headers as Record<string, string> || {}),
+  }
+
+  if (isGetRequest) {
+    headers['Cache-Control'] = 'no-cache, no-store, must-revalidate'
+    headers['Pragma'] = 'no-cache'
+    headers['Expires'] = '0'
   }
   
   // Add Authorization header with Cognito access token
@@ -73,6 +88,7 @@ export async function apiRequest<T>(
   try {
     const response = await fetch(url, {
       ...options,
+      cache: isGetRequest ? 'no-store' : options.cache,
       headers,
       credentials: 'omit', // Cognito uses tokens, not cookies
     })

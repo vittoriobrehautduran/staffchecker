@@ -1,6 +1,6 @@
 import { useState, useRef, useEffect } from 'react'
 import { useAuth } from '@/contexts/AuthContext'
-import { useNavigate } from 'react-router-dom'
+import { useLocation, useNavigate } from 'react-router-dom'
 import { format, startOfMonth, endOfMonth, eachDayOfInterval, addMonths } from 'date-fns'
 import Calendar from 'react-calendar'
 import 'react-calendar/dist/Calendar.css'
@@ -47,12 +47,38 @@ interface MonthEntries {
   }
 }
 
+type ReportLocationState = {
+  activeMonthKey?: string
+}
+
+// Parse "yyyy-MM" safely and fall back to current month if invalid.
+const getInitialCalendarMonth = (monthKey?: string): Date => {
+  if (!monthKey || !/^\d{4}-\d{2}$/.test(monthKey)) {
+    return startOfMonth(new Date())
+  }
+
+  const [yearPart, monthPart] = monthKey.split('-')
+  const year = Number(yearPart)
+  const monthIndex = Number(monthPart) - 1
+  const parsedDate = new Date(year, monthIndex, 1)
+
+  if (Number.isNaN(parsedDate.getTime())) {
+    return startOfMonth(new Date())
+  }
+
+  return startOfMonth(parsedDate)
+}
+
 export default function Report() {
   const { isSignedIn } = useAuth()
   const navigate = useNavigate()
+  const location = useLocation()
   const { toast } = useToast()
   const today = new Date()
-  const [currentDate, setCurrentDate] = useState(startOfMonth(today))
+  const locationState = location.state as ReportLocationState | null
+  const [currentDate, setCurrentDate] = useState(() =>
+    getInitialCalendarMonth(locationState?.activeMonthKey)
+  )
   const [selectedDate, setSelectedDate] = useState<Date | undefined>(undefined)
   const [entries, setEntries] = useState<Entry[]>([])
   const [reportStatus, setReportStatus] = useState<'draft' | 'submitted'>('draft')
@@ -414,7 +440,13 @@ export default function Report() {
           </div>
           <Button 
             variant="outline" 
-            onClick={() => navigate('/preview')}
+            onClick={() =>
+              navigate('/preview', {
+                state: {
+                  reportMonthKey: format(currentDate, 'yyyy-MM'),
+                },
+              })
+            }
             className="shadow-md hover:shadow-lg transition-all duration-200 text-xs sm:text-sm px-3 sm:px-4 h-8 sm:h-10 flex-shrink-0 border-slate-200 hover:border-slate-300 bg-white/90 backdrop-blur-sm"
           >
             <span className="hidden sm:inline">Förhandsvisa</span>
