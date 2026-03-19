@@ -1,6 +1,6 @@
 import { APIGatewayProxyEvent, APIGatewayProxyResult } from 'aws-lambda'
 import { sql } from './utils/database'
-import { getUserIdFromCognitoSession } from './utils/cognito-auth'
+import { getUserIdFromCognitoSession, getCognitoUserIdFromRequest } from './utils/cognito-auth'
 
 // Helper function to get CORS origin from request
 function getCorsOrigin(event: APIGatewayProxyEvent): string {
@@ -44,9 +44,8 @@ export const handler = async (
   }
 
   try {
-    const userId = await getUserIdFromCognitoSession(event)
-    
-    if (!userId) {
+    const cognitoSub = await getCognitoUserIdFromRequest(event)
+    if (!cognitoSub) {
       return {
         statusCode: 401,
         headers: {
@@ -55,6 +54,24 @@ export const handler = async (
           'Access-Control-Allow-Credentials': 'true',
         },
         body: JSON.stringify({ message: 'Not authenticated' }),
+      }
+    }
+
+    const userId = await getUserIdFromCognitoSession(event)
+
+    if (!userId) {
+      return {
+        statusCode: 403,
+        headers: {
+          'Content-Type': 'application/json',
+          'Access-Control-Allow-Origin': origin,
+          'Access-Control-Allow-Credentials': 'true',
+        },
+        body: JSON.stringify({
+          code: 'USER_NOT_REGISTERED',
+          message:
+            'Det finns inget konto kopplat till den här inloggningen. Registrera dig först med samma e-postadress, eller använd e-post och lösenord om du redan har ett konto.',
+        }),
       }
     }
 
@@ -68,13 +85,17 @@ export const handler = async (
 
     if (userResult.length === 0) {
       return {
-        statusCode: 404,
+        statusCode: 403,
         headers: {
           'Content-Type': 'application/json',
           'Access-Control-Allow-Origin': origin,
           'Access-Control-Allow-Credentials': 'true',
         },
-        body: JSON.stringify({ message: 'User not found' }),
+        body: JSON.stringify({
+          code: 'USER_NOT_REGISTERED',
+          message:
+            'Det finns inget konto kopplat till den här inloggningen. Registrera dig först med samma e-postadress, eller använd e-post och lösenord om du redan har ett konto.',
+        }),
       }
     }
 

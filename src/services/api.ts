@@ -101,6 +101,19 @@ export async function apiRequest<T>(
         throw new Error(`${error.message}. Saknade fält: ${missing}`)
       }
       
+      // OAuth / Google login succeeded in Cognito but this email is not registered in the app DB.
+      if (response.status === 403) {
+        const code = (error as { code?: string }).code
+        if (code === 'USER_NOT_REGISTERED') {
+          const err = new Error(
+            (error as { message?: string }).message ||
+              'Det finns inget konto kopplat till den här inloggningen.'
+          ) as Error & { code?: string }
+          err.code = 'USER_NOT_REGISTERED'
+          throw err
+        }
+      }
+
       // Handle 401 Unauthorized - token might be expired
       if (response.status === 401) {
         // Clear stored token and try to refresh

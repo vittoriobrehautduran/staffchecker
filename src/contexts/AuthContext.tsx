@@ -56,8 +56,6 @@ export function AuthProvider({ children }: { children: ReactNode }) {
           isAdmin: false, // Will be fetched from API
         }
 
-        setUser(userData)
-        
         // Store ID token in localStorage for API calls (has user attributes like email)
         if (session.tokens.idToken) {
           const token = typeof session.tokens.idToken === 'string'
@@ -66,16 +64,40 @@ export function AuthProvider({ children }: { children: ReactNode }) {
           localStorage.setItem('cognito-id-token', token)
         }
 
-        // Fetch admin status from backend
+        // Must resolve app account (Google can sign in to Cognito without a row in `users`).
         try {
           const { apiRequest } = await import('@/services/api')
           const userInfo = await apiRequest<{ isAdmin: boolean }>('/get-user-info')
           if (userInfo && typeof userInfo.isAdmin === 'boolean') {
             setUser({ ...userData, isAdmin: userInfo.isAdmin })
+          } else {
+            setUser(userData)
           }
-        } catch (apiError) {
-          // If API call fails, user is not admin (default)
-          console.log('Could not fetch admin status, defaulting to false')
+        } catch (apiError: any) {
+          if (apiError?.code === 'USER_NOT_REGISTERED') {
+            try {
+              await cognitoSignOut()
+            } catch {
+              // ignore
+            }
+            setUser(null)
+            localStorage.removeItem('cognito-id-token')
+            sessionStorage.setItem(
+              'staffcheck_auth_notice',
+              JSON.stringify({
+                type: 'USER_NOT_REGISTERED',
+                message:
+                  apiError?.message ||
+                  'Det finns inget konto kopplat till den här inloggningen.',
+              })
+            )
+            if (typeof window !== 'undefined' && window.location.pathname !== '/login') {
+              window.location.replace('/login')
+            }
+            return
+          }
+          console.log('Could not fetch user profile from backend:', apiError)
+          setUser(userData)
         }
       } else {
         setUser(null)

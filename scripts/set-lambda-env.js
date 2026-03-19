@@ -85,7 +85,7 @@ const registrationEnvVars = {
 }
 
 // Functions that need email env vars for reports
-const emailFunctions = ['submit-report', 'auto-submit-reports']
+const emailFunctions = ['submit-report']
 
 // Functions that need registration env vars
 const registrationFunctions = ['register-start']
@@ -142,7 +142,6 @@ async function setFunctionEnvironment(functionName) {
 
 async function setAllFunctionEnvironments() {
   const functions = [
-    `${PROJECT_NAME}-auto-submit-reports`,
     `${PROJECT_NAME}-create-entry`,
     `${PROJECT_NAME}-delete-entry`,
     `${PROJECT_NAME}-get-entries`,

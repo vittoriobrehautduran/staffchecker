@@ -31,7 +31,6 @@ async function getLambdaRoleFromExistingFunction() {
     `${PROJECT_NAME}-auth`,
     `${PROJECT_NAME}-submit-report`,
     `${PROJECT_NAME}-auth-personnummer-login`,
-    `${PROJECT_NAME}-auto-submit-reports`
   ]
   
   for (const funcName of existingFunctions) {

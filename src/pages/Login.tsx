@@ -1,5 +1,5 @@
-import { useState } from 'react'
-import { useNavigate } from 'react-router-dom'
+import { useState, useEffect } from 'react'
+import { useNavigate, Link } from 'react-router-dom'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
@@ -15,9 +15,25 @@ export default function Login() {
   const [showPassword, setShowPassword] = useState(false)
   const [isLoading, setIsLoading] = useState(false)
   const [isOAuthLoading, setIsOAuthLoading] = useState<string | null>(null)
+  const [oauthNotRegistered, setOauthNotRegistered] = useState<{ message: string } | null>(null)
   const { signIn, signInWithOAuth } = useAuth()
   const navigate = useNavigate()
   const { toast } = useToast()
+
+  useEffect(() => {
+    try {
+      const raw = sessionStorage.getItem('staffcheck_auth_notice')
+      if (raw) {
+        const parsed = JSON.parse(raw) as { type?: string; message?: string }
+        sessionStorage.removeItem('staffcheck_auth_notice')
+        if (parsed.type === 'USER_NOT_REGISTERED' && parsed.message) {
+          setOauthNotRegistered({ message: parsed.message })
+        }
+      }
+    } catch {
+      sessionStorage.removeItem('staffcheck_auth_notice')
+    }
+  }, [])
 
   const handleOAuthClick = async () => {
     setIsOAuthLoading('Google')
@@ -122,6 +138,17 @@ export default function Login() {
           </CardDescription>
         </CardHeader>
         <CardContent className="relative space-y-6">
+          {oauthNotRegistered && (
+            <div
+              className="rounded-lg border border-amber-200 bg-amber-50 dark:border-amber-900 dark:bg-amber-950/40 p-4 text-sm text-amber-900 dark:text-amber-100 space-y-3"
+              role="alert"
+            >
+              <p className="font-medium leading-relaxed">{oauthNotRegistered.message}</p>
+              <Button asChild variant="default" className="w-full sm:w-auto">
+                <Link to="/register">Skapa konto / registrera dig</Link>
+              </Button>
+            </div>
+          )}
           <form onSubmit={handleSubmit} className="space-y-5">
             <div className="space-y-2">
               <Label htmlFor="email" className="text-sm font-medium flex items-center gap-2">
