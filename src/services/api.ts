@@ -74,12 +74,6 @@ export async function apiRequest<T>(
     ...(options.headers as Record<string, string> || {}),
   }
 
-  if (isGetRequest) {
-    headers['Cache-Control'] = 'no-cache, no-store, must-revalidate'
-    headers['Pragma'] = 'no-cache'
-    headers['Expires'] = '0'
-  }
-  
   // Add Authorization header with Cognito access token
   if (accessToken) {
     headers['Authorization'] = `Bearer ${accessToken}`
