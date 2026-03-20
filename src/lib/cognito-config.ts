@@ -14,6 +14,7 @@ const buildRedirectUrls = (envUrl: string | undefined): string[] => {
     getCurrentOrigin(),
     envUrl || '',
     'https://staffcheck.spangatbk.se',
+    'https://staging.d3jub8c52hgrc6.amplifyapp.com',
     'http://localhost:5173',
   ].filter(Boolean)
 

@@ -7,6 +7,7 @@ function getCorsHeaders(origin: string | null): Record<string, string> {
     'http://localhost:5173',
     'http://localhost:3000',
     'https://staffcheck.spangatbk.se',
+    'https://staging.d3jub8c52hgrc6.amplifyapp.com',
     process.env.FRONTEND_URL,
   ].filter(Boolean) as string[]
 
