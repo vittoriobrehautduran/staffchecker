@@ -21,17 +21,44 @@ export default function Login() {
   const { toast } = useToast()
 
   useEffect(() => {
-    try {
-      const raw = sessionStorage.getItem('staffcheck_auth_notice')
-      if (raw) {
-        const parsed = JSON.parse(raw) as { type?: string; message?: string }
-        sessionStorage.removeItem('staffcheck_auth_notice')
-        if (parsed.type === 'USER_NOT_REGISTERED' && parsed.message) {
+    const noticeMaxAgeMs = 2 * 60 * 1000
+    const parseAndUseNotice = (raw: string | null): boolean => {
+      if (!raw) return false
+      try {
+        const parsed = JSON.parse(raw) as { type?: string; message?: string; createdAt?: number }
+        const createdAt = parsed.createdAt || 0
+        const isFresh = createdAt > 0 && Date.now() - createdAt <= noticeMaxAgeMs
+        if (parsed.type === 'USER_NOT_REGISTERED' && parsed.message && isFresh) {
           setOauthNotRegistered({ message: parsed.message })
+          return true
         }
+      } catch {
+        return false
+      }
+      return false
+    }
+
+    try {
+      const urlParams = new URLSearchParams(window.location.search)
+      const authError = urlParams.get('authError')
+      if (authError === 'USER_NOT_REGISTERED') {
+        setOauthNotRegistered({
+          message:
+            'E-postadressen du använde med Google är inte registrerad hos oss. Registrera dig först med samma e-postadress, eller logga in med e-post och lösenord om du redan har ett konto.',
+        })
+      }
+
+      const sessionNotice = sessionStorage.getItem('staffcheck_auth_notice')
+      const localNotice = localStorage.getItem('staffcheck_auth_notice')
+      const usedStoredNotice = parseAndUseNotice(sessionNotice) || parseAndUseNotice(localNotice)
+
+      if (usedStoredNotice || authError === 'USER_NOT_REGISTERED') {
+        // Keep the notice visible for this page load but clean storage to avoid stale repeats later.
+        sessionStorage.removeItem('staffcheck_auth_notice')
+        localStorage.removeItem('staffcheck_auth_notice')
       }
     } catch {
-      sessionStorage.removeItem('staffcheck_auth_notice')
+      // ignore storage/query parsing issues
     }
   }, [])
 

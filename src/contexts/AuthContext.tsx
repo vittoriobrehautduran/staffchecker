@@ -10,6 +10,12 @@ interface User {
   isAdmin?: boolean
 }
 
+type AuthNotice = {
+  type: 'USER_NOT_REGISTERED'
+  message: string
+  createdAt: number
+}
+
 interface AuthContextType {
   user: User | null
   isLoading: boolean
@@ -34,6 +40,20 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   const [user, setUser] = useState<User | null>(null)
   const [isLoading, setIsLoading] = useState(true)
   const isMountedRef = useRef(true)
+
+  const storeAuthNotice = (notice: AuthNotice) => {
+    const serializedNotice = JSON.stringify(notice)
+    try {
+      sessionStorage.setItem('staffcheck_auth_notice', serializedNotice)
+    } catch {
+      // ignore sessionStorage errors
+    }
+    try {
+      localStorage.setItem('staffcheck_auth_notice', serializedNotice)
+    } catch {
+      // ignore localStorage errors
+    }
+  }
 
   // Fetch current user and session
   const fetchUser = async () => {
@@ -82,17 +102,15 @@ export function AuthProvider({ children }: { children: ReactNode }) {
             }
             setUser(null)
             localStorage.removeItem('cognito-id-token')
-            sessionStorage.setItem(
-              'staffcheck_auth_notice',
-              JSON.stringify({
-                type: 'USER_NOT_REGISTERED',
-                message:
-                  apiError?.message ||
-                  'Det finns inget konto kopplat till den här inloggningen.',
-              })
-            )
+            storeAuthNotice({
+              type: 'USER_NOT_REGISTERED',
+              message:
+                apiError?.message ||
+                'Det finns inget konto kopplat till den här inloggningen.',
+              createdAt: Date.now(),
+            })
             if (typeof window !== 'undefined' && window.location.pathname !== '/login') {
-              window.location.replace('/login')
+              window.location.replace('/login?authError=USER_NOT_REGISTERED')
             }
             return
           }
@@ -256,6 +274,10 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       await signInWithRedirect({
         provider,
         customState: window.location.pathname, // Save current path to return after OAuth
+        options: {
+          // Force account chooser so users can switch Google account after a failed/unregistered attempt.
+          prompt: provider === 'Google' ? 'SELECT_ACCOUNT' : undefined,
+        },
       })
       // signInWithRedirect will redirect the page, so execution stops here
     } catch (error: any) {
