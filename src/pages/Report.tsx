@@ -6,6 +6,7 @@ import Calendar from 'react-calendar'
 import 'react-calendar/dist/Calendar.css'
 import './Report.css'
 import { Button } from '@/components/ui/button'
+import { Eye } from 'lucide-react'
 import { DateModal } from '@/components/Calendar/DateModal'
 import { useToast } from '@/components/ui/use-toast'
 import { apiRequest } from '@/services/api'
@@ -357,15 +358,15 @@ export default function Report() {
 
     const badgeClassName = (() => {
       if (dayData.reportStatus === 'submitted') {
-        return 'bg-gray-200 text-gray-700'
+        return 'bg-muted text-muted-foreground'
       }
       if (hasLeave) {
-        return 'bg-green-100 text-green-800'
+        return 'bg-emerald-500/15 text-emerald-800 dark:text-emerald-300'
       }
       if (hasCompensation) {
-        return 'bg-orange-100 text-orange-800'
+        return 'bg-orange-500/15 text-orange-800 dark:text-orange-300'
       }
-      return 'bg-blue-100 text-blue-700'
+      return 'bg-primary/15 text-primary'
     })()
 
     return (
@@ -374,7 +375,7 @@ export default function Report() {
           {totalHours.toFixed(1)}h
         </div>
         {dayData.entries.length > 1 && (
-          <div className="text-xs text-gray-500 mt-1 font-medium">
+          <div className="text-xs text-muted-foreground mt-1 font-medium">
             {dayData.entries.length} poster
           </div>
         )}
@@ -409,13 +410,23 @@ export default function Report() {
       // - Compensation shows orange
       // - Default work shows blue
       if (dayData.reportStatus === 'submitted') {
-        classes.push('!bg-gray-100')
+        classes.push('!bg-muted/90')
       } else if (hasLeave) {
-        classes.push('!bg-green-50')
+        classes.push('!bg-emerald-500/12')
       } else if (hasCompensation) {
-        classes.push('!bg-orange-50')
+        classes.push('!bg-orange-500/12')
       } else {
-        classes.push('!bg-blue-50')
+        classes.push('!bg-primary/12')
+      }
+    }
+
+    const inViewMonth =
+      date.getMonth() === currentDate.getMonth() &&
+      date.getFullYear() === currentDate.getFullYear()
+    const isOutOfRange = dateMonth > nextMonth || dateMonth < earliestMonth
+    if (inViewMonth && !isOutOfRange) {
+      if (!dayData?.entries?.length) {
+        classes.push('report-tile-empty')
       }
     }
     
@@ -426,20 +437,19 @@ export default function Report() {
   const maxDate = endOfMonth(addMonths(today, 1))
 
   return (
-    <div className="min-h-screen bg-gradient-to-br from-slate-50 via-blue-50/30 to-slate-50">
-      {/* Premium header with shadow */}
-      <div className="flex-shrink-0 px-3 sm:px-4 md:px-6 py-3 sm:py-4 border-b border-slate-200/60 bg-white/80 backdrop-blur-sm shadow-sm">
-        <div className="flex items-center justify-between gap-2 sm:gap-4">
-          <div className="flex-1 min-w-0">
-            <h1 className="text-xl sm:text-2xl md:text-3xl font-bold bg-gradient-to-r from-slate-900 via-slate-800 to-slate-900 bg-clip-text text-transparent truncate">
+    <div className="flex min-h-screen flex-1 flex-col bg-background">
+      <div className="flex-shrink-0 border-b border-border bg-card/30 px-3 py-4 sm:px-6 sm:py-5">
+        <div className="mx-auto flex max-w-7xl items-center justify-between gap-3 sm:gap-6">
+          <div className="min-w-0 flex-1">
+            <h1 className="truncate text-2xl font-semibold tracking-tight text-foreground sm:text-3xl">
               Timrapport
             </h1>
-            <p className="text-xs sm:text-sm text-slate-600/80 hidden sm:block">
+            <p className="mt-1 hidden text-xs text-muted-foreground sm:block sm:text-sm">
               Klicka på ett datum för att lägga till eller redigera timmar
             </p>
           </div>
-          <Button 
-            variant="outline" 
+          <Button
+            variant="default"
             onClick={() =>
               navigate('/preview', {
                 state: {
@@ -447,46 +457,47 @@ export default function Report() {
                 },
               })
             }
-            className="shadow-md hover:shadow-lg transition-all duration-200 text-xs sm:text-sm px-3 sm:px-4 h-8 sm:h-10 flex-shrink-0 border-slate-200 hover:border-slate-300 bg-white/90 backdrop-blur-sm"
+            className="h-9 flex-shrink-0 px-3 text-xs shadow-sm transition-shadow hover:shadow-md sm:h-10 sm:px-4 sm:text-sm"
           >
+            <Eye className="mr-1.5 h-4 w-4 opacity-90 sm:mr-2" aria-hidden />
             <span className="hidden sm:inline">Förhandsvisa</span>
             <span className="sm:hidden">Förhandsgranska</span>
           </Button>
         </div>
       </div>
-      
-      {/* Loading banner / Notification */}
-      <div className="flex-shrink-0 h-[48px] sm:h-[52px] px-3 sm:px-4 md:px-6 border-b transition-all duration-200 relative">
-        <div className={`absolute inset-0 h-full flex items-center gap-3 text-blue-700 transition-opacity duration-300 ${
-          isLoadingEntries 
-            ? 'opacity-100 bg-blue-50/80 border-blue-200/50 backdrop-blur-sm z-10' 
-            : 'opacity-0 z-0'
-        }`}>
-          <div className="relative h-4 w-4 sm:h-5 sm:w-5 flex-shrink-0">
-            <div className="absolute inset-0 rounded-full border-2 border-blue-200"></div>
-            <div className="absolute inset-0 rounded-full border-2 border-transparent border-t-blue-600 animate-spin"></div>
+
+      <div className="relative h-[48px] shrink-0 border-b border-border sm:h-[52px]">
+        <div
+          className={`absolute inset-0 z-10 flex h-full items-center gap-3 px-3 transition-opacity duration-300 sm:px-6 ${
+            isLoadingEntries ? 'opacity-100' : 'pointer-events-none opacity-0'
+          }`}
+        >
+          <div className="rounded-md border border-primary/25 bg-primary/10 px-3 py-2 sm:px-4">
+            <div className="flex items-center gap-3 text-sm font-medium text-foreground sm:text-base">
+              <div className="relative h-4 w-4 shrink-0 sm:h-5 sm:w-5">
+                <div className="absolute inset-0 rounded-full border-2 border-primary/30" />
+                <div className="absolute inset-0 animate-spin rounded-full border-2 border-transparent border-t-primary" />
+              </div>
+              <span>Laddar dina timmar, vänta en stund...</span>
+            </div>
           </div>
-          <p className="text-sm sm:text-base font-medium">
-            Laddar dina timmar, vänta en stund...
-          </p>
         </div>
-        
+
         {!isLoadingEntries && (
-          <div className={`absolute inset-0 h-full flex items-center justify-center text-amber-700 transition-opacity duration-500 ${
-            showNotification 
-              ? 'opacity-100 bg-amber-50/80 border-amber-200/50 backdrop-blur-sm z-10' 
-              : 'opacity-0 z-0'
-          }`}>
-            <p className="text-sm sm:text-base font-medium px-4">
+          <div
+            className={`absolute inset-0 z-10 flex h-full items-center justify-center px-3 transition-opacity duration-500 sm:px-6 ${
+              showNotification ? 'opacity-100' : 'pointer-events-none opacity-0'
+            }`}
+          >
+            <p className="rounded-md border border-amber-500/25 bg-amber-500/10 px-4 py-2 text-center text-sm font-medium text-amber-950 dark:text-amber-100 sm:text-base">
               Glöm inte att lämna in rapporten i slutet av månaden
             </p>
           </div>
         )}
       </div>
-      
-      {/* Calendar container */}
-      <div className="w-full bg-white p-2 sm:p-4 md:p-6 lg:p-8 flex items-start justify-center">
-        <div className="w-full max-w-7xl flex flex-col">
+
+      <div className="flex flex-1 justify-center px-2 py-4 sm:px-4 sm:py-6 md:px-6 lg:py-8">
+        <div className="flex w-full max-w-7xl flex-col rounded-xl border border-border bg-card p-3 shadow-lg shadow-black/20 sm:rounded-2xl sm:p-5 md:p-8">
           <Calendar
             onChange={handleDateClick}
             value={selectedDate}
@@ -497,7 +508,7 @@ export default function Report() {
             locale="sv-SE"
             tileContent={tileContent}
             tileClassName={tileClassName}
-            className="w-full border-0"
+            className="report-dashboard-calendar w-full border-0"
             showWeekNumbers={true}
           />
         </div>

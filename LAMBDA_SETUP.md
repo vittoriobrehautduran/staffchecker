@@ -38,6 +38,10 @@ Go to each Lambda function in AWS Console → Configuration → Environment vari
 - `PUT /update-entry` → `timrapport-update-entry`
 - `DELETE /delete-entry` → `timrapport-delete-entry`
 
+#### User preferences:
+- `GET /get-user-info` → `timrapport-get-user-info` (returns `theme`: `light` | `dark`)
+- `PUT /update-user-preferences` → `timrapport-update-user-preferences` (body: `{ "theme": "light" | "dark" }`)
+
 5. Enable CORS on all methods:
    - Access-Control-Allow-Origin: `*`
    - Access-Control-Allow-Headers: `Content-Type,Authorization`

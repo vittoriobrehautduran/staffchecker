@@ -111,7 +111,7 @@ export default function Admin() {
   }
 
   return (
-    <div className="min-h-screen bg-background p-4">
+    <div className="min-h-screen flex-1 bg-background p-4 md:p-6">
       <div className="container mx-auto max-w-2xl">
         <div className="mb-4">
           <Button variant="ghost" onClick={() => navigate('/report')}>
@@ -179,8 +179,8 @@ export default function Admin() {
               </Button>
             </form>
 
-            <div className="mt-6 p-4 bg-amber-50 border border-amber-200 rounded-md">
-              <p className="text-sm text-amber-800">
+            <div className="mt-6 rounded-md border border-amber-500/30 bg-amber-500/10 p-4">
+              <p className="text-sm text-amber-950 dark:text-amber-100">
                 <strong>Obs:</strong> Detta kommer att återställa rapporten till utkast-status. 
                 Användaren kommer att kunna redigera och skicka rapporten igen.
               </p>

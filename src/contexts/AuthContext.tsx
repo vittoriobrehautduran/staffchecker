@@ -1,4 +1,4 @@
-import { createContext, useContext, useState, useEffect, useRef, type ReactNode } from 'react'
+import { createContext, useContext, useState, useEffect, useRef, useCallback, type ReactNode } from 'react'
 import { signIn as cognitoSignIn, signUp as cognitoSignUp, signOut as cognitoSignOut, getCurrentUser, fetchAuthSession, confirmSignUp, resendSignUpCode, updatePassword, signInWithRedirect } from 'aws-amplify/auth'
 import '@/lib/cognito-config'
 
@@ -8,6 +8,8 @@ interface User {
   name: string | null
   emailVerified: boolean
   isAdmin?: boolean
+  /** Synced from DB (`users.ui_theme`); default dark when unset. */
+  theme?: 'light' | 'dark'
 }
 
 type AuthNotice = {
@@ -32,6 +34,7 @@ interface AuthContextType {
   verifyEmail: (code: string, email: string) => Promise<void>
   resendVerificationCode: (email: string) => Promise<string>
   changePassword: (currentPassword: string, newPassword: string) => Promise<void>
+  patchUser: (partial: Partial<Pick<User, 'theme' | 'isAdmin'>>) => void
 }
 
 const AuthContext = createContext<AuthContextType | undefined>(undefined)
@@ -40,6 +43,10 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   const [user, setUser] = useState<User | null>(null)
   const [isLoading, setIsLoading] = useState(true)
   const isMountedRef = useRef(true)
+
+  const patchUser = useCallback((partial: Partial<Pick<User, 'theme' | 'isAdmin'>>) => {
+    setUser((prev) => (prev ? { ...prev, ...partial } : null))
+  }, [])
 
   const storeAuthNotice = (notice: AuthNotice) => {
     const serializedNotice = JSON.stringify(notice)
@@ -87,11 +94,13 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         // Must resolve app account (Google can sign in to Cognito without a row in `users`).
         try {
           const { apiRequest } = await import('@/services/api')
-          const userInfo = await apiRequest<{ isAdmin: boolean }>('/get-user-info')
+          const userInfo = await apiRequest<{ isAdmin: boolean; theme?: string }>('/get-user-info')
+          const resolvedTheme: 'light' | 'dark' =
+            userInfo?.theme === 'light' ? 'light' : 'dark'
           if (userInfo && typeof userInfo.isAdmin === 'boolean') {
-            setUser({ ...userData, isAdmin: userInfo.isAdmin })
+            setUser({ ...userData, isAdmin: userInfo.isAdmin, theme: resolvedTheme })
           } else {
-            setUser(userData)
+            setUser({ ...userData, theme: resolvedTheme })
           }
         } catch (apiError: any) {
           if (apiError?.code === 'USER_NOT_REGISTERED') {
@@ -368,6 +377,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         verifyEmail,
         resendVerificationCode,
         changePassword,
+        patchUser,
       }}
     >
       {children}

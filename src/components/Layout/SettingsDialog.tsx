@@ -11,7 +11,8 @@ import {
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
-import { Eye, EyeOff, Lock, User, Mail } from 'lucide-react'
+import { Eye, EyeOff, Lock, User, Mail, Moon, Sun } from 'lucide-react'
+import { useTheme } from '@/contexts/ThemeContext'
 
 interface SettingsDialogProps {
   open: boolean
@@ -20,6 +21,7 @@ interface SettingsDialogProps {
 
 export function SettingsDialog({ open, onOpenChange }: SettingsDialogProps) {
   const { changePassword, user } = useAuth()
+  const { theme, setTheme } = useTheme()
   const { toast } = useToast()
   const [currentPassword, setCurrentPassword] = useState('')
   const [newPassword, setNewPassword] = useState('')
@@ -103,7 +105,32 @@ export function SettingsDialog({ open, onOpenChange }: SettingsDialogProps) {
             Hantera ditt konto och ändra lösenord
           </DialogDescription>
         </DialogHeader>
-        
+
+        <div className="space-y-3 border-b pb-4">
+          <h3 className="text-sm font-semibold">Utseende</h3>
+          <p className="text-xs text-muted-foreground">Ljust eller mörkt läge sparas på den här enheten.</p>
+          <div className="flex gap-2">
+            <Button
+              type="button"
+              variant={theme === 'light' ? 'default' : 'outline'}
+              className="flex-1"
+              onClick={() => setTheme('light')}
+            >
+              <Sun className="mr-2 h-4 w-4" aria-hidden />
+              Ljust
+            </Button>
+            <Button
+              type="button"
+              variant={theme === 'dark' ? 'default' : 'outline'}
+              className="flex-1"
+              onClick={() => setTheme('dark')}
+            >
+              <Moon className="mr-2 h-4 w-4" aria-hidden />
+              Mörkt
+            </Button>
+          </div>
+        </div>
+
         {/* User Information Section */}
         <div className="space-y-4 pb-4 border-b">
           <div className="space-y-2">

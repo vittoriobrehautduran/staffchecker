@@ -1,8 +1,7 @@
 import { APIGatewayProxyEvent, APIGatewayProxyResult } from 'aws-lambda'
 import { sql } from './utils/database'
-import { getUserIdFromCognitoSession, getCognitoUserIdFromRequest } from './utils/cognito-auth'
+import { getUserIdFromCognitoSession } from './utils/cognito-auth'
 
-// Helper function to get CORS origin from request
 function getCorsOrigin(event: APIGatewayProxyEvent): string {
   const requestOrigin = event.headers?.Origin || event.headers?.origin || '*'
   const allowedOrigins = [
@@ -18,21 +17,21 @@ export const handler = async (
 ): Promise<APIGatewayProxyResult> => {
   const origin = getCorsOrigin(event)
 
-  // Handle CORS preflight
   if (event.httpMethod === 'OPTIONS') {
     return {
       statusCode: 200,
       headers: {
         'Access-Control-Allow-Origin': origin,
-        'Access-Control-Allow-Methods': 'GET, OPTIONS',
-        'Access-Control-Allow-Headers': 'Content-Type, Authorization',
+        'Access-Control-Allow-Methods': 'PUT, OPTIONS',
+        'Access-Control-Allow-Headers': 'Content-Type, Authorization, Cookie, X-Auth-Token',
         'Access-Control-Allow-Credentials': 'true',
+        'Access-Control-Max-Age': '86400',
       },
       body: '',
     }
   }
 
-  if (event.httpMethod !== 'GET') {
+  if (event.httpMethod !== 'PUT') {
     return {
       statusCode: 405,
       headers: {
@@ -45,8 +44,9 @@ export const handler = async (
   }
 
   try {
-    const cognitoSub = await getCognitoUserIdFromRequest(event)
-    if (!cognitoSub) {
+    const userId = await getUserIdFromCognitoSession(event)
+
+    if (!userId) {
       return {
         statusCode: 401,
         headers: {
@@ -58,50 +58,39 @@ export const handler = async (
       }
     }
 
-    const userId = await getUserIdFromCognitoSession(event)
-
-    if (!userId) {
+    let body: { theme?: string }
+    try {
+      body = JSON.parse(event.body || '{}')
+    } catch {
       return {
-        statusCode: 403,
+        statusCode: 400,
         headers: {
           'Content-Type': 'application/json',
           'Access-Control-Allow-Origin': origin,
           'Access-Control-Allow-Credentials': 'true',
         },
-        body: JSON.stringify({
-          code: 'USER_NOT_REGISTERED',
-          message:
-            'Det finns inget konto kopplat till den här inloggningen. Registrera dig först med samma e-postadress, eller använd e-post och lösenord om du redan har ett konto.',
-        }),
+        body: JSON.stringify({ message: 'Invalid JSON body' }),
       }
     }
 
-    // Get user info including admin status
-    const userResult = await sql`
-      SELECT id, email, name, last_name, is_admin, ui_theme
-      FROM users 
+    const theme = body.theme
+    if (theme !== 'light' && theme !== 'dark') {
+      return {
+        statusCode: 400,
+        headers: {
+          'Content-Type': 'application/json',
+          'Access-Control-Allow-Origin': origin,
+          'Access-Control-Allow-Credentials': 'true',
+        },
+        body: JSON.stringify({ message: 'theme must be "light" or "dark"' }),
+      }
+    }
+
+    await sql`
+      UPDATE users
+      SET ui_theme = ${theme}, updated_at = CURRENT_TIMESTAMP
       WHERE id = ${userId}
-      LIMIT 1
     `
-
-    if (userResult.length === 0) {
-      return {
-        statusCode: 403,
-        headers: {
-          'Content-Type': 'application/json',
-          'Access-Control-Allow-Origin': origin,
-          'Access-Control-Allow-Credentials': 'true',
-        },
-        body: JSON.stringify({
-          code: 'USER_NOT_REGISTERED',
-          message:
-            'Det finns inget konto kopplat till den här inloggningen. Registrera dig först med samma e-postadress, eller använd e-post och lösenord om du redan har ett konto.',
-        }),
-      }
-    }
-
-    const user = userResult[0]
-    const theme = user.ui_theme === 'light' ? 'light' : 'dark'
 
     return {
       statusCode: 200,
@@ -110,17 +99,10 @@ export const handler = async (
         'Access-Control-Allow-Origin': origin,
         'Access-Control-Allow-Credentials': 'true',
       },
-      body: JSON.stringify({
-        id: user.id,
-        email: user.email,
-        name: user.name,
-        lastName: user.last_name,
-        isAdmin: user.is_admin || false,
-        theme,
-      }),
+      body: JSON.stringify({ theme }),
     }
   } catch (error: any) {
-    console.error('Error getting user info:', error)
+    console.error('update-user-preferences error:', error)
     return {
       statusCode: 500,
       headers: {
@@ -128,11 +110,10 @@ export const handler = async (
         'Access-Control-Allow-Origin': origin,
         'Access-Control-Allow-Credentials': 'true',
       },
-      body: JSON.stringify({ 
+      body: JSON.stringify({
         message: 'Internal server error',
-        error: error?.message || 'Unknown error'
+        error: error?.message || 'Unknown error',
       }),
     }
   }
 }
-

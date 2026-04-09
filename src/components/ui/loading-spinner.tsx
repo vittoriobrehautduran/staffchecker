@@ -3,19 +3,31 @@ import { cn } from '@/lib/utils'
 interface LoadingSpinnerProps {
   size?: 'sm' | 'md' | 'lg'
   className?: string
+  /** Stone rings for auth / neutral surfaces (ignores app theme primary). */
+  variant?: 'default' | 'neutral'
 }
 
-export function LoadingSpinner({ size = 'md', className }: LoadingSpinnerProps) {
+export function LoadingSpinner({ size = 'md', className, variant = 'default' }: LoadingSpinnerProps) {
   const sizeClasses = {
     sm: 'h-4 w-4',
     md: 'h-8 w-8',
     lg: 'h-12 w-12',
   }
 
+  const ringMuted =
+    variant === 'neutral' ? 'border-stone-200' : 'border-primary/20'
+  const ringActive =
+    variant === 'neutral' ? 'border-t-stone-700' : 'border-t-primary'
+
   return (
     <div className={cn('relative', sizeClasses[size], className)}>
-      <div className="absolute inset-0 rounded-full border-4 border-primary/20"></div>
-      <div className="absolute inset-0 rounded-full border-4 border-transparent border-t-primary animate-spin"></div>
+      <div className={cn('absolute inset-0 rounded-full border-4', ringMuted)} />
+      <div
+        className={cn(
+          'absolute inset-0 animate-spin rounded-full border-4 border-transparent',
+          ringActive
+        )}
+      />
     </div>
   )
 }
@@ -40,9 +52,25 @@ export function LoadingOverlay({ message = 'Laddar...' }: LoadingOverlayProps) {
 
 interface PremiumLoadingOverlayProps {
   message?: string
+  /** Matches neutral auth screens (no app light/dark). */
+  variant?: 'default' | 'neutral'
 }
 
-export function PremiumLoadingOverlay({ message = 'Loggar in...' }: PremiumLoadingOverlayProps) {
+export function PremiumLoadingOverlay({
+  message = 'Loggar in...',
+  variant = 'default',
+}: PremiumLoadingOverlayProps) {
+  if (variant === 'neutral') {
+    return (
+      <div className="fixed inset-0 z-[100] flex items-center justify-center bg-[#e8eaef]/92 backdrop-blur-md">
+        <div className="flex flex-col items-center gap-6">
+          <LoadingSpinner size="lg" variant="neutral" />
+          <p className="text-sm font-semibold text-stone-700">{message}</p>
+        </div>
+      </div>
+    )
+  }
+
   return (
     <div className="fixed inset-0 z-[100] flex items-center justify-center bg-gradient-to-br from-blue-50/95 via-indigo-50/95 to-purple-50/95 dark:from-gray-900/95 dark:via-gray-800/95 dark:to-gray-900/95 backdrop-blur-md">
       <div className="flex flex-col items-center gap-8">

@@ -6,6 +6,7 @@ CREATE TABLE IF NOT EXISTS users (
   last_name VARCHAR(255) NOT NULL,
   personnummer VARCHAR(12), -- Optional, nullable
   email VARCHAR(255) UNIQUE NOT NULL,
+  ui_theme VARCHAR(10),
   created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
   updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
 );

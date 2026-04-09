@@ -3,9 +3,12 @@ import { useNavigate } from 'react-router-dom'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
-import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card'
+import { CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card'
 import { useToast } from '@/components/ui/use-toast'
 import { useAuth } from '@/contexts/AuthContext'
+import { AuthPageShell, AuthCard, authInputClassName } from '@/components/auth/AuthLayout'
+import { cn } from '@/lib/utils'
+import { LoadingSpinner } from '@/components/ui/loading-spinner'
 
 export default function VerifyEmail() {
   const [code, setCode] = useState('')
@@ -122,25 +125,34 @@ export default function VerifyEmail() {
   }
 
   if (!email) {
-    return <div>Laddar...</div>
+    return (
+      <AuthPageShell>
+        <div className="text-center">
+          <LoadingSpinner size="lg" variant="neutral" />
+          <p className="mt-4 text-sm text-stone-600">Laddar...</p>
+        </div>
+      </AuthPageShell>
+    )
   }
 
   return (
-    <div className="min-h-screen flex items-center justify-center bg-background p-4">
-      <Card className="w-full max-w-md">
-        <CardHeader>
-          <CardTitle>Verifiera din e-post</CardTitle>
-          <CardDescription>
+    <AuthPageShell>
+      <AuthCard className="w-full">
+        <CardHeader className="space-y-1 pb-2">
+          <CardTitle className="text-2xl font-semibold tracking-tight text-stone-900">
+            Verifiera din e-post
+          </CardTitle>
+          <CardDescription className="text-base text-stone-500">
             Vi har skickat en verifieringskod till din e-post. Ange koden nedan.
           </CardDescription>
           {timeLeft > 0 && (
-            <div className="mt-2 text-sm">
-              <span className="text-muted-foreground">Tid kvar: </span>
-              <span className={`font-semibold ${timeLeft <= 30 ? 'text-red-500' : 'text-orange-500'}`}>
+            <div className="mt-3 text-sm">
+              <span className="text-stone-500">Tid kvar: </span>
+              <span className={`font-semibold ${timeLeft <= 30 ? 'text-red-600' : 'text-orange-600'}`}>
                 {Math.floor(timeLeft / 60)}:{(timeLeft % 60).toString().padStart(2, '0')}
               </span>
               {timeLeft <= 30 && (
-                <span className="text-red-500 text-xs block mt-1">
+                <span className="mt-1 block text-xs text-red-600">
                   Du har {timeLeft} sekunder kvar innan kontot raderas
                 </span>
               )}
@@ -150,7 +162,9 @@ export default function VerifyEmail() {
         <CardContent>
           <form onSubmit={handleSubmit} className="space-y-4">
             <div className="space-y-2">
-              <Label htmlFor="code">Verifieringskod</Label>
+              <Label htmlFor="code" className="text-stone-700">
+                Verifieringskod
+              </Label>
               <Input
                 id="code"
                 type="text"
@@ -161,31 +175,36 @@ export default function VerifyEmail() {
                 disabled={isLoading}
                 maxLength={6}
                 autoFocus
-                className="text-center text-2xl tracking-widest font-mono"
+                className={cn(
+                  'text-center font-mono text-2xl tracking-widest',
+                  authInputClassName
+                )}
               />
-              <p className="text-xs text-muted-foreground">
+              <p className="text-xs text-stone-500">
                 Ange den 6-siffriga koden som skickades till din e-post.
               </p>
             </div>
-            <Button type="submit" className="w-full" disabled={isLoading}>
+            <Button
+              type="submit"
+              className="w-full bg-stone-900 font-semibold text-white hover:bg-stone-800"
+              disabled={isLoading}
+            >
               {isLoading ? 'Verifierar...' : 'Verifiera'}
             </Button>
           </form>
           <div className="mt-4 text-center text-sm">
-            <p className="text-muted-foreground mb-2">
-              Har du inte fått koden?
-            </p>
+            <p className="mb-2 text-stone-500">Har du inte fått koden?</p>
             <button
               type="button"
               onClick={handleResend}
-              className="text-primary hover:underline font-medium"
+              className="font-medium text-stone-900 underline-offset-4 hover:underline"
               disabled={isLoading}
             >
               Skicka ny kod
             </button>
           </div>
         </CardContent>
-      </Card>
-    </div>
+      </AuthCard>
+    </AuthPageShell>
   )
 }

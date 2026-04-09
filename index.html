@@ -2,6 +2,14 @@
 <html lang="en">
   <head>
     <meta charset="UTF-8" />
+    <script>
+      (function () {
+        try {
+          var t = localStorage.getItem('staffcheck-theme');
+          document.documentElement.classList.toggle('dark', t !== 'light');
+        } catch (e) {}
+      })();
+    </script>
     <link rel="icon" type="image/jpeg" href="/logo.jpg" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
     <title>Staffcheck</title>

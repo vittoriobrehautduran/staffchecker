@@ -3,11 +3,13 @@ import { useNavigate, Link } from 'react-router-dom'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
-import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card'
+import { CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card'
 import { useToast } from '@/components/ui/use-toast'
 import { useAuth } from '@/contexts/AuthContext'
 import { Eye, EyeOff, Mail, Lock } from 'lucide-react'
 import { LoadingSpinner, PremiumLoadingOverlay } from '@/components/ui/loading-spinner'
+import { AuthPageShell, AuthCard, authInputClassName } from '@/components/auth/AuthLayout'
+import { cn } from '@/lib/utils'
 
 export default function Login() {
   const [email, setEmail] = useState('')
@@ -138,48 +140,41 @@ export default function Login() {
 
   return (
     <>
-      {isLoading && <PremiumLoadingOverlay message="Loggar in..." />}
-      <div className="min-h-screen flex items-center justify-center p-4 relative overflow-hidden">
-      {/* Animated gradient background */}
-      <div className="absolute inset-0 bg-gradient-to-br from-blue-50 via-indigo-50 to-purple-50 dark:from-gray-900 dark:via-gray-800 dark:to-gray-900">
-        <div className="absolute inset-0 bg-[url('data:image/svg+xml;base64,PHN2ZyB3aWR0aD0iNjAiIGhlaWdodD0iNjAiIHZpZXdCb3g9IjAgMCA2MCA2MCIgeG1sbnM9Imh0dHA6Ly93d3cudzMub3JnLzIwMDAvc3ZnIj48ZyBmaWxsPSJub25lIiBmaWxsLXJ1bGU9ImV2ZW5vZGQiPjxnIGZpbGw9IiNmMWY1ZjkiIGZpbGwtb3BhY2l0eT0iMC40Ij48Y2lyY2xlIGN4PSIzMCIgY3k9IjMwIiByPSIxLjUiLz48L2c+PC9nPjwvc3ZnPg==')] opacity-40"></div>
-        <div className="absolute top-0 left-1/4 w-96 h-96 bg-blue-400 rounded-full mix-blend-multiply filter blur-xl opacity-20 animate-blob"></div>
-        <div className="absolute top-0 right-1/4 w-96 h-96 bg-purple-400 rounded-full mix-blend-multiply filter blur-xl opacity-20 animate-blob animation-delay-2000"></div>
-        <div className="absolute -bottom-8 left-1/2 w-96 h-96 bg-indigo-400 rounded-full mix-blend-multiply filter blur-xl opacity-20 animate-blob animation-delay-4000"></div>
-      </div>
-
-      {/* Glassmorphism card */}
-      <Card className="w-full max-w-md relative z-10 backdrop-blur-xl bg-white/80 dark:bg-gray-900/80 border-white/20 shadow-2xl">
-        <div className="absolute inset-0 bg-gradient-to-br from-white/50 to-transparent rounded-lg"></div>
-        <CardHeader className="relative space-y-1 pb-6">
-          <div className="flex items-center justify-center mb-4">
-            <div className="p-3 rounded-full bg-gradient-to-br from-blue-500 to-indigo-600 shadow-lg">
-              <Lock className="h-6 w-6 text-white" />
+      {isLoading && <PremiumLoadingOverlay message="Loggar in..." variant="neutral" />}
+      <AuthPageShell>
+      <AuthCard className="w-full">
+        <CardHeader className="space-y-1 pb-6">
+          <div className="mb-4 flex items-center justify-center">
+            <div className="rounded-2xl bg-stone-100 p-3.5 ring-1 ring-stone-200/80">
+              <Lock className="h-6 w-6 text-stone-700" />
             </div>
           </div>
-          <CardTitle className="text-3xl font-bold text-center bg-gradient-to-r from-blue-600 to-indigo-600 bg-clip-text text-transparent">
+          <CardTitle className="text-center text-3xl font-semibold tracking-tight text-stone-900">
             Välkommen tillbaka
           </CardTitle>
-          <CardDescription className="text-center text-base">
+          <CardDescription className="text-center text-base text-stone-500">
             Logga in för att fortsätta
           </CardDescription>
         </CardHeader>
-        <CardContent className="relative space-y-6">
+        <CardContent className="space-y-6">
           {oauthNotRegistered && (
             <div
-              className="rounded-lg border border-amber-200 bg-amber-50 dark:border-amber-900 dark:bg-amber-950/40 p-4 text-sm text-amber-900 dark:text-amber-100 space-y-3"
+              className="space-y-3 rounded-xl border border-amber-200/90 bg-amber-50 p-4 text-sm text-amber-950"
               role="alert"
             >
               <p className="font-medium leading-relaxed">{oauthNotRegistered.message}</p>
-              <Button asChild variant="default" className="w-full sm:w-auto">
+              <Button
+                asChild
+                className="w-full bg-stone-900 text-white hover:bg-stone-800 sm:w-auto"
+              >
                 <Link to="/register">Skapa konto / registrera dig</Link>
               </Button>
             </div>
           )}
           <form onSubmit={handleSubmit} className="space-y-5">
             <div className="space-y-2">
-              <Label htmlFor="email" className="text-sm font-medium flex items-center gap-2">
-                <Mail className="h-4 w-4 text-muted-foreground" />
+              <Label htmlFor="email" className="flex items-center gap-2 text-sm font-medium text-stone-700">
+                <Mail className="h-4 w-4 text-stone-500" />
                 E-post
               </Label>
               <div className="relative">
@@ -191,13 +186,13 @@ export default function Login() {
                   placeholder="din@epost.se"
                 required
                 disabled={isLoading}
-                  className="h-12 pl-4 pr-4 bg-white/50 dark:bg-gray-800/50 border-gray-200 dark:border-gray-700 focus:border-blue-500 focus:ring-2 focus:ring-blue-500/20 transition-all duration-200"
+                  className={cn('h-12 pl-4 pr-4', authInputClassName)}
               />
               </div>
             </div>
             <div className="space-y-2">
-              <Label htmlFor="password" className="text-sm font-medium flex items-center gap-2">
-                <Lock className="h-4 w-4 text-muted-foreground" />
+              <Label htmlFor="password" className="flex items-center gap-2 text-sm font-medium text-stone-700">
+                <Lock className="h-4 w-4 text-stone-500" />
                 Lösenord
               </Label>
               <div className="relative">
@@ -209,27 +204,27 @@ export default function Login() {
                   placeholder="Ditt lösenord"
                   required
                   disabled={isLoading}
-                  className="h-12 pl-4 pr-12 bg-white/50 dark:bg-gray-800/50 border-gray-200 dark:border-gray-700 focus:border-blue-500 focus:ring-2 focus:ring-blue-500/20 transition-all duration-200"
+                  className={cn('h-12 pl-4 pr-12', authInputClassName)}
                 />
                 <Button
                   type="button"
                   variant="ghost"
                   size="sm"
-                  className="absolute right-0 top-0 h-full px-3 py-2 hover:bg-transparent"
+                  className="absolute right-0 top-0 h-full px-3 py-2 text-stone-500 hover:bg-stone-100 hover:text-stone-800"
                   onClick={() => setShowPassword((prev) => !prev)}
                   disabled={isLoading}
                 >
                   {showPassword ? (
-                    <EyeOff className="h-5 w-5 text-muted-foreground" />
+                    <EyeOff className="h-5 w-5" />
                   ) : (
-                    <Eye className="h-5 w-5 text-muted-foreground" />
+                    <Eye className="h-5 w-5" />
                   )}
                 </Button>
               </div>
             </div>
-            <Button 
-              type="submit" 
-              className="w-full h-12 bg-gradient-to-r from-blue-600 to-indigo-600 hover:from-blue-700 hover:to-indigo-700 text-white font-semibold shadow-lg hover:shadow-xl transition-all duration-200 transform hover:scale-[1.02] disabled:transform-none disabled:opacity-70" 
+            <Button
+              type="submit"
+              className="h-12 w-full bg-stone-900 font-semibold text-white shadow-md transition-all hover:bg-stone-800 hover:shadow-lg"
               disabled={isLoading}
             >
               {isLoading ? (
@@ -245,19 +240,17 @@ export default function Login() {
 
           <div className="relative my-6">
             <div className="absolute inset-0 flex items-center">
-              <span className="w-full border-t border-gray-300 dark:border-gray-700" />
+              <span className="w-full border-t border-stone-200" />
             </div>
-            <div className="relative flex justify-center text-xs uppercase">
-              <span className="bg-white/80 dark:bg-gray-900/80 px-2 text-muted-foreground">
-                Eller fortsätt med
-              </span>
+            <div className="relative flex justify-center text-xs font-medium uppercase tracking-wide text-stone-400">
+              <span className="bg-white px-3">Eller fortsätt med</span>
             </div>
           </div>
 
           <Button
             type="button"
             variant="outline"
-            className="w-full h-12 bg-white dark:bg-gray-800 hover:bg-gray-50 dark:hover:bg-gray-700 border-gray-300 dark:border-gray-600"
+            className="h-12 w-full border-stone-200 bg-white text-stone-700 shadow-sm hover:bg-stone-50"
             onClick={handleOAuthClick}
             disabled={isLoading || isOAuthLoading !== null}
           >
@@ -284,35 +277,13 @@ export default function Login() {
 
           <div className="mt-6 space-y-2 text-center text-sm">
             <div>
-              <span className="text-muted-foreground">För att registrera dig, skanna QR-koden i personalrummet.</span>
+              <span className="text-stone-500">För att registrera dig, skanna QR-koden i personalrummet.</span>
             </div>
           </div>
         </CardContent>
-      </Card>
+      </AuthCard>
 
-      <style>{`
-        @keyframes blob {
-          0%, 100% {
-            transform: translate(0, 0) scale(1);
-          }
-          33% {
-            transform: translate(30px, -50px) scale(1.1);
-          }
-          66% {
-            transform: translate(-20px, 20px) scale(0.9);
-          }
-        }
-        .animate-blob {
-          animation: blob 7s infinite;
-        }
-        .animation-delay-2000 {
-          animation-delay: 2s;
-        }
-        .animation-delay-4000 {
-          animation-delay: 4s;
-        }
-      `}</style>
-    </div>
+      </AuthPageShell>
     </>
   )
 }

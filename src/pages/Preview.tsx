@@ -224,7 +224,7 @@ export default function Preview() {
 
   if (isLoading) {
     return (
-      <div className="min-h-screen bg-background p-4">
+      <div className="min-h-screen flex-1 bg-background p-4 md:p-6">
         <div className="container mx-auto max-w-4xl">
           <div className="text-center">Laddar...</div>
         </div>
@@ -234,7 +234,7 @@ export default function Preview() {
 
   if (!reportData) {
     return (
-      <div className="min-h-screen bg-background p-4">
+      <div className="min-h-screen flex-1 bg-background p-4 md:p-6">
         <div className="container mx-auto max-w-4xl">
           <Card>
             <CardHeader>
@@ -315,7 +315,7 @@ export default function Preview() {
   }, 0)
 
   return (
-    <div className="min-h-screen bg-background p-4">
+    <div className="min-h-screen flex-1 bg-background p-4 md:p-6">
       <div className="container mx-auto max-w-4xl">
         <div className="mb-4">
           <Button
@@ -390,7 +390,7 @@ export default function Preview() {
                         {/* Work Entries */}
                         {dateWorkEntries.length > 0 && (
                           <div>
-                            <h4 className="text-sm font-semibold text-blue-700 dark:text-blue-400 mb-2">Arbete</h4>
+                            <h4 className="mb-2 text-sm font-semibold text-primary">Arbete</h4>
                             <div className="space-y-2">
                               {dateWorkEntries.map((entry) => {
                                 if (!entry.time_from || !entry.time_to) return null
@@ -434,7 +434,7 @@ export default function Preview() {
                         {/* Leave Entries */}
                         {dateLeaveEntries.length > 0 && (
                           <div>
-                            <h4 className="text-sm font-semibold text-green-700 dark:text-green-400 mb-2">Ledighet</h4>
+                            <h4 className="mb-2 text-sm font-semibold text-emerald-700 dark:text-emerald-400">Ledighet</h4>
                             <div className="space-y-2">
                               {dateLeaveEntries.map((entry) => {
                                 if (entry.is_full_day_leave) {
@@ -523,11 +523,11 @@ export default function Preview() {
                 <div className="border-t pt-4 mt-6 space-y-2">
                   <h3 className="text-lg font-semibold">Totalt för månaden</h3>
                   <div className="flex items-center justify-between">
-                    <span className="text-base text-blue-700 dark:text-blue-400">Arbetade timmar:</span>
+                    <span className="text-base text-primary">Arbetade timmar:</span>
                     <span className="text-base font-semibold">{totalWorkedHours.toFixed(1)} timmar</span>
                   </div>
                   <div className="flex items-center justify-between">
-                    <span className="text-base text-green-700 dark:text-green-400">Ledighetstimmar:</span>
+                    <span className="text-base text-emerald-700 dark:text-emerald-400">Ledighetstimmar:</span>
                     <span className="text-base font-semibold">{totalLeaveHours.toFixed(1)} timmar</span>
                   </div>
                   <div className="flex items-center justify-between">
