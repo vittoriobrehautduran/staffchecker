@@ -47,7 +47,7 @@ npm run logs get-report
 Or use AWS Console → CloudWatch → Log Groups → `/aws/lambda/timrapport-get-report`
 
 ## What Changed
-- Lambda functions now use `getUserIdFromCognitoSession()` instead of Better Auth
+- Lambda functions now use `getUserIdFromCognitoSession()` for Cognito session mapping
 - Token verification uses Cognito JWT tokens
 - Users are automatically created in database when they first authenticate
 

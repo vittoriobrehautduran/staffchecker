@@ -279,6 +279,15 @@ export default function Login() {
             <div>
               <span className="text-stone-500">För att registrera dig, skanna QR-koden i personalrummet.</span>
             </div>
+            <div className="flex items-center justify-center gap-3 text-xs">
+              <Link to="/privacy" className="text-stone-600 underline underline-offset-4 hover:text-stone-900">
+                Integritetspolicy
+              </Link>
+              <span className="text-stone-300">|</span>
+              <Link to="/terms" className="text-stone-600 underline underline-offset-4 hover:text-stone-900">
+                Användarvillkor
+              </Link>
+            </div>
           </div>
         </CardContent>
       </AuthCard>

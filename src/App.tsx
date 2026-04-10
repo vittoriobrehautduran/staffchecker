@@ -8,6 +8,8 @@ import Report from '@/pages/Report'
 import Preview from '@/pages/Preview'
 import Admin from '@/pages/Admin'
 import Debug from '@/pages/Debug'
+import PrivacyPolicy from '@/pages/PrivacyPolicy'
+import TermsOfUse from '@/pages/TermsOfUse'
 
 function App() {
   return (
@@ -17,6 +19,8 @@ function App() {
         <Route path="/register" element={<Register />} />
         <Route path="/verify-email" element={<VerifyEmail />} />
         <Route path="/debug" element={<Debug />} />
+        <Route path="/privacy" element={<PrivacyPolicy />} />
+        <Route path="/terms" element={<TermsOfUse />} />
         <Route element={<ProtectedLayout />}>
           <Route path="/report" element={<Report />} />
           <Route path="/preview" element={<Preview />} />

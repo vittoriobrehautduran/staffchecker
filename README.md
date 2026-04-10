@@ -8,7 +8,7 @@ Appen använder:
 - **Frontend**: AWS Amplify (React + Vite)
 - **Backend**: AWS Lambda functions via API Gateway
 - **Databas**: Neon PostgreSQL
-- **Autentisering**: Better Auth
+- **Autentisering**: AWS Cognito
 
 ## Utveckling
 
@@ -32,9 +32,6 @@ SES_REGION=eu-north-1
 AWS_SES_ACCESS_KEY_ID=...
 AWS_SES_SECRET_ACCESS_KEY=...
 BOSS_EMAIL_ADDRESS=boss@example.com
-
-# Better Auth secret (generera med: openssl rand -base64 32)
-BETTER_AUTH_SECRET=...
 ```
 
 **Viktigt för DATABASE_URL:**
@@ -55,7 +52,7 @@ npm run dev
   VITE_API_BASE_URL=https://ywqlyoek80.execute-api.eu-north-1.amazonaws.com/prod
   ```
 - Alla API-anrop går till din riktiga API Gateway (Lambda-funktioner körs i AWS)
-- Detta är liknande `netlify dev` men använder AWS Lambda istället
+- Detta liknar lokal serverkörning men använder AWS Lambda istället
 
 **OBS:** 
 - Du kan inte köra Lambda-funktionerna lokalt enkelt (kräver AWS SAM eller Docker)
@@ -82,15 +79,16 @@ npm run build
 
 ### Backend (AWS Lambda)
 
-Alla Lambda-funktioner finns i `lambda/` mappen. Se `AWS_MIGRATION.md` för detaljerade instruktioner om hur du:
+Alla Lambda-funktioner finns i `lambda/` mappen.
 - Skapar Lambda-funktioner
 - Konfigurerar API Gateway
 - Sätter miljövariabler i Lambda
 
 **Viktiga miljövariabler för Lambda:**
 - `DATABASE_URL`
-- `BETTER_AUTH_SECRET`
-- `BETTER_AUTH_URL` (din Amplify frontend URL)
+- `COGNITO_USER_POOL_ID`
+- `COGNITO_CLIENT_ID`
+- `COGNITO_REGION` (valfritt, annars används `AWS_REGION`)
 - `SES_REGION`
 - `AWS_SES_ACCESS_KEY_ID`
 - `AWS_SES_SECRET_ACCESS_KEY`

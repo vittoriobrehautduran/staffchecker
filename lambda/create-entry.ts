@@ -56,7 +56,7 @@ export const handler = async (
   }
 
   try {
-    // Get user ID from Better Auth session
+    // Resolve internal user ID from Cognito-authenticated request
     let userId: number | null = null
     try {
       userId = await getUserIdFromCognitoSession(event)

@@ -372,7 +372,7 @@ export default function Report() {
         return 'bg-muted text-muted-foreground'
       }
       if (hasLeave) {
-        return 'bg-emerald-500/15 text-emerald-800 dark:text-emerald-300'
+        return 'bg-emerald-600/[0.045] text-emerald-700/80 dark:text-emerald-400/65'
       }
       if (hasCompensation) {
         return 'bg-orange-500/15 text-orange-800 dark:text-orange-300'
@@ -427,7 +427,7 @@ export default function Report() {
       if (dayData.reportStatus === 'submitted') {
         classes.push('!bg-muted/90')
       } else if (hasLeave) {
-        classes.push('!bg-emerald-500/12')
+        classes.push('!bg-emerald-600/[0.04]')
       } else if (hasCompensation) {
         classes.push('!bg-orange-500/12')
       } else {

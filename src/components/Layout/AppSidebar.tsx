@@ -10,7 +10,7 @@ import {
   DropdownMenuSeparator,
   DropdownMenuTrigger,
 } from '@/components/ui/dropdown-menu'
-import { Calendar, Eye, LogOut, Settings, Shield, X } from 'lucide-react'
+import { Calendar, Eye, FileText, LogOut, Settings, Shield, X } from 'lucide-react'
 import { SettingsDialog } from './SettingsDialog'
 
 type AppSidebarProps = {
@@ -117,6 +117,14 @@ export function AppSidebar({ mobileOpen, onMobileOpenChange }: AppSidebarProps) 
             <DropdownMenuItem onClick={() => setIsSettingsOpen(true)}>
               <Settings className="mr-2 h-4 w-4" />
               Inställningar
+            </DropdownMenuItem>
+            <DropdownMenuItem onClick={() => navigate('/privacy')}>
+              <FileText className="mr-2 h-4 w-4" />
+              Integritetspolicy
+            </DropdownMenuItem>
+            <DropdownMenuItem onClick={() => navigate('/terms')}>
+              <FileText className="mr-2 h-4 w-4" />
+              Användarvillkor
             </DropdownMenuItem>
             <DropdownMenuSeparator />
             <DropdownMenuItem onClick={handleSignOut} className="text-destructive focus:text-destructive">

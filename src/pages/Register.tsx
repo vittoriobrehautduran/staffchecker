@@ -1,5 +1,5 @@
 import { useState, useEffect } from 'react'
-import { useNavigate, useSearchParams } from 'react-router-dom'
+import { Link, useNavigate, useSearchParams } from 'react-router-dom'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
@@ -19,6 +19,7 @@ export default function Register() {
   const [lastName, setLastName] = useState('')
   const [password, setPassword] = useState('')
   const [showPassword, setShowPassword] = useState(false)
+  const [hasAcceptedLegal, setHasAcceptedLegal] = useState(false)
   const [isLoading, setIsLoading] = useState(false)
   const [isValidatingToken, setIsValidatingToken] = useState(true)
   const [searchParams] = useSearchParams()
@@ -84,6 +85,15 @@ export default function Register() {
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault()
+
+    if (!hasAcceptedLegal) {
+      toast({
+        title: 'Acceptera villkoren',
+        description: 'Du behöver acceptera användarvillkor och integritetspolicy för att registrera konto.',
+        variant: 'destructive',
+      })
+      return
+    }
     
     // Show loading immediately
     setIsLoading(true)
@@ -116,7 +126,7 @@ export default function Register() {
       const errorMessage = error.message || ''
       const errorCode = error.code || ''
       
-      // Check for Better Auth error codes
+      // Check known registration error codes
       if (errorCode === 'USER_ALREADY_EXISTS_USE_ANOTHER_EMAIL' || 
           errorMessage.includes('already exists') || 
           errorMessage.includes('User already exists')) {
@@ -260,7 +270,7 @@ export default function Register() {
             <Button
               type="submit"
               className="h-12 w-full bg-stone-900 font-semibold text-white shadow-md transition-all hover:bg-stone-800 hover:shadow-lg"
-              disabled={isLoading}
+              disabled={isLoading || !hasAcceptedLegal}
             >
               {isLoading ? (
                 <div className="flex items-center gap-2">
@@ -271,6 +281,29 @@ export default function Register() {
                 'Registrera'
               )}
             </Button>
+
+            <div className="rounded-lg border border-stone-200 bg-stone-50/80 p-3 text-sm text-stone-700">
+              <label className="flex items-start gap-2">
+                <input
+                  type="checkbox"
+                  className="mt-0.5 h-4 w-4 rounded border-stone-300"
+                  checked={hasAcceptedLegal}
+                  onChange={(event) => setHasAcceptedLegal(event.target.checked)}
+                  disabled={isLoading}
+                />
+                <span className="leading-5">
+                  Jag har läst och accepterar{' '}
+                  <Link to="/terms" className="font-medium text-stone-900 underline underline-offset-4">
+                    användarvillkor
+                  </Link>{' '}
+                  samt{' '}
+                  <Link to="/privacy" className="font-medium text-stone-900 underline underline-offset-4">
+                    integritetspolicy
+                  </Link>
+                  .
+                </span>
+              </label>
+            </div>
           </form>
           <div className="mt-6 space-y-2 text-center text-sm">
             <div>

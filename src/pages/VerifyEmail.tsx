@@ -1,5 +1,5 @@
 import { useState, useEffect } from 'react'
-import { useNavigate } from 'react-router-dom'
+import { Link, useNavigate } from 'react-router-dom'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
@@ -202,6 +202,15 @@ export default function VerifyEmail() {
             >
               Skicka ny kod
             </button>
+            <div className="mt-3 flex items-center justify-center gap-3 text-xs">
+              <Link to="/privacy" className="text-stone-600 underline underline-offset-4 hover:text-stone-900">
+                Integritetspolicy
+              </Link>
+              <span className="text-stone-300">|</span>
+              <Link to="/terms" className="text-stone-600 underline underline-offset-4 hover:text-stone-900">
+                Användarvillkor
+              </Link>
+            </div>
           </div>
         </CardContent>
       </AuthCard>
