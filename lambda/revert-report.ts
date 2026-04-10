@@ -61,9 +61,10 @@ export const handler = async (
     }
 
     const body = JSON.parse(event.body || '{}')
+    const operation = body?.operation === 'delete_user_data' ? 'delete_user_data' : 'revert_report'
     const { userEmail, month, year } = body
 
-    if (!userEmail || !month || !year) {
+    if (!userEmail) {
       return {
         statusCode: 400,
         headers: {
@@ -71,26 +72,13 @@ export const handler = async (
           'Access-Control-Allow-Origin': origin,
           'Access-Control-Allow-Credentials': 'true',
         },
-        body: JSON.stringify({ message: 'userEmail, month, and year are required' }),
-      }
-    }
-
-    // Validate month and year
-    if (month < 1 || month > 12) {
-      return {
-        statusCode: 400,
-        headers: {
-          'Content-Type': 'application/json',
-          'Access-Control-Allow-Origin': origin,
-          'Access-Control-Allow-Credentials': 'true',
-        },
-        body: JSON.stringify({ message: 'Invalid month (must be 1-12)' }),
+        body: JSON.stringify({ message: 'userEmail is required' }),
       }
     }
 
     // Find the user
     const userResult = await sql`
-      SELECT id FROM users 
+      SELECT id, is_admin FROM users 
       WHERE email = ${userEmail.toLowerCase().trim()}
       LIMIT 1
     `
@@ -108,6 +96,63 @@ export const handler = async (
     }
 
     const userId = userResult[0].id
+
+    if (operation === 'delete_user_data') {
+      if (userResult[0].is_admin === true) {
+        return {
+          statusCode: 400,
+          headers: {
+            'Content-Type': 'application/json',
+            'Access-Control-Allow-Origin': origin,
+            'Access-Control-Allow-Credentials': 'true',
+          },
+          body: JSON.stringify({ message: 'Cannot delete an admin account' }),
+        }
+      }
+
+      await sql`
+        DELETE FROM users
+        WHERE id = ${userId}
+      `
+
+      return {
+        statusCode: 200,
+        headers: {
+          'Content-Type': 'application/json',
+          'Access-Control-Allow-Origin': origin,
+          'Access-Control-Allow-Credentials': 'true',
+        },
+        body: JSON.stringify({
+          message: 'User and related reports/entries deleted successfully',
+          userId,
+        }),
+      }
+    }
+
+    if (!month || !year) {
+      return {
+        statusCode: 400,
+        headers: {
+          'Content-Type': 'application/json',
+          'Access-Control-Allow-Origin': origin,
+          'Access-Control-Allow-Credentials': 'true',
+        },
+        body: JSON.stringify({ message: 'month and year are required for revert_report' }),
+      }
+    }
+
+    // Validate month and year
+    if (month < 1 || month > 12) {
+      return {
+        statusCode: 400,
+        headers: {
+          'Content-Type': 'application/json',
+          'Access-Control-Allow-Origin': origin,
+          'Access-Control-Allow-Credentials': 'true',
+        },
+        body: JSON.stringify({ message: 'Invalid month (must be 1-12)' }),
+      }
+    }
 
     // Find the report
     const reportResult = await sql`

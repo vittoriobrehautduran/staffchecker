@@ -17,6 +17,8 @@ export default function Admin() {
   const [month, setMonth] = useState('')
   const [year, setYear] = useState('')
   const [isReverting, setIsReverting] = useState(false)
+  const [deleteUserEmail, setDeleteUserEmail] = useState('')
+  const [isDeletingUser, setIsDeletingUser] = useState(false)
 
   useEffect(() => {
     if (!isSignedIn) {
@@ -110,6 +112,52 @@ export default function Admin() {
     }
   }
 
+  const handleDeleteUserData = async (e: React.FormEvent) => {
+    e.preventDefault()
+
+    if (!deleteUserEmail.trim()) {
+      toast({
+        title: 'Fält saknas',
+        description: 'Användarens e-postadress måste fyllas i',
+        variant: 'destructive',
+      })
+      return
+    }
+
+    const confirmed = window.confirm(
+      `Detta tar bort användaren ${deleteUserEmail.trim()} och alla rapporter/entries permanent. Vill du fortsätta?`
+    )
+    if (!confirmed) {
+      return
+    }
+
+    setIsDeletingUser(true)
+    try {
+      await apiRequest('/revert-report', {
+        method: 'POST',
+        body: JSON.stringify({
+          operation: 'delete_user_data',
+          userEmail: deleteUserEmail.trim().toLowerCase(),
+        }),
+      })
+
+      toast({
+        title: 'Användare borttagen',
+        description: 'Användaren och all kopplad data har tagits bort permanent',
+      })
+      setDeleteUserEmail('')
+    } catch (error: any) {
+      console.error('Error deleting user data:', error)
+      toast({
+        title: 'Kunde inte ta bort användare',
+        description: error.message || 'Ett fel uppstod',
+        variant: 'destructive',
+      })
+    } finally {
+      setIsDeletingUser(false)
+    }
+  }
+
   return (
     <div className="min-h-screen flex-1 bg-background p-4 md:p-6">
       <div className="container mx-auto max-w-2xl">
@@ -183,6 +231,47 @@ export default function Admin() {
               <p className="text-sm text-amber-950 dark:text-amber-100">
                 <strong>Obs:</strong> Detta kommer att återställa rapporten till utkast-status. 
                 Användaren kommer att kunna redigera och skicka rapporten igen.
+              </p>
+            </div>
+          </CardContent>
+        </Card>
+
+        <Card className="mt-6 border-destructive/40">
+          <CardHeader>
+            <CardTitle>Admin - Radera användare och all data</CardTitle>
+            <CardDescription>
+              Tar bort användarens konto i appens databas samt alla rapporter och entries permanent.
+            </CardDescription>
+          </CardHeader>
+          <CardContent>
+            <form onSubmit={handleDeleteUserData} className="space-y-4">
+              <div className="space-y-2">
+                <Label htmlFor="deleteUserEmail">Användarens e-postadress</Label>
+                <Input
+                  id="deleteUserEmail"
+                  type="email"
+                  value={deleteUserEmail}
+                  onChange={(e) => setDeleteUserEmail(e.target.value)}
+                  placeholder="user@example.com"
+                  required
+                  disabled={isDeletingUser}
+                />
+              </div>
+
+              <Button
+                type="submit"
+                variant="destructive"
+                className="w-full"
+                disabled={isDeletingUser}
+              >
+                {isDeletingUser ? 'Raderar användare...' : 'Radera användare och all data'}
+              </Button>
+            </form>
+
+            <div className="mt-6 rounded-md border border-destructive/30 bg-destructive/10 p-4">
+              <p className="text-sm text-destructive">
+                <strong>Varning:</strong> Denna åtgärd går inte att ångra. Användaren, rapporter och entries
+                tas bort permanent i appens databas.
               </p>
             </div>
           </CardContent>
