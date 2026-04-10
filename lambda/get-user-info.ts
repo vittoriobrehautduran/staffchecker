@@ -101,7 +101,7 @@ export const handler = async (
     }
 
     const user = userResult[0]
-    const theme = user.ui_theme === 'light' ? 'light' : 'dark'
+    const theme = user.ui_theme === 'dark' ? 'dark' : 'light'
 
     return {
       statusCode: 200,

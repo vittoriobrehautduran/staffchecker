@@ -9,7 +9,7 @@ interface User {
   name: string | null
   emailVerified: boolean
   isAdmin?: boolean
-  /** Synced from DB (`users.ui_theme`); default dark when unset. */
+  /** Synced from DB (`users.ui_theme`); default light when unset. */
   theme?: 'light' | 'dark'
 }
 
@@ -98,7 +98,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
           const { apiRequest } = await import('@/services/api')
           const userInfo = await apiRequest<{ isAdmin: boolean; theme?: string }>('/get-user-info')
           const resolvedTheme: 'light' | 'dark' =
-            userInfo?.theme === 'light' ? 'light' : 'dark'
+            userInfo?.theme === 'dark' ? 'dark' : 'light'
           if (userInfo && typeof userInfo.isAdmin === 'boolean') {
             setUser({ ...userData, isAdmin: userInfo.isAdmin, theme: resolvedTheme })
           } else {

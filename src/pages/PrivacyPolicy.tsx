@@ -18,10 +18,28 @@ export default function PrivacyPolicy() {
 
         <section className="space-y-6 rounded-xl border border-border bg-card p-5 sm:p-6">
           <div>
-            <h2 className="text-lg font-semibold">1. Personuppgiftsansvarig</h2>
+            <h2 className="text-lg font-semibold">1. Personuppgiftsansvarig och leverantör</h2>
             <p className="mt-2 text-sm leading-6 text-muted-foreground">
-              Tennisklubben är personuppgiftsansvarig för behandling av personuppgifter i Staffcheck. Kontakt:
-              klubbstyrelsen eller utsedd administrativ kontaktperson.
+              <strong>Tennisklubben</strong> är personuppgiftsansvarig för behandlingen av personuppgifter när
+              Staffcheck används i klubbens verksamhet (t.ex. timrapportering). Begäran om registerutdrag,
+              rättelse, radering eller andra rättigheter enligt GDPR riktas i första hand till klubbstyrelsen
+              eller den administratör som klubben utsett.
+            </p>
+            <p className="mt-3 text-sm leading-6 text-muted-foreground">
+              <strong>Brehaut Consulting</strong> har utvecklat Staffcheck och tillhandahåller tjänsten till
+              klubben. Brehaut Consulting är personuppgiftsbiträde och behandlar uppgifter enligt klubbens
+              instruktioner och personuppgiftsbiträdesavtal. Åtkomst till uppgifter sker endast i den
+              omfattning som krävs för drift, underhåll, support och utveckling av tjänsten.
+            </p>
+            <p className="mt-3 text-sm leading-6 text-muted-foreground">
+              Teknisk kontakt:{' '}
+              <a
+                href="mailto:contact@brehautconsulting.com"
+                className="font-medium text-primary underline underline-offset-2 hover:opacity-90"
+              >
+                contact@brehautconsulting.com
+              </a>
+              . Det ändrar inte att klubben är den du i första hand ska vända dig till som registrerad.
             </p>
           </div>
 
@@ -55,8 +73,10 @@ export default function PrivacyPolicy() {
           <div>
             <h2 className="text-lg font-semibold">5. Delning av uppgifter</h2>
             <p className="mt-2 text-sm leading-6 text-muted-foreground">
-              Uppgifter delas endast med leverantörer som behövs för drift av systemet (t.ex. hosting, e-post
-              eller databastjänster) och då med personuppgiftsbiträdesavtal (DPA).
+              Uppgifter delas med leverantörer som behövs för drift av systemet. Det omfattar Brehaut
+              Consulting som utvecklar och tillhandahåller appen, samt underleverantörer för t.ex. hosting,
+              e-post eller databas – i samtliga fall med personuppgiftsbiträdesavtal eller motsvarande
+              skyddsåtgärder enligt GDPR.
             </p>
           </div>
 
@@ -80,12 +100,9 @@ export default function PrivacyPolicy() {
           </div>
         </section>
 
-        <div className="mt-6 flex flex-wrap gap-4 text-sm">
+        <div className="mt-6 text-sm">
           <Link className="font-medium text-primary hover:underline" to="/terms">
             Läs användarvillkor
-          </Link>
-          <Link className="font-medium text-primary hover:underline" to="/login">
-            Till inloggning
           </Link>
         </div>
       </div>

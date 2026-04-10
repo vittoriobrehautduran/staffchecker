@@ -2,4 +2,4 @@
 ALTER TABLE users
   ADD COLUMN IF NOT EXISTS ui_theme VARCHAR(10);
 
-COMMENT ON COLUMN users.ui_theme IS 'light | dark; NULL means default (dark)';
+COMMENT ON COLUMN users.ui_theme IS 'light | dark; NULL means default (light)';

@@ -11,7 +11,8 @@ export default function TermsOfUse() {
           <h1 className="mt-2 text-3xl font-semibold tracking-tight">Användarvillkor</h1>
           <p className="mt-3 max-w-2xl text-sm text-muted-foreground">
             Dessa villkor reglerar hur appen får användas av personal och administrativ personal inom
-            tennisklubben.
+            tennisklubben. Appen tillhandahålls tekniskt av Brehaut Consulting åt klubben; din användning
+            regleras främst i förhållande till klubben som arbetsgivare eller uppdragsgivare.
           </p>
           <p className="mt-2 text-sm text-muted-foreground">Senast uppdaterad: {lastUpdated}</p>
         </header>
@@ -20,7 +21,10 @@ export default function TermsOfUse() {
           <div>
             <h2 className="text-lg font-semibold">1. Syfte med appen</h2>
             <p className="mt-2 text-sm leading-6 text-muted-foreground">
-              Appen används för rapportering och administration av arbetade timmar samt intern planering.
+              Appen används för rapportering och administration av arbetade timmar samt intern planering i
+              klubben. Leverantören (Brehaut Consulting) tillhandahåller plattformen enligt avtal med klubben
+              och får behandla personuppgifter enligt integritetspolicyn och GDPR som personuppgiftsbiträde åt
+              klubben.
             </p>
           </div>
 
@@ -66,12 +70,9 @@ export default function TermsOfUse() {
           </div>
         </section>
 
-        <div className="mt-6 flex flex-wrap gap-4 text-sm">
+        <div className="mt-6 text-sm">
           <Link className="font-medium text-primary hover:underline" to="/privacy">
             Läs integritetspolicy
-          </Link>
-          <Link className="font-medium text-primary hover:underline" to="/login">
-            Till inloggning
           </Link>
         </div>
       </div>

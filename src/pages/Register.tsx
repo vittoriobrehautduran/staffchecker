@@ -282,22 +282,35 @@ export default function Register() {
               )}
             </Button>
 
-            <div className="rounded-lg border border-stone-200 bg-stone-50/80 p-3 text-sm text-stone-700">
-              <label className="flex items-start gap-2">
-                <input
-                  type="checkbox"
-                  className="mt-0.5 h-4 w-4 rounded border-stone-300"
-                  checked={hasAcceptedLegal}
-                  onChange={(event) => setHasAcceptedLegal(event.target.checked)}
-                  disabled={isLoading}
-                />
-                <span className="leading-5">
+            <div className="rounded-lg border border-stone-200 bg-stone-50/80 p-4 text-sm text-stone-700">
+              <label className="flex items-start gap-5 sm:gap-6">
+                <span className="flex shrink-0 items-center justify-center rounded-md border border-stone-200 bg-white p-2 shadow-sm">
+                  <input
+                    type="checkbox"
+                    className="h-5 w-5 cursor-pointer rounded border-stone-400 text-stone-900 accent-stone-900"
+                    checked={hasAcceptedLegal}
+                    onChange={(event) => setHasAcceptedLegal(event.target.checked)}
+                    disabled={isLoading}
+                    aria-label="Acceptera användarvillkor och integritetspolicy"
+                  />
+                </span>
+                <span className="min-w-0 flex-1 pt-0.5 leading-relaxed">
                   Jag har läst och accepterar{' '}
-                  <Link to="/terms" className="font-medium text-stone-900 underline underline-offset-4">
+                  <Link
+                    to="/terms"
+                    target="_blank"
+                    rel="noopener noreferrer"
+                    className="font-medium text-stone-900 underline underline-offset-4 hover:text-stone-700"
+                  >
                     användarvillkor
                   </Link>{' '}
                   samt{' '}
-                  <Link to="/privacy" className="font-medium text-stone-900 underline underline-offset-4">
+                  <Link
+                    to="/privacy"
+                    target="_blank"
+                    rel="noopener noreferrer"
+                    className="font-medium text-stone-900 underline underline-offset-4 hover:text-stone-700"
+                  >
                     integritetspolicy
                   </Link>
                   .

@@ -6,7 +6,7 @@
       (function () {
         try {
           var t = localStorage.getItem('staffcheck-theme');
-          document.documentElement.classList.toggle('dark', t !== 'light');
+          document.documentElement.classList.toggle('dark', t === 'dark');
         } catch (e) {}
       })();
     </script>

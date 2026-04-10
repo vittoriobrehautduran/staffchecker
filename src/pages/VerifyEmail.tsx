@@ -91,7 +91,7 @@ export default function VerifyEmail() {
       localStorage.removeItem('registration_timestamp')
       
       // Session will be updated automatically by Cognito
-      navigate('/report')
+      navigate('/dashboard')
     } catch (error: any) {
       console.error('Verification error:', error)
       toast({
@@ -203,11 +203,21 @@ export default function VerifyEmail() {
               Skicka ny kod
             </button>
             <div className="mt-3 flex items-center justify-center gap-3 text-xs">
-              <Link to="/privacy" className="text-stone-600 underline underline-offset-4 hover:text-stone-900">
+              <Link
+                to="/privacy"
+                target="_blank"
+                rel="noopener noreferrer"
+                className="text-stone-600 underline underline-offset-4 hover:text-stone-900"
+              >
                 Integritetspolicy
               </Link>
               <span className="text-stone-300">|</span>
-              <Link to="/terms" className="text-stone-600 underline underline-offset-4 hover:text-stone-900">
+              <Link
+                to="/terms"
+                target="_blank"
+                rel="noopener noreferrer"
+                className="text-stone-600 underline underline-offset-4 hover:text-stone-900"
+              >
                 Användarvillkor
               </Link>
             </div>

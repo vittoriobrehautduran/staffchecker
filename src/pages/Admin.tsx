@@ -33,7 +33,7 @@ export default function Admin() {
         description: 'Du har inte behörighet att komma åt denna sida',
         variant: 'destructive',
       })
-      navigate('/report')
+      navigate('/dashboard')
     }
   }, [isSignedIn, user, navigate, toast])
 
@@ -162,9 +162,9 @@ export default function Admin() {
     <div className="min-h-screen flex-1 bg-background p-4 md:p-6">
       <div className="container mx-auto max-w-2xl">
         <div className="mb-4">
-          <Button variant="ghost" onClick={() => navigate('/report')}>
+          <Button variant="ghost" onClick={() => navigate('/dashboard')}>
             <ArrowLeft className="h-4 w-4 mr-2" />
-            Tillbaka till kalender
+            Till översikt
           </Button>
         </div>
 

@@ -19,7 +19,7 @@ function readStoredTheme(): ThemeMode {
   } catch {
     // ignore
   }
-  return 'dark'
+  return 'light'
 }
 
 function applyDomTheme(mode: ThemeMode) {
@@ -45,7 +45,7 @@ export function ThemeProvider({ children }: ThemeProviderProps) {
       return
     }
 
-    const t = user.theme === 'light' ? 'light' : 'dark'
+    const t = user.theme === 'dark' ? 'dark' : 'light'
     setThemeState(t)
     try {
       localStorage.setItem(STORAGE_KEY, t)
