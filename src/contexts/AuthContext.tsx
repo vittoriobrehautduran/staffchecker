@@ -189,19 +189,46 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   }, [])
 
   const signIn = async (email: string, password: string) => {
-    try {
+    const normalizedEmail = email.trim().toLowerCase()
+
+    const runSignIn = async () => {
       const { isSignedIn } = await cognitoSignIn({
-        username: email.trim(),
+        username: normalizedEmail,
         password,
       })
-
-      if (isSignedIn) {
-        await fetchUser()
-      } else {
+      if (!isSignedIn) {
         throw new Error('Inloggning misslyckades')
       }
+      await fetchUser()
+    }
+
+    try {
+      await runSignIn()
     } catch (error: any) {
       console.error('Sign in error:', error)
+
+      if (error.name === 'UserAlreadyAuthenticatedException') {
+        try {
+          const session = await fetchAuthSession()
+          const payload = session.tokens?.idToken?.payload as Record<string, unknown> | undefined
+          const activeEmail =
+            typeof payload?.email === 'string' ? payload.email.toLowerCase().trim() : null
+
+          if (activeEmail === normalizedEmail) {
+            // Session already matches the requested account; just hydrate app state.
+            await fetchUser()
+            return
+          }
+
+          // Another user is already signed in. Clear local session and retry once.
+          await cognitoSignOut()
+          await runSignIn()
+          return
+        } catch (recoveryError: any) {
+          console.error('Sign in recovery error:', recoveryError)
+          throw new Error(recoveryError?.message || 'Kunde inte byta konto. Logga ut och försök igen.')
+        }
+      }
       
       let errorMessage = 'Inloggning misslyckades'
       if (error.name === 'NotAuthorizedException') {
