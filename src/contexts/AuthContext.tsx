@@ -1,5 +1,6 @@
 import { createContext, useContext, useState, useEffect, useRef, useCallback, type ReactNode } from 'react'
 import { signIn as cognitoSignIn, signUp as cognitoSignUp, signOut as cognitoSignOut, getCurrentUser, fetchAuthSession, confirmSignUp, resendSignUpCode, updatePassword, signInWithRedirect } from 'aws-amplify/auth'
+import { Hub } from 'aws-amplify/utils'
 import '@/lib/cognito-config'
 
 interface User {
@@ -43,6 +44,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   const [user, setUser] = useState<User | null>(null)
   const [isLoading, setIsLoading] = useState(true)
   const isMountedRef = useRef(true)
+  const oauthReturnHandledRef = useRef(false)
 
   const patchUser = useCallback((partial: Partial<Pick<User, 'theme' | 'isAdmin'>>) => {
     setUser((prev) => (prev ? { ...prev, ...partial } : null))
@@ -153,26 +155,46 @@ export function AuthProvider({ children }: { children: ReactNode }) {
 
   useEffect(() => {
     isMountedRef.current = true
-    
+
+    const completeOAuthReturn = async () => {
+      if (oauthReturnHandledRef.current) {
+        return
+      }
+      oauthReturnHandledRef.current = true
+
+      // Exchange ?code= for tokens before getCurrentUser(); otherwise /oauth2/token can 400.
+      for (let attempt = 0; attempt < 4; attempt += 1) {
+        try {
+          await fetchAuthSession({ forceRefresh: attempt > 0 })
+          break
+        } catch (e) {
+          if (attempt === 3) {
+            console.error('OAuth token exchange failed after retries:', e)
+          } else {
+            await new Promise((r) => setTimeout(r, 250 * (attempt + 1)))
+          }
+        }
+      }
+      await fetchUser()
+      const newUrl = window.location.pathname
+      window.history.replaceState({}, '', newUrl)
+    }
+
     // Check if we're returning from OAuth redirect
     const urlParams = new URLSearchParams(window.location.search)
     const code = urlParams.get('code')
     const state = urlParams.get('state')
-    
+
+    const hubRemove = Hub.listen('auth', ({ payload }) => {
+      if (payload.event === 'signInWithRedirect') {
+        void completeOAuthReturn()
+      }
+    })
+
     if (code || state) {
-      // User is returning from OAuth redirect
-      // Amplify will automatically exchange the code for tokens
-      // Wait a bit for Amplify to process, then fetch user
-      setTimeout(() => {
-        fetchUser().then(() => {
-          // Clean up URL by removing OAuth parameters
-          const newUrl = window.location.pathname
-          window.history.replaceState({}, '', newUrl)
-        })
-      }, 500)
+      void completeOAuthReturn()
     } else {
-      // Normal page load, fetch user immediately
-    fetchUser()
+      fetchUser()
     }
 
     // Listen for auth state changes
@@ -184,6 +206,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
 
     return () => {
       isMountedRef.current = false
+      hubRemove()
       clearInterval(interval)
     }
   }, [])

@@ -9,13 +9,19 @@ const getCurrentOrigin = (): string => {
   return ''
 }
 
+// Cognito callback URLs must match Hosted UI + app client settings exactly (including trailing slash).
+const normalizeRootUrl = (url: string): string => {
+  const trimmed = url.trim().replace(/\/+$/, '')
+  return trimmed ? `${trimmed}/` : ''
+}
+
 const buildRedirectUrls = (envUrl: string | undefined): string[] => {
   const urls = [
-    getCurrentOrigin(),
-    envUrl || '',
-    'https://staffcheck.spangatbk.se',
-    'https://staging.d3jub8c52hgrc6.amplifyapp.com',
-    'http://localhost:5173',
+    normalizeRootUrl(getCurrentOrigin()),
+    normalizeRootUrl(envUrl || ''),
+    'https://staffcheck.spangatbk.se/',
+    'https://staging.d3jub8c52hgrc6.amplifyapp.com/',
+    'http://localhost:5173/',
   ].filter(Boolean)
 
   // Keep order stable but remove duplicates so Cognito/Amplify uses the active origin first.
@@ -43,9 +49,9 @@ const cognitoConfig = {
   },
 }
 
-// Configure Amplify
+// Browser SPA only: ssr:true can break OAuth PKCE / token exchange in some setups.
 Amplify.configure(cognitoConfig, {
-  ssr: true,
+  ssr: false,
 })
 
 export default cognitoConfig
