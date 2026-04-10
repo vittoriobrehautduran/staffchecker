@@ -195,9 +195,8 @@ export async function getUserIdFromCognitoSession(event: APIGatewayProxyEvent): 
       return result[0].id
     }
 
-    // Fallback: Try to get email from token and link existing user
-    // IMPORTANT: We no longer auto-create users here.
-    // If the email is not already in the users table, we treat the user as unauthorized.
+    // Fallback: Try to get email from token and link existing user.
+    // If user does not exist yet, auto-provision a minimal user record from Cognito claims.
     const authHeader = event.headers?.Authorization || event.headers?.authorization || ''
     const token = authHeader.startsWith('Bearer ') ? authHeader.substring(7) : 
                   event.queryStringParameters?._token || null
@@ -207,6 +206,7 @@ export async function getUserIdFromCognitoSession(event: APIGatewayProxyEvent): 
       const email = payload?.email
       const givenName = payload?.given_name || payload?.['given_name'] || ''
       const familyName = payload?.family_name || payload?.['family_name'] || ''
+      const fullName = payload?.name || payload?.['name'] || ''
       
       if (email) {
         console.log(`getUserIdFromCognitoSession: Trying fallback lookup by email: ${email}`)
@@ -226,10 +226,41 @@ export async function getUserIdFromCognitoSession(event: APIGatewayProxyEvent): 
           console.log(`getUserIdFromCognitoSession: Found user by email, updated cognito_user_id`)
           return emailResult[0].id
         }
-        // If email is not found, we intentionally DO NOT create a new user.
-        console.warn(
-          'getUserIdFromCognitoSession: Email from Cognito token is not registered in users table. Treating as unauthorized.'
-        )
+
+        const normalizedGivenName = String(givenName || '').trim()
+        const normalizedFamilyName = String(familyName || '').trim()
+        const fallbackFullName = String(fullName || '').trim()
+
+        const derivedFirstName =
+          normalizedGivenName ||
+          (fallbackFullName ? fallbackFullName.split(' ')[0] : '') ||
+          'Okänd'
+        const derivedLastName =
+          normalizedFamilyName ||
+          (fallbackFullName ? fallbackFullName.split(' ').slice(1).join(' ') : '') ||
+          'Användare'
+
+        const createdUser = await sql`
+          INSERT INTO users (name, last_name, email, cognito_user_id)
+          VALUES (
+            ${derivedFirstName},
+            ${derivedLastName},
+            ${email.toLowerCase().trim()},
+            ${cognitoUserId}
+          )
+          ON CONFLICT (email)
+          DO UPDATE SET
+            cognito_user_id = COALESCE(users.cognito_user_id, EXCLUDED.cognito_user_id),
+            updated_at = CURRENT_TIMESTAMP
+          RETURNING id
+        `
+
+        if (createdUser.length > 0) {
+          console.log('getUserIdFromCognitoSession: Auto-provisioned user from Cognito claims')
+          return createdUser[0].id
+        }
+
+        console.warn('getUserIdFromCognitoSession: Could not auto-provision user')
         return null
       }
     }
