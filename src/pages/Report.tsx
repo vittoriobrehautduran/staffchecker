@@ -90,6 +90,17 @@ export default function Report() {
   const loadingRef = useRef(false)
   const lastLoadedMonthRef = useRef<string | null>(null)
   const notificationTimeoutsRef = useRef<NodeJS.Timeout[]>([])
+  const [compactHourLabels, setCompactHourLabels] = useState(
+    () => typeof window !== 'undefined' && window.matchMedia('(max-width: 640px)').matches
+  )
+
+  useEffect(() => {
+    const mq = window.matchMedia('(max-width: 640px)')
+    const apply = () => setCompactHourLabels(mq.matches)
+    apply()
+    mq.addEventListener('change', apply)
+    return () => mq.removeEventListener('change', apply)
+  }, [])
 
   if (!isSignedIn) {
     navigate('/login')
@@ -369,10 +380,14 @@ export default function Report() {
       return 'bg-primary/15 text-primary'
     })()
 
+    const hoursLabel = `${totalHours.toFixed(1)}${compactHourLabels ? '' : 'h'}`
+
     return (
-      <div className="mt-2 text-center w-full">
-        <div className={`text-sm font-bold px-2 py-1 rounded-md ${badgeClassName}`}>
-          {totalHours.toFixed(1)}h
+      <div className="mt-2 w-full text-center">
+        <div
+          className={`rounded-md px-1 py-0.5 text-xs font-bold sm:px-2 sm:py-1 sm:text-sm ${badgeClassName}`}
+        >
+          {hoursLabel}
         </div>
         {dayData.entries.length > 1 && (
           <div className="text-xs text-muted-foreground mt-1 font-medium">
@@ -496,8 +511,8 @@ export default function Report() {
         )}
       </div>
 
-      <div className="flex flex-1 justify-center px-2 py-4 sm:px-4 sm:py-6 md:px-6 lg:py-8">
-        <div className="flex w-full max-w-7xl flex-col rounded-xl border border-border bg-card p-3 shadow-lg shadow-black/20 sm:rounded-2xl sm:p-5 md:p-8">
+      <div className="flex flex-1 justify-center px-1 py-3 sm:px-4 sm:py-6 md:px-6 lg:py-8">
+        <div className="flex w-full max-w-7xl flex-col rounded-xl border border-border bg-card p-2 shadow-lg shadow-black/20 sm:rounded-2xl sm:p-5 md:p-8">
           <Calendar
             onChange={handleDateClick}
             value={selectedDate}

@@ -336,6 +336,31 @@
 }
 
 @media (max-width: 640px) {
+  /* Narrower week column than default 1/8 width so day cells get more horizontal space. */
+  .report-dashboard-calendar.react-calendar .react-calendar__month-view__weekNumbers {
+    flex: 0 0 30px !important;
+    max-width: 34px !important;
+    padding-right: 4px !important;
+    gap: 2px !important;
+  }
+
+  .report-dashboard-calendar.react-calendar .react-calendar__month-view__weekNumbers::before {
+    font-size: 8px;
+    letter-spacing: 0.02em;
+    padding-left: 0;
+    padding-right: 0;
+  }
+
+  .report-dashboard-calendar.react-calendar .react-calendar__month-view__weekNumbers__weekNumber {
+    min-height: 100px !important;
+    height: 100px !important;
+    font-size: 10px !important;
+  }
+
+  .report-dashboard-calendar.react-calendar .react-calendar__month-view__days {
+    gap: 2px;
+  }
+
   .report-dashboard-calendar.react-calendar .react-calendar__navigation {
     height: 48px;
     gap: 12px;
@@ -356,8 +381,8 @@
 
   .report-dashboard-calendar.react-calendar .react-calendar__tile {
     min-height: 100px;
-    padding: 8px 4px;
-    font-size: 13px;
+    padding: 8px 2px;
+    font-size: 12px;
   }
 
   .report-dashboard-calendar.react-calendar .react-calendar__month-view__weekdays {
@@ -366,12 +391,7 @@
   }
 
   .report-dashboard-calendar.react-calendar .react-calendar__month-view__weekdays__weekday {
-    padding: 6px 2px;
-  }
-
-  .report-dashboard-calendar.react-calendar .react-calendar__month-view__weekNumbers__weekNumber {
-    min-height: 100px !important;
-    height: 100px !important;
+    padding: 6px 1px;
   }
 }
 
