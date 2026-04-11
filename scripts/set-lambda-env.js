@@ -1,3 +1,9 @@
+/**
+ * Pushar miljövariabler från .env.local till listade Lambdas.
+ * - timrapport-submit-report (prod): BOSS_EMAIL_ADDRESS ändras aldrig härifrån (behåll värdet i AWS).
+ * - timrapport-submit-report-staging: BOSS från BOSS_EMAIL_ADDRESS_STAGING eller BOSS_EMAIL_ADDRESS.
+ * - Saknad Lambda: varning + hoppa över (deploya funktionen först).
+ */
 import { LambdaClient, UpdateFunctionConfigurationCommand, GetFunctionConfigurationCommand } from '@aws-sdk/client-lambda'
 import { readFileSync, existsSync } from 'fs'
 import { join, dirname } from 'path'
@@ -70,12 +76,11 @@ const commonEnvVars = {
   COGNITO_CLIENT_ID: process.env.COGNITO_CLIENT_ID,
 }
 
-// Environment variables for email functions (SES for reports)
-const emailEnvVars = {
+// SES + keys shared by all report-email Lambdas (from .env.local)
+const emailEnvVarsSesOnly = {
   SES_REGION: process.env.SES_REGION || 'eu-north-1',
   AWS_SES_ACCESS_KEY_ID: process.env.AWS_SES_ACCESS_KEY_ID,
   AWS_SES_SECRET_ACCESS_KEY: process.env.AWS_SES_SECRET_ACCESS_KEY,
-  BOSS_EMAIL_ADDRESS: process.env.BOSS_EMAIL_ADDRESS,
 }
 
 // Environment variables for registration functions
@@ -85,44 +90,58 @@ const registrationEnvVars = {
 }
 
 // Functions that need email env vars for reports
-const emailFunctions = ['submit-report']
+const emailFunctions = ['submit-report', 'submit-report-staging']
 
 // Functions that need registration env vars
 const registrationFunctions = ['register-start']
 
 async function setFunctionEnvironment(functionName) {
+  const functionBaseName = functionName.replace(`${PROJECT_NAME}-`, '')
+
   try {
     // Get current configuration
     const currentConfig = await lambdaClient.send(
       new GetFunctionConfigurationCommand({ FunctionName: functionName })
     )
-    
+
     const currentEnvVars = currentConfig.Environment?.Variables || {}
-    
+
     // Merge with new env vars
     const newEnvVars = {
       ...currentEnvVars,
       ...commonEnvVars,
     }
-    
-    // Add email vars if needed
-    const functionBaseName = functionName.replace(`${PROJECT_NAME}-`, '')
+
+    // Email-capable Lambdas: always refresh SES fields from .env.local
     if (emailFunctions.includes(functionBaseName)) {
-      Object.assign(newEnvVars, emailEnvVars)
+      Object.assign(newEnvVars, emailEnvVarsSesOnly)
+
+      if (functionBaseName === 'submit-report') {
+        // Production report: never overwrite BOSS_EMAIL_ADDRESS from this script (set once in AWS Console).
+        if (currentEnvVars.BOSS_EMAIL_ADDRESS !== undefined) {
+          newEnvVars.BOSS_EMAIL_ADDRESS = currentEnvVars.BOSS_EMAIL_ADDRESS
+        }
+      } else if (functionBaseName === 'submit-report-staging') {
+        const stagingBoss =
+          process.env.BOSS_EMAIL_ADDRESS_STAGING || process.env.BOSS_EMAIL_ADDRESS
+        if (stagingBoss) {
+          newEnvVars.BOSS_EMAIL_ADDRESS = stagingBoss
+        }
+      }
     }
-    
+
     // Add registration vars if needed
     if (registrationFunctions.includes(functionBaseName)) {
       Object.assign(newEnvVars, registrationEnvVars)
     }
-    
+
     // Remove undefined values
     Object.keys(newEnvVars).forEach(key => {
       if (newEnvVars[key] === undefined) {
         delete newEnvVars[key]
       }
     })
-    
+
     // Update function configuration
     await lambdaClient.send(
       new UpdateFunctionConfigurationCommand({
@@ -132,9 +151,13 @@ async function setFunctionEnvironment(functionName) {
         },
       })
     )
-    
+
     console.log(`✅ Updated environment variables for ${functionName}`)
   } catch (error) {
+    if (error.name === 'ResourceNotFoundException') {
+      console.warn(`⏭️  Skip ${functionName} (Lambda finns inte — kör deploy:lambda först)`)
+      return
+    }
     console.error(`❌ Error updating ${functionName}:`, error.message)
     throw error
   }
@@ -152,6 +175,7 @@ async function setAllFunctionEnvironments() {
     `${PROJECT_NAME}-register-start`,
     `${PROJECT_NAME}-revert-report`,
     `${PROJECT_NAME}-submit-report`,
+    `${PROJECT_NAME}-submit-report-staging`,
     `${PROJECT_NAME}-update-entry`,
     `${PROJECT_NAME}-validate-registration-token`,
   ]

@@ -7,6 +7,7 @@ import { Button } from '@/components/ui/button'
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card'
 import { useToast } from '@/components/ui/use-toast'
 import { apiRequest } from '@/services/api'
+import { getReportSubmitPath } from '@/lib/report-api'
 import { calculateHours } from '@/utils/validation'
 import { ArrowLeft } from 'lucide-react'
 
@@ -188,7 +189,7 @@ export default function Preview() {
     setIsSubmitting(true)
 
     try {
-      await apiRequest('/submit-report', {
+      await apiRequest(`/${getReportSubmitPath()}`, {
         method: 'POST',
         body: JSON.stringify({
           month: reportData.month,

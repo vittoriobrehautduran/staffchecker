@@ -14,6 +14,8 @@ Appen använder:
 
 För underbiträden, var data lagras, autentisering, loggar och kända tekniska luckor — se **[docs/personuppgifter-och-sakerhet.md](docs/personuppgifter-och-sakerhet.md)**. Uppdatera den när arkitektur eller leverantörer ändras.
 
+För **staging** med annan mottagare vid inskickad rapport: **[docs/staging-rapport-e-post.md](docs/staging-rapport-e-post.md)** (`VITE_REPORT_SUBMIT_PATH`, Lambda `submit-report-staging`, API Gateway).
+
 ## Utveckling
 
 ### Första gången
