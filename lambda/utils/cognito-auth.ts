@@ -80,17 +80,12 @@ function decodeToken(token: string): any {
 // Extract Cognito user ID from request
 export async function getCognitoUserIdFromRequest(event: APIGatewayProxyEvent): Promise<string | null> {
   try {
-    console.log('getCognitoUserIdFromRequest: Starting')
-    console.log('COGNITO_USER_POOL_ID:', COGNITO_USER_POOL_ID ? 'Set' : 'Missing')
-    console.log('COGNITO_REGION:', COGNITO_REGION)
-    
     // Check Authorization header
     const authHeader = event.headers?.Authorization || event.headers?.authorization || ''
     let token: string | null = null
 
     if (authHeader.startsWith('Bearer ')) {
       token = authHeader.substring(7)
-      console.log('Token found in Authorization header, length:', token.length)
     }
 
     // Check query parameter (fallback for API Gateway REST API)
@@ -98,15 +93,10 @@ export async function getCognitoUserIdFromRequest(event: APIGatewayProxyEvent): 
       token = event.queryStringParameters?._token || 
               event.multiValueQueryStringParameters?._token?.[0] || 
               null
-      if (token) {
-        console.log('Token found in query parameter, length:', token.length)
-      }
     }
 
     if (!token) {
-      console.log('No token found in request')
-      console.log('Headers:', JSON.stringify(event.headers))
-      console.log('Query params:', JSON.stringify(event.queryStringParameters))
+      console.error('getCognitoUserIdFromRequest: No token in Authorization header or _token query param')
       return null
     }
 
@@ -116,12 +106,6 @@ export async function getCognitoUserIdFromRequest(event: APIGatewayProxyEvent): 
       console.error('Failed to decode token')
       return null
     }
-    
-    console.log('Token decoded successfully. Payload keys:', Object.keys(payload))
-    console.log('Token sub:', payload.sub)
-    console.log('Token email:', payload.email)
-    console.log('Token iss:', payload.iss)
-    console.log('Token aud:', payload.aud)
 
     // Verify token expiration
     const now = Math.floor(Date.now() / 1000)
@@ -173,8 +157,6 @@ export async function getCognitoUserIdFromRequest(event: APIGatewayProxyEvent): 
 // Get your app's user ID from Cognito user ID
 export async function getUserIdFromCognitoSession(event: APIGatewayProxyEvent): Promise<number | null> {
   const cognitoUserId = await getCognitoUserIdFromRequest(event)
-  
-  console.log('getUserIdFromCognitoSession: Cognito user ID:', cognitoUserId ? 'Found' : 'Missing')
 
   if (!cognitoUserId) {
     console.error('getUserIdFromCognitoSession: No Cognito user ID found in session')
@@ -191,7 +173,6 @@ export async function getUserIdFromCognitoSession(event: APIGatewayProxyEvent): 
     `
 
     if (result && result.length > 0) {
-      console.log(`getUserIdFromCognitoSession: Found user ID: ${result[0].id}`)
       return result[0].id
     }
 
@@ -209,7 +190,6 @@ export async function getUserIdFromCognitoSession(event: APIGatewayProxyEvent): 
       const fullName = payload?.name || payload?.['name'] || ''
       
       if (email) {
-        console.log(`getUserIdFromCognitoSession: Trying fallback lookup by email: ${email}`)
         const emailResult = await sql`
           SELECT id FROM users 
           WHERE email = ${email.toLowerCase().trim()}
@@ -223,7 +203,6 @@ export async function getUserIdFromCognitoSession(event: APIGatewayProxyEvent): 
             SET cognito_user_id = ${cognitoUserId}
             WHERE id = ${emailResult[0].id}
           `
-          console.log(`getUserIdFromCognitoSession: Found user by email, updated cognito_user_id`)
           return emailResult[0].id
         }
 
@@ -256,7 +235,6 @@ export async function getUserIdFromCognitoSession(event: APIGatewayProxyEvent): 
         `
 
         if (createdUser.length > 0) {
-          console.log('getUserIdFromCognitoSession: Auto-provisioned user from Cognito claims')
           return createdUser[0].id
         }
 

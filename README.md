@@ -10,6 +10,10 @@ Appen använder:
 - **Databas**: Neon PostgreSQL
 - **Autentisering**: AWS Cognito
 
+## Personuppgifter och säkerhet (GDPR / biträde)
+
+För underbiträden, var data lagras, autentisering, loggar och kända tekniska luckor — se **[docs/personuppgifter-och-sakerhet.md](docs/personuppgifter-och-sakerhet.md)**. Uppdatera den när arkitektur eller leverantörer ändras.
+
 ## Utveckling
 
 ### Första gången
