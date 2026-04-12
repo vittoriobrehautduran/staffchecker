@@ -1,6 +1,7 @@
 /**
  * Pushar miljövariabler från .env.local till listade Lambdas.
  * - timrapport-submit-report (prod): BOSS_EMAIL_ADDRESS ändras aldrig härifrån (behåll värdet i AWS).
+ * - REPORT_EMAIL_FROM / EMAIL_BACKUP: sätts från .env.local när de finns; annars behålls befintligt Lambda-värde.
  * - timrapport-submit-report-staging: BOSS från BOSS_EMAIL_ADDRESS_STAGING eller BOSS_EMAIL_ADDRESS.
  * - Saknad Lambda: varning + hoppa över (deploya funktionen först).
  */
@@ -115,6 +116,18 @@ async function setFunctionEnvironment(functionName) {
     // Email-capable Lambdas: always refresh SES fields from .env.local
     if (emailFunctions.includes(functionBaseName)) {
       Object.assign(newEnvVars, emailEnvVarsSesOnly)
+
+      if (process.env.REPORT_EMAIL_FROM) {
+        newEnvVars.REPORT_EMAIL_FROM = process.env.REPORT_EMAIL_FROM
+      } else if (currentEnvVars.REPORT_EMAIL_FROM !== undefined) {
+        newEnvVars.REPORT_EMAIL_FROM = currentEnvVars.REPORT_EMAIL_FROM
+      }
+
+      if (process.env.EMAIL_BACKUP) {
+        newEnvVars.EMAIL_BACKUP = process.env.EMAIL_BACKUP
+      } else if (currentEnvVars.EMAIL_BACKUP !== undefined) {
+        newEnvVars.EMAIL_BACKUP = currentEnvVars.EMAIL_BACKUP
+      }
 
       if (functionBaseName === 'submit-report') {
         // Production report: never overwrite BOSS_EMAIL_ADDRESS from this script (set once in AWS Console).

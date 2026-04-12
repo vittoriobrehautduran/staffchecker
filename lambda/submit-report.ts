@@ -422,37 +422,53 @@ export const handler = async (
     textBody += `- Ledighetstimmar: ${totalLeaveHours.toFixed(1)} timmar\n`
     textBody += `- Ersättning: ${totalCompensationEntries} poster${totalCompensationAmount > 0 ? ` (${totalCompensationAmount.toFixed(2)} SEK)` : ''}\n`
 
-    // Send email via AWS SES
+    // Send email via AWS SES: From = REPORT_EMAIL_FROM, else EMAIL_BACKUP, else user; Reply-To = employee when From ≠ user
     const bossEmail = process.env.BOSS_EMAIL_ADDRESS
-    if (bossEmail) {
-      try {
-        const emailCommand = new SendEmailCommand({
-          Source: user.email,
-          Destination: {
-            ToAddresses: [bossEmail],
-          },
-          Message: {
-            Subject: {
-              Data: `Timrapport - ${user.name} ${user.last_name} - ${monthName} ${year}`,
-              Charset: 'UTF-8',
-            },
-            Body: {
-              Html: {
-                Data: htmlBody,
-                Charset: 'UTF-8',
-              },
-              Text: {
-                Data: textBody,
-                Charset: 'UTF-8',
-              },
-            },
-          },
-        })
+    const reportFromEnv = process.env.REPORT_EMAIL_FROM?.trim()
+    const emailBackupEnv = process.env.EMAIL_BACKUP?.trim()
+    const userEmail = (user.email && String(user.email).trim()) || ''
+    const sourceAddress = reportFromEnv || emailBackupEnv || userEmail
 
-        await sesClient.send(emailCommand)
-      } catch (emailError: any) {
-        console.error('Error sending email:', emailError)
-        // Don't fail the submission if email fails - just log it
+    if (bossEmail) {
+      if (!sourceAddress) {
+        console.error(
+          'Skipping report email: set REPORT_EMAIL_FROM or EMAIL_BACKUP, or ensure user has an email address'
+        )
+      } else {
+        try {
+          const useReplyTo =
+            userEmail.length > 0 &&
+            sourceAddress.toLowerCase() !== userEmail.toLowerCase()
+
+          const emailCommand = new SendEmailCommand({
+            Source: sourceAddress,
+            ...(useReplyTo ? { ReplyToAddresses: [userEmail] } : {}),
+            Destination: {
+              ToAddresses: [bossEmail],
+            },
+            Message: {
+              Subject: {
+                Data: `Timrapport - ${user.name} ${user.last_name} - ${monthName} ${year}`,
+                Charset: 'UTF-8',
+              },
+              Body: {
+                Html: {
+                  Data: htmlBody,
+                  Charset: 'UTF-8',
+                },
+                Text: {
+                  Data: textBody,
+                  Charset: 'UTF-8',
+                },
+              },
+            },
+          })
+
+          await sesClient.send(emailCommand)
+        } catch (emailError: any) {
+          console.error('Error sending email:', emailError)
+          // Don't fail the submission if email fails - just log it
+        }
       }
     }
 

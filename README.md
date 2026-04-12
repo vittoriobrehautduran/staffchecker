@@ -38,6 +38,9 @@ SES_REGION=eu-north-1
 AWS_SES_ACCESS_KEY_ID=...
 AWS_SES_SECRET_ACCESS_KEY=...
 BOSS_EMAIL_ADDRESS=boss@example.com
+# Verifierad avsändare i SES (t.ex. noreply@dindomän.se). Sedan EMAIL_BACKUP om den är satt, annars användarens mejl.
+REPORT_EMAIL_FROM=noreply@example.com
+EMAIL_BACKUP=backup-sender@example.com
 ```
 
 **Viktigt för DATABASE_URL:**
@@ -99,6 +102,9 @@ Alla Lambda-funktioner finns i `lambda/` mappen.
 - `AWS_SES_ACCESS_KEY_ID`
 - `AWS_SES_SECRET_ACCESS_KEY`
 - `BOSS_EMAIL_ADDRESS`
+- `REPORT_EMAIL_FROM` (valfritt)
+- `EMAIL_BACKUP` (valfritt; From om `REPORT_EMAIL_FROM` saknas)
+- Utan båda: From = användarens mejl
 
 ## Databas
 
