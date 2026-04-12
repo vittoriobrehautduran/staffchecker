@@ -5,6 +5,14 @@ import { addMonths, format } from 'date-fns'
 import { sv } from 'date-fns/locale'
 import { Button } from '@/components/ui/button'
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card'
+import {
+  Dialog,
+  DialogContent,
+  DialogDescription,
+  DialogFooter,
+  DialogHeader,
+  DialogTitle,
+} from '@/components/ui/dialog'
 import { useToast } from '@/components/ui/use-toast'
 import { apiRequest } from '@/services/api'
 import { getReportSubmitPath } from '@/lib/report-api'
@@ -77,6 +85,7 @@ export default function Preview() {
   const [reportData, setReportData] = useState<ReportData | null>(null)
   const [isLoading, setIsLoading] = useState(true)
   const [isSubmitting, setIsSubmitting] = useState(false)
+  const [confirmSubmitOpen, setConfirmSubmitOpen] = useState(false)
   const [selectedPeriod, setSelectedPeriod] = useState<ReportPeriod>('current')
   const locationState = location.state as PreviewLocationState | null
   const requestedMonth = parseMonthKey(locationState?.reportMonthKey)
@@ -174,7 +183,8 @@ export default function Preview() {
     await loadReportData(period)
   }
 
-  const handleSubmit = async () => {
+  // Öppnar bekräftelsedialog; själva utskicket sker i handleConfirmSubmit.
+  const handleSubmitClick = () => {
     if (!reportData) return
 
     if (reportData.entries.length === 0) {
@@ -186,6 +196,13 @@ export default function Preview() {
       return
     }
 
+    setConfirmSubmitOpen(true)
+  }
+
+  const handleConfirmSubmit = async () => {
+    if (!reportData) return
+
+    setConfirmSubmitOpen(false)
     setIsSubmitting(true)
 
     try {
@@ -317,6 +334,31 @@ export default function Preview() {
 
   return (
     <div className="min-h-screen flex-1 bg-background p-4 md:p-6">
+      <Dialog open={confirmSubmitOpen} onOpenChange={setConfirmSubmitOpen}>
+        <DialogContent className="sm:max-w-md">
+          <DialogHeader>
+            <DialogTitle>Skicka rapport?</DialogTitle>
+            <DialogDescription>
+              Vill du skicka rapporten för <span className="font-medium text-foreground">{monthName}</span>{' '}
+              till din chef? Efter att rapporten skickats kan du inte längre redigera den.
+            </DialogDescription>
+          </DialogHeader>
+          <DialogFooter className="gap-2 sm:gap-0">
+            <Button
+              type="button"
+              variant="outline"
+              onClick={() => setConfirmSubmitOpen(false)}
+              disabled={isSubmitting}
+            >
+              Nej
+            </Button>
+            <Button type="button" onClick={() => void handleConfirmSubmit()} disabled={isSubmitting}>
+              Ja, skicka
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
       <div className="container mx-auto max-w-4xl">
         <div className="mb-4">
           <Button
@@ -542,7 +584,7 @@ export default function Preview() {
 
                 <div className="flex gap-4 pt-4">
                   <Button
-                    onClick={handleSubmit}
+                    onClick={handleSubmitClick}
                     disabled={isSubmitting || reportData.status === 'submitted'}
                     className="flex-1"
                   >
