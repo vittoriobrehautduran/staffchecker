@@ -98,7 +98,7 @@ export function SettingsDialog({ open, onOpenChange }: SettingsDialogProps) {
 
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
-      <DialogContent className="sm:max-w-md">
+      <DialogContent className="max-h-[min(90vh,100dvh)] overflow-y-auto overscroll-contain sm:max-w-md">
         <DialogHeader>
           <DialogTitle>Inställningar</DialogTitle>
           <DialogDescription>

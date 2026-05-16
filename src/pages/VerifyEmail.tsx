@@ -91,7 +91,7 @@ export default function VerifyEmail() {
       localStorage.removeItem('registration_timestamp')
       
       // Session will be updated automatically by Cognito
-      navigate('/dashboard')
+      navigate('/dashboard', { replace: true })
     } catch (error: any) {
       console.error('Verification error:', error)
       toast({
