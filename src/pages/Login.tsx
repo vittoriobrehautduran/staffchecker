@@ -18,9 +18,16 @@ export default function Login() {
   const [isLoading, setIsLoading] = useState(false)
   const [isOAuthLoading, setIsOAuthLoading] = useState<string | null>(null)
   const [oauthNotRegistered, setOauthNotRegistered] = useState<{ message: string } | null>(null)
-  const { signIn, signInWithOAuth } = useAuth()
+  const { signIn, signInWithOAuth, isSignedIn, isLoading: isAuthLoading } = useAuth()
   const navigate = useNavigate()
   const { toast } = useToast()
+
+  // Already signed in — skip login so the back button does not return here.
+  useEffect(() => {
+    if (!isAuthLoading && isSignedIn) {
+      navigate('/dashboard', { replace: true })
+    }
+  }, [isAuthLoading, isSignedIn, navigate])
 
   useEffect(() => {
     const noticeMaxAgeMs = 2 * 60 * 1000
@@ -67,6 +74,8 @@ export default function Login() {
   const handleOAuthClick = async () => {
     setIsOAuthLoading('Google')
     try {
+      // Replace /login in history so OAuth return + dashboard does not leave login as "back".
+      window.history.replaceState({}, '', '/')
       await signInWithOAuth('Google')
       // signInWithRedirect will redirect the page, so we don't need to do anything else
     } catch (error: any) {
@@ -107,7 +116,7 @@ export default function Login() {
         title: 'Välkommen!',
         description: 'Du är nu inloggad',
       })
-      navigate('/dashboard')
+      navigate('/dashboard', { replace: true })
     } catch (error: any) {
       console.error('Login error:', error)
       
