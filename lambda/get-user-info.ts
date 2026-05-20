@@ -13,7 +13,7 @@ function getCorsOrigin(event: APIGatewayProxyEvent): string {
 }
 
 type MembershipRow = {
-  permissions: string[] | null
+  permissions: string | null
 }
 
 export const handler = async (
@@ -107,11 +107,11 @@ export const handler = async (
     let clubPermissions: string[] = []
 
     try {
-      const memberships = await sql<MembershipRow[]>`
+      const memberships = (await sql`
         SELECT DISTINCT unnest(m.permissions) AS permissions
         FROM user_club_memberships m
         WHERE m.user_id = ${userId}
-      `
+      `) as MembershipRow[]
       clubPermissions = memberships
         .map((row) => row.permissions)
         .filter((permission): permission is string => typeof permission === 'string')

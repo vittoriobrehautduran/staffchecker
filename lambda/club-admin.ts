@@ -25,14 +25,14 @@ function corsHeaders(origin: string) {
 
 async function getBossClubId(userId: number): Promise<number | null> {
   try {
-    const rows = await sql<{ club_id: number }[]>`
+    const rows = (await sql`
       SELECT club_id
       FROM user_club_memberships
       WHERE user_id = ${userId}
         AND permissions @> ARRAY['club_boss']::text[]
       ORDER BY club_id ASC
       LIMIT 1
-    `
+    `) as { club_id: number }[]
 
     if (!rows.length) {
       return null
@@ -50,15 +50,7 @@ async function getBossClubId(userId: number): Promise<number | null> {
 }
 
 async function getClubPayload(clubId: number) {
-  const [club] = await sql<{
-    id: number
-    name: string
-    slug: string
-    tennis_courts_count: number
-    bordtennis_tables_count: number
-    default_slot_duration_minutes: number
-    retention_days: number
-  }[]>`
+  const [club] = (await sql`
     SELECT
       id,
       name,
@@ -70,48 +62,56 @@ async function getClubPayload(clubId: number) {
     FROM clubs
     WHERE id = ${clubId}
     LIMIT 1
-  `
+  `) as {
+    id: number
+    name: string
+    slug: string
+    tennis_courts_count: number
+    bordtennis_tables_count: number
+    default_slot_duration_minutes: number
+    retention_days: number
+  }[]
 
   if (!club) {
     throw new Error('Club not found')
   }
 
-  const coaches = await sql<{
-    id: number
-    name: string
-    sport: SportType
-    is_active: boolean
-  }[]>`
+  const coaches = (await sql`
     SELECT id, name, sport, is_active
     FROM club_coaches
     WHERE club_id = ${clubId}
     ORDER BY sort_order ASC, id ASC
-  `
-
-  const classes = await sql<{
+  `) as {
     id: number
     name: string
-    sport: Exclude<SportType, 'both'>
+    sport: SportType
     is_active: boolean
-  }[]>`
+  }[]
+
+  const classes = (await sql`
     SELECT id, name, sport, is_active
     FROM club_classes
     WHERE club_id = ${clubId}
     ORDER BY sort_order ASC, id ASC
-  `
+  `) as {
+    id: number
+    name: string
+    sport: Exclude<SportType, 'both'>
+    is_active: boolean
+  }[]
 
-  const resources = await sql<{
+  const resources = (await sql`
+    SELECT id, resource_type, resource_number, label, is_active
+    FROM club_resources
+    WHERE club_id = ${clubId}
+    ORDER BY resource_type ASC, resource_number ASC
+  `) as {
     id: number
     resource_type: ResourceType
     resource_number: number
     label: string | null
     is_active: boolean
-  }[]>`
-    SELECT id, resource_type, resource_number, label, is_active
-    FROM club_resources
-    WHERE club_id = ${clubId}
-    ORDER BY resource_type ASC, resource_number ASC
-  `
+  }[]
 
   return {
     club,
