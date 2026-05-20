@@ -16,6 +16,10 @@ För underbiträden, var data lagras, autentisering, loggar och kända tekniska 
 
 För **staging** med annan mottagare vid inskickad rapport: **[docs/staging-rapport-e-post.md](docs/staging-rapport-e-post.md)** (`VITE_REPORT_SUBMIT_PATH`, Lambda `submit-report-staging`, API Gateway).
 
+**Dedikerad staging API Gateway** (samma rutter som produktion, men `timrapport-staging-*`-Lambdas där de finns): sätt i Amplify **staging** (eller `.env.local`)  
+`VITE_API_BASE_URL=https://l910tb5ik1.execute-api.eu-north-1.amazonaws.com/prod`  
+Vissa rutter (t.ex. `/auth/{proxy+}`, webauthn, vissa registrerings-endpoints) pekar fortfarande på ARNs från den gamla klonen om motsvarande Lambda saknas i kontot — då fungerar de inte förrän de pekas om eller deployas som `timrapport-staging-*`. För att återskapa API:t från produktion: `python3 scripts/clone-staging-apigateway.py` (kräver AWS CLI).
+
 ## Utveckling
 
 ### Första gången

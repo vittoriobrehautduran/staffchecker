@@ -2,7 +2,6 @@ import { APIGatewayProxyEvent, APIGatewayProxyResult } from 'aws-lambda'
 import { sql } from './utils/database'
 import { getUserIdFromCognitoSession, getCognitoUserIdFromRequest } from './utils/cognito-auth'
 
-// Helper function to get CORS origin from request
 function getCorsOrigin(event: APIGatewayProxyEvent): string {
   const requestOrigin = event.headers?.Origin || event.headers?.origin || '*'
   const allowedOrigins = [
@@ -13,12 +12,15 @@ function getCorsOrigin(event: APIGatewayProxyEvent): string {
   return allowedOrigins.includes(requestOrigin) ? requestOrigin : allowedOrigins[0]
 }
 
+type MembershipRow = {
+  permissions: string[] | null
+}
+
 export const handler = async (
   event: APIGatewayProxyEvent
 ): Promise<APIGatewayProxyResult> => {
   const origin = getCorsOrigin(event)
 
-  // Handle CORS preflight
   if (event.httpMethod === 'OPTIONS') {
     return {
       statusCode: 200,
@@ -76,10 +78,9 @@ export const handler = async (
       }
     }
 
-    // Get user info including admin status
     const userResult = await sql`
       SELECT id, email, name, last_name, is_admin, ui_theme
-      FROM users 
+      FROM users
       WHERE id = ${userId}
       LIMIT 1
     `
@@ -103,6 +104,28 @@ export const handler = async (
     const user = userResult[0]
     const theme = user.ui_theme === 'dark' ? 'dark' : 'light'
 
+    let clubPermissions: string[] = []
+
+    try {
+      const memberships = await sql<MembershipRow[]>`
+        SELECT DISTINCT unnest(m.permissions) AS permissions
+        FROM user_club_memberships m
+        WHERE m.user_id = ${userId}
+      `
+      clubPermissions = memberships
+        .map((row) => row.permissions)
+        .filter((permission): permission is string => typeof permission === 'string')
+    } catch (membershipError: any) {
+      if (membershipError?.code !== '42P01') {
+        throw membershipError
+      }
+      clubPermissions = []
+    }
+
+    const hasClubBossAccess = clubPermissions.includes('club_boss')
+    const hasClubCoachAccess = clubPermissions.includes('club_coach')
+    const hasClubAccess = hasClubBossAccess || hasClubCoachAccess
+
     return {
       statusCode: 200,
       headers: {
@@ -117,6 +140,9 @@ export const handler = async (
         lastName: user.last_name,
         isAdmin: user.is_admin || false,
         theme,
+        clubPermissions,
+        hasClubAccess,
+        hasClubBossAccess,
       }),
     }
   } catch (error: any) {
@@ -128,11 +154,10 @@ export const handler = async (
         'Access-Control-Allow-Origin': origin,
         'Access-Control-Allow-Credentials': 'true',
       },
-      body: JSON.stringify({ 
+      body: JSON.stringify({
         message: 'Internal server error',
-        error: error?.message || 'Unknown error'
+        error: error?.message || 'Unknown error',
       }),
     }
   }
 }
-

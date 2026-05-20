@@ -14,7 +14,7 @@ const projectRoot = join(__dirname, '..')
 const LAMBDA_REGION = process.env.AWS_REGION || process.env.AWS_DEFAULT_REGION || 'eu-north-1'
 const LAMBDA_RUNTIME = 'nodejs22.x'
 const LAMBDA_ROLE = process.env.LAMBDA_ROLE_ARN || '' // You'll need to set this
-const PROJECT_NAME = 'timrapport'
+const PROJECT_NAME = process.env.LAMBDA_FUNCTION_PREFIX || 'timrapport'
 const TIMEOUT = 30 // seconds
 const MEMORY_SIZE = 512 // MB
 

@@ -65,7 +65,7 @@ Object.keys(envVars).forEach(key => {
 })
 
 const LAMBDA_REGION = process.env.AWS_REGION || process.env.AWS_DEFAULT_REGION || 'eu-north-1'
-const PROJECT_NAME = 'timrapport'
+const PROJECT_NAME = process.env.LAMBDA_FUNCTION_PREFIX || 'timrapport'
 
 const lambdaClient = new LambdaClient({ region: LAMBDA_REGION })
 
@@ -185,6 +185,7 @@ async function setAllFunctionEnvironments() {
     `${PROJECT_NAME}-get-user-info`,
     `${PROJECT_NAME}-update-user-preferences`,
     `${PROJECT_NAME}-cognito-pre-signup`,
+    `${PROJECT_NAME}-club-admin`,
     `${PROJECT_NAME}-register-start`,
     `${PROJECT_NAME}-revert-report`,
     `${PROJECT_NAME}-submit-report`,

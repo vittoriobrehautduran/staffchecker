@@ -10,7 +10,7 @@ import {
   DropdownMenuSeparator,
   DropdownMenuTrigger,
 } from '@/components/ui/dropdown-menu'
-import { Calendar, CircleHelp, Eye, FileText, LayoutDashboard, LogOut, Settings, Shield, X } from 'lucide-react'
+import { Calendar, CircleHelp, Eye, FileText, LayoutDashboard, LogOut, Settings, Shield, Users, X } from 'lucide-react'
 import { SettingsDialog } from './SettingsDialog'
 
 type AppSidebarProps = {
@@ -119,6 +119,12 @@ export function AppSidebar({ mobileOpen, onMobileOpenChange }: AppSidebarProps) 
           <Eye className="h-5 w-5 shrink-0 opacity-90" aria-hidden />
           <span>Förhandsvisa</span>
         </NavLink>
+        {user?.hasClubAccess && (
+          <NavLink to="/club" className={({ isActive }) => sidebarItemClass(isActive)}>
+            <Users className="h-5 w-5 shrink-0 opacity-90" aria-hidden />
+            <span>Klubb</span>
+          </NavLink>
+        )}
         {user?.isAdmin && (
           <NavLink to="/admin" className={({ isActive }) => sidebarItemClass(isActive)}>
             <Shield className="h-5 w-5 shrink-0 opacity-90" aria-hidden />

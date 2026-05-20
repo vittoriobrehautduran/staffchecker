@@ -10,11 +10,11 @@ import Dashboard from '@/pages/Dashboard'
 import Report from '@/pages/Report'
 import Preview from '@/pages/Preview'
 import Admin from '@/pages/Admin'
+import Club from '@/pages/Club'
 import Debug from '@/pages/Debug'
 import PrivacyPolicy from '@/pages/PrivacyPolicy'
 import TermsOfUse from '@/pages/TermsOfUse'
 
-// After OAuth or a fresh sign-in, land on dashboard without leaving /login in the back stack.
 function PostAuthNavigation() {
   const { isSignedIn, isLoading } = useAuth()
   const location = useLocation()
@@ -55,6 +55,7 @@ function App() {
           <Route path="/dashboard" element={<Dashboard />} />
           <Route path="/report" element={<Report />} />
           <Route path="/preview" element={<Preview />} />
+          <Route path="/club" element={<Club />} />
           <Route path="/admin" element={<Admin />} />
         </Route>
         <Route path="/" element={<Navigate to="/dashboard" replace />} />
