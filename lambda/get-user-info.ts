@@ -78,12 +78,36 @@ export const handler = async (
       }
     }
 
-    const userResult = await sql`
-      SELECT id, email, name, last_name, is_admin, ui_theme
-      FROM users
-      WHERE id = ${userId}
-      LIMIT 1
-    `
+    let userResult: {
+      id: number
+      email: string
+      name: string
+      last_name: string
+      is_admin: boolean
+      ui_theme: string | null
+      is_salary_manager?: boolean
+      is_report_boss?: boolean
+    }[]
+
+    try {
+      userResult = (await sql`
+        SELECT id, email, name, last_name, is_admin, ui_theme,
+               is_salary_manager, is_report_boss
+        FROM users
+        WHERE id = ${userId}
+        LIMIT 1
+      `) as typeof userResult
+    } catch (columnError: any) {
+      if (columnError?.code !== '42703') {
+        throw columnError
+      }
+      userResult = (await sql`
+        SELECT id, email, name, last_name, is_admin, ui_theme
+        FROM users
+        WHERE id = ${userId}
+        LIMIT 1
+      `) as typeof userResult
+    }
 
     if (userResult.length === 0) {
       return {
@@ -126,6 +150,14 @@ export const handler = async (
     const hasClubCoachAccess = clubPermissions.includes('club_coach')
     const hasClubAccess = hasClubBossAccess || hasClubCoachAccess
 
+    const bossEmail = (process.env.BOSS_EMAIL_ADDRESS || '').trim().toLowerCase()
+    const userEmail = (user.email || '').trim().toLowerCase()
+    const isSalaryManager = !!user.is_salary_manager
+    const isReportBoss = !!user.is_report_boss
+    const isBossEmail = bossEmail.length > 0 && userEmail === bossEmail
+    const hasEmployeeReportsAccess =
+      !!user.is_admin || isSalaryManager || isReportBoss || isBossEmail
+
     return {
       statusCode: 200,
       headers: {
@@ -143,6 +175,9 @@ export const handler = async (
         clubPermissions,
         hasClubAccess,
         hasClubBossAccess,
+        isSalaryManager,
+        isReportBoss,
+        hasEmployeeReportsAccess,
       }),
     }
   } catch (error: any) {

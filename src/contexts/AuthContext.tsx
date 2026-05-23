@@ -14,6 +14,7 @@ interface User {
   clubPermissions?: string[]
   hasClubAccess?: boolean
   hasClubBossAccess?: boolean
+  hasEmployeeReportsAccess?: boolean
 }
 
 type AuthNotice = {
@@ -38,7 +39,7 @@ interface AuthContextType {
   verifyEmail: (code: string, email: string) => Promise<void>
   resendVerificationCode: (email: string) => Promise<string>
   changePassword: (currentPassword: string, newPassword: string) => Promise<void>
-  patchUser: (partial: Partial<Pick<User, 'theme' | 'isAdmin' | 'clubPermissions' | 'hasClubAccess' | 'hasClubBossAccess'>>) => void
+  patchUser: (partial: Partial<Pick<User, 'theme' | 'isAdmin' | 'clubPermissions' | 'hasClubAccess' | 'hasClubBossAccess' | 'hasEmployeeReportsAccess'>>) => void
 }
 
 const AuthContext = createContext<AuthContextType | undefined>(undefined)
@@ -49,7 +50,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   const isMountedRef = useRef(true)
   const oauthReturnHandledRef = useRef(false)
 
-  const patchUser = useCallback((partial: Partial<Pick<User, 'theme' | 'isAdmin' | 'clubPermissions' | 'hasClubAccess' | 'hasClubBossAccess'>>) => {
+  const patchUser = useCallback((partial: Partial<Pick<User, 'theme' | 'isAdmin' | 'clubPermissions' | 'hasClubAccess' | 'hasClubBossAccess' | 'hasEmployeeReportsAccess'>>) => {
     setUser((prev) => (prev ? { ...prev, ...partial } : null))
   }, [])
 
@@ -99,13 +100,28 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         // Must resolve app account (Google can sign in to Cognito without a row in `users`).
         try {
           const { apiRequest } = await import('@/services/api')
-          const userInfo = await apiRequest<{ isAdmin: boolean; theme?: string; clubPermissions?: string[]; hasClubAccess?: boolean; hasClubBossAccess?: boolean }>('/get-user-info')
+          const userInfo = await apiRequest<{ isAdmin: boolean; theme?: string; clubPermissions?: string[]; hasClubAccess?: boolean; hasClubBossAccess?: boolean; hasEmployeeReportsAccess?: boolean }>('/get-user-info')
           const resolvedTheme: 'light' | 'dark' =
             userInfo?.theme === 'dark' ? 'dark' : 'light'
           if (userInfo && typeof userInfo.isAdmin === 'boolean') {
-            setUser({ ...userData, isAdmin: userInfo.isAdmin, theme: resolvedTheme, clubPermissions: userInfo.clubPermissions || [], hasClubAccess: !!userInfo.hasClubAccess, hasClubBossAccess: !!userInfo.hasClubBossAccess })
+            setUser({
+              ...userData,
+              isAdmin: userInfo.isAdmin,
+              theme: resolvedTheme,
+              clubPermissions: userInfo.clubPermissions || [],
+              hasClubAccess: !!userInfo.hasClubAccess,
+              hasClubBossAccess: !!userInfo.hasClubBossAccess,
+              hasEmployeeReportsAccess: !!userInfo.hasEmployeeReportsAccess,
+            })
           } else {
-            setUser({ ...userData, theme: resolvedTheme, clubPermissions: [], hasClubAccess: false, hasClubBossAccess: false })
+            setUser({
+              ...userData,
+              theme: resolvedTheme,
+              clubPermissions: [],
+              hasClubAccess: false,
+              hasClubBossAccess: false,
+              hasEmployeeReportsAccess: false,
+            })
           }
         } catch (apiError: any) {
           if (apiError?.code === 'USER_NOT_REGISTERED') {

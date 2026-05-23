@@ -111,6 +111,9 @@ const emailFunctions = ['submit-report', 'submit-report-staging']
 // Functions that need registration env vars
 const registrationFunctions = ['register-start']
 
+// Boss email for read-only employee report access (get-user-info, list/get-employee-report)
+const reportViewerFunctions = ['list-employee-reports', 'get-employee-report', 'get-user-info']
+
 async function setFunctionEnvironment(functionName) {
   const functionBaseName = functionName.replace(`${PROJECT_NAME}-`, '')
 
@@ -163,6 +166,17 @@ async function setFunctionEnvironment(functionName) {
       Object.assign(newEnvVars, registrationEnvVars)
     }
 
+    if (reportViewerFunctions.includes(functionBaseName)) {
+      const bossFromEnv = isStagingLambdas
+        ? process.env.BOSS_EMAIL_ADDRESS_STAGING || process.env.BOSS_EMAIL_ADDRESS
+        : process.env.BOSS_EMAIL_ADDRESS
+      if (bossFromEnv) {
+        newEnvVars.BOSS_EMAIL_ADDRESS = bossFromEnv
+      } else if (currentEnvVars.BOSS_EMAIL_ADDRESS !== undefined) {
+        newEnvVars.BOSS_EMAIL_ADDRESS = currentEnvVars.BOSS_EMAIL_ADDRESS
+      }
+    }
+
     // Remove undefined values
     Object.keys(newEnvVars).forEach(key => {
       if (newEnvVars[key] === undefined) {
@@ -197,6 +211,8 @@ async function setAllFunctionEnvironments() {
     `${PROJECT_NAME}-delete-entry`,
     `${PROJECT_NAME}-get-entries`,
     `${PROJECT_NAME}-get-report`,
+    `${PROJECT_NAME}-get-employee-report`,
+    `${PROJECT_NAME}-list-employee-reports`,
     `${PROJECT_NAME}-get-user-info`,
     `${PROJECT_NAME}-update-user-preferences`,
     `${PROJECT_NAME}-cognito-pre-signup`,

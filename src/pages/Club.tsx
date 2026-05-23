@@ -5,6 +5,7 @@ import { apiRequest } from '@/services/api'
 import { Button } from '@/components/ui/button'
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card'
 import { useToast } from '@/components/ui/use-toast'
+import { LoadingSpinner } from '@/components/ui/loading-spinner'
 import { ChevronDown, ChevronUp, FileUp, Settings2 } from 'lucide-react'
 import { ClubDayPanel } from '@/pages/club/ClubDayPanel'
 import { ClubPdfImportPanel } from '@/pages/club/ClubPdfImportPanel'
@@ -16,12 +17,29 @@ function newLocalId() {
   return `draft-${Date.now()}-${Math.random().toString(36).slice(2, 9)}`
 }
 
+function ClubScheduleLoading({ showSlowMessage }: { showSlowMessage: boolean }) {
+  return (
+    <div className="flex flex-col items-center justify-center gap-4 py-16">
+      <LoadingSpinner size="lg" />
+      <p className="text-sm font-medium text-foreground">Laddar klubben…</p>
+      {showSlowMessage && (
+        <p className="max-w-md text-center text-sm text-muted-foreground">
+          Hämtar veckoschema, tränare, banor och lektioner. Det kan ta några sekunder om schemat
+          är stort.
+        </p>
+      )}
+    </div>
+  )
+}
+
 export default function Club() {
   const { isSignedIn, user } = useAuth()
   const navigate = useNavigate()
   const { toast } = useToast()
 
   const [data, setData] = useState<ClubPayload | null>(null)
+  const [hasLoadedClub, setHasLoadedClub] = useState(false)
+  const [showSlowLoadHint, setShowSlowLoadHint] = useState(false)
   const [isLoading, setIsLoading] = useState(false)
   const [isSavingLesson, setIsSavingLesson] = useState(false)
   const [activeWeekday, setActiveWeekday] = useState(1)
@@ -77,8 +95,20 @@ export default function Club() {
       })
     } finally {
       setIsLoading(false)
+      setHasLoadedClub(true)
     }
   }, [applyPayload, toast])
+
+  const isInitialClubLoad = canManageClub && !hasLoadedClub
+
+  useEffect(() => {
+    if (!isInitialClubLoad) {
+      setShowSlowLoadHint(false)
+      return
+    }
+    const timer = window.setTimeout(() => setShowSlowLoadHint(true), 3000)
+    return () => window.clearTimeout(timer)
+  }, [isInitialClubLoad])
 
   useEffect(() => {
     if (!isSignedIn) {
@@ -353,6 +383,24 @@ export default function Club() {
 
   const activeDayLabel = WEEKDAYS.find((day) => day.value === activeWeekday)?.label || ''
 
+  if (isInitialClubLoad) {
+    return (
+      <div className="min-h-screen flex-1 bg-background p-4 md:p-6">
+        <div className="container mx-auto max-w-4xl space-y-6">
+          <div>
+            <h1 className="text-2xl font-semibold tracking-tight">Klubb</h1>
+            <p className="mt-1 text-sm text-muted-foreground">Veckoschema och inställningar.</p>
+          </div>
+          <Card>
+            <CardContent className="pt-6">
+              <ClubScheduleLoading showSlowMessage={showSlowLoadHint} />
+            </CardContent>
+          </Card>
+        </div>
+      </div>
+    )
+  }
+
   return (
     <div className="min-h-screen flex-1 bg-background p-4 md:p-6">
       <div className="container mx-auto max-w-4xl space-y-6">
@@ -494,12 +542,10 @@ export default function Club() {
                     onSaveDraft={saveDraftById}
                     onRemoveDraft={removeDraft}
                   />
-                ) : data ? (
+                ) : (
                   <p className="text-sm text-muted-foreground">
                     {activeSportLabel} är inte aktiverat. Slå på det under Inställningar.
                   </p>
-                ) : (
-                  <p className="text-sm text-muted-foreground">Laddar...</p>
                 )}
               </>
             )}

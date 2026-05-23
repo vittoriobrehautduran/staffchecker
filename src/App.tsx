@@ -11,6 +11,7 @@ import Report from '@/pages/Report'
 import Preview from '@/pages/Preview'
 import Admin from '@/pages/Admin'
 import Club from '@/pages/Club'
+import EmployeeReports from '@/pages/EmployeeReports'
 import Debug from '@/pages/Debug'
 import PrivacyPolicy from '@/pages/PrivacyPolicy'
 import TermsOfUse from '@/pages/TermsOfUse'
@@ -57,6 +58,7 @@ function App() {
           <Route path="/preview" element={<Preview />} />
           <Route path="/club" element={<Club />} />
           <Route path="/admin" element={<Admin />} />
+          <Route path="/employee-reports" element={<EmployeeReports />} />
         </Route>
         <Route path="/" element={<Navigate to="/dashboard" replace />} />
       </Routes>

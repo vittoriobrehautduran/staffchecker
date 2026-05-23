@@ -281,3 +281,60 @@ export async function getAdminUserIdFromRequest(event: APIGatewayProxyEvent): Pr
   return userId
 }
 
+function normalizeEmail(email: string | null | undefined): string {
+  return (email || '').trim().toLowerCase()
+}
+
+// Boss (report recipient), salary manager, or admin — read-only access to all staff reports.
+export async function canViewEmployeeReports(userId: number): Promise<boolean> {
+  try {
+    const rows = await sql`
+      SELECT is_admin, is_salary_manager, is_report_boss, email
+      FROM users
+      WHERE id = ${userId}
+      LIMIT 1
+    `
+
+    if (!rows.length) {
+      return false
+    }
+
+    const user = rows[0] as {
+      is_admin: boolean
+      is_salary_manager: boolean
+      is_report_boss: boolean
+      email: string
+    }
+
+    if (user.is_admin || user.is_salary_manager || user.is_report_boss) {
+      return true
+    }
+
+    const bossEmail = normalizeEmail(process.env.BOSS_EMAIL_ADDRESS)
+    if (bossEmail && normalizeEmail(user.email) === bossEmail) {
+      return true
+    }
+
+    return false
+  } catch (error: any) {
+    // Columns may not exist until migration is applied.
+    if (error?.code === '42703') {
+      return isUserAdmin(userId)
+    }
+    console.error('canViewEmployeeReports failed:', error?.message)
+    return false
+  }
+}
+
+export async function getReportViewerUserIdFromRequest(
+  event: APIGatewayProxyEvent
+): Promise<number | null> {
+  const userId = await getUserIdFromCognitoSession(event)
+  if (!userId) {
+    return null
+  }
+
+  const allowed = await canViewEmployeeReports(userId)
+  return allowed ? userId : null
+}
+
