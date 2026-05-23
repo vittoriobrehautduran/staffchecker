@@ -175,6 +175,7 @@ export const handler = async (
         clubPermissions,
         hasClubAccess,
         hasClubBossAccess,
+        hasClubCoachAccess,
         isSalaryManager,
         isReportBoss,
         hasEmployeeReportsAccess,

@@ -53,18 +53,35 @@ export type PdfImportPreview = {
 const DAY_MAP: Record<string, number> = {
   må: 1,
   ma: 1,
+  måndag: 1,
+  mandag: 1,
   ti: 2,
+  tis: 2,
+  tisdag: 2,
   on: 3,
   ons: 3,
+  onsdag: 3,
   to: 4,
   tor: 4,
+  torsdag: 4,
   fr: 5,
+  fre: 5,
+  fredag: 5,
   lö: 6,
   lo: 6,
   lör: 6,
+  lor: 6,
+  lördag: 6,
   sö: 7,
   so: 7,
+  sön: 7,
+  son: 7,
+  söndag: 7,
+  sondag: 7,
 }
+
+const DAY_TOKEN =
+  '(Må|Måndag|Ma|Mandag|Ti|Tisdag|Tis|Ons?|On|Onsdag|To|Torsdag|Tor|Fr|Fredag|Fre|Lö|Lör|Lördag|Lo|Lordag|Sö|Sön|Söndag|So|Sondag)'
 
 /** Placeholder coach when PDF has no trainer for a court/slot. */
 export const UNKNOWN_COACH_NAME = 'unknown'
@@ -77,6 +94,90 @@ const DATA_ROW_RE =
 
 function normalizeSpaces(value: string) {
   return value.replace(/\s+/g, ' ').trim()
+}
+
+function weekdayFromDayToken(token: string): number | undefined {
+  const normalized = token.toLowerCase().normalize('NFD').replace(/\p{M}/gu, '')
+  if (DAY_MAP[normalized]) return DAY_MAP[normalized]
+  const two = normalized.slice(0, 2)
+  if (DAY_MAP[two]) return DAY_MAP[two]
+  const three = normalized.slice(0, 3)
+  return DAY_MAP[three]
+}
+
+function looksLikeUnparsedDataRow(line: string): boolean {
+  const trimmed = normalizeSpaces(line)
+  return (
+    trimmed.length >= 12 &&
+    /\d{1,2}:\d{2}/.test(trimmed) &&
+    /(Bana|Bord)\s*\d+/i.test(trimmed) &&
+    /\d{3,}/.test(trimmed)
+  )
+}
+
+function parseDataRowRelaxed(trimmed: string): ParsedRow | null {
+  const tailRe = new RegExp(
+    `\\s+${DAY_TOKEN}\\s+(\\d{1,2}:\\d{2})\\s+(Bana|Bord)\\s*(\\d+)\\s*$`,
+    'i'
+  )
+  const tailMatch = trimmed.match(tailRe)
+  if (!tailMatch) return null
+
+  const weekday = weekdayFromDayToken(tailMatch[1])
+  if (!weekday) return null
+
+  const startTime = normalizeTime(tailMatch[2])
+  const venueType = tailMatch[3].toLowerCase() === 'bord' ? 'bordtennis' : 'tennis'
+  const resourceNumber = Number(tailMatch[4])
+  const head = trimmed.slice(0, tailMatch.index).trim()
+
+  const withBirth = head.match(/^(\d{3,6})\s+(.+?)\s+(-\d{2})\s+(.+)$/)
+  if (withBirth) {
+    return {
+      customerNo: withBirth[1],
+      playerName: normalizeSpaces(withBirth[2]),
+      birthYear: parseBirthYear(withBirth[3]),
+      phone: normalizeSpaces(withBirth[4]),
+      weekday,
+      startTime,
+      sport: venueType as LessonSport,
+      resourceNumber,
+      venueRaw: `${tailMatch[3]} ${tailMatch[4]}`,
+      coachName: null,
+    }
+  }
+
+  const withPhone = head.match(/^(\d{3,6})\s+(.+?)\s+((?:\+46|0)[\d][\d\s-]{7,})$/)
+  if (withPhone) {
+    return {
+      customerNo: withPhone[1],
+      playerName: normalizeSpaces(withPhone[2]),
+      phone: normalizeSpaces(withPhone[3]),
+      weekday,
+      startTime,
+      sport: venueType as LessonSport,
+      resourceNumber,
+      venueRaw: `${tailMatch[3]} ${tailMatch[4]}`,
+      coachName: null,
+    }
+  }
+
+  const minimal = head.match(/^(\d{3,6})\s+(.+)$/)
+  if (minimal) {
+    return {
+      customerNo: minimal[1],
+      playerName: normalizeSpaces(minimal[2]),
+      phone: '',
+      weekday,
+      startTime,
+      sport: venueType as LessonSport,
+      resourceNumber,
+      venueRaw: `${tailMatch[3]} ${tailMatch[4]}`,
+      coachName: null,
+    }
+  }
+
+  return null
 }
 
 /** Swedish mobile/landline — used to spot PDF lines where only a number was parsed as coach name. */
@@ -188,7 +289,7 @@ function groupTextItemsIntoLines(items: TextItem[], yTolerance = 4): string[] {
     let text = ''
     let lastX = -1
     for (const part of line.parts) {
-      if (lastX >= 0 && part.x - lastX > 12) {
+      if (lastX >= 0 && part.x - lastX > 18) {
         text += '\t'
       } else if (text.length > 0) {
         text += ' '
@@ -234,8 +335,7 @@ function parseLine(
 
   const rowMatch = trimmed.match(DATA_ROW_RE)
   if (rowMatch) {
-    const dayKey = rowMatch[5].toLowerCase().normalize('NFD').replace(/\p{M}/gu, '')
-    const weekday = DAY_MAP[dayKey]
+    const weekday = weekdayFromDayToken(rowMatch[5])
     if (!weekday) return null
 
     const venueType = rowMatch[7].toLowerCase() === 'bord' ? 'bordtennis' : 'tennis'
@@ -252,6 +352,17 @@ function parseLine(
         resourceNumber: Number(rowMatch[8]),
         venueRaw: `${rowMatch[7]} ${rowMatch[8]}`,
         coachName: currentCoach?.name ?? null,
+      },
+    }
+  }
+
+  const relaxed = parseDataRowRelaxed(trimmed)
+  if (relaxed) {
+    return {
+      type: 'row',
+      row: {
+        ...relaxed,
+        coachName: currentCoach?.name ?? relaxed.coachName,
       },
     }
   }
@@ -354,10 +465,9 @@ function sanitizeInvalidCoachNames(
       coachName: null,
       coachTempId: null,
       status: 'needs_review' as const,
-      included: false,
       warnings: [
         ...lesson.warnings,
-        'Tränare såg ut som telefonnummer — välj tränare manuellt',
+        'Tränare såg ut som telefonnummer — kopplas till "unknown" vid import',
       ],
     }
   })
@@ -381,10 +491,16 @@ export async function parseSchedulePdf(
   let currentCoach: { name: string; phone?: string } | null = null
   const rows: ParsedRow[] = []
   let linesParsed = 0
+  let unparsedCandidates = 0
 
   for (const line of lines) {
     const parsed = parseLine(line, currentCoach)
-    if (!parsed) continue
+    if (!parsed) {
+      if (looksLikeUnparsedDataRow(line)) {
+        unparsedCandidates += 1
+      }
+      continue
+    }
 
     if (parsed.type === 'coach') {
       // PDF sometimes has only a phone on the coach line — keep the previous real coach.
@@ -400,6 +516,10 @@ export async function parseSchedulePdf(
 
   if (linesParsed === 0) {
     warnings.push('Inga lektionsrader hittades. Kontrollera att PDF:en är textbaserad (inte skannad bild).')
+  } else if (unparsedCandidates > 0) {
+    warnings.push(
+      `${unparsedCandidates} rad(er) såg ut som lektioner men kunde inte tolkas helt — granska att alla lektioner finns i listan.`
+    )
   }
 
   let lessons = groupRowsIntoLessons(rows, defaultDurationMinutes)
@@ -478,8 +598,9 @@ export function enrichPdfPreview(preview: PdfImportPreview, club: ClubPayload): 
 
     if (coachName) {
       if (!looksLikePersonName(coachName)) {
-        warnings.push(`Tränare "${coachName}" ser ut som telefonnummer — välj manuellt`)
-        status = 'needs_review'
+        warnings.push(`Tränare "${coachName}" ser ut som telefonnummer — använder "unknown"`)
+        coachName = null
+        coachId = undefined
       } else {
         coachId = coachByName.get(normalizeCoachName(coachName))
         if (!coachId) {
@@ -519,10 +640,7 @@ export function enrichPdfPreview(preview: PdfImportPreview, club: ClubPayload): 
       autoUnknownCount += 1
     }
 
-    const hasBlockingIssue =
-      !result.resourceId ||
-      result.players.length === 0 ||
-      result.warnings.some((warning) => warning.includes('telefonnummer'))
+    const hasBlockingIssue = !result.resourceId || result.players.length === 0
 
     if (
       !hasBlockingIssue &&

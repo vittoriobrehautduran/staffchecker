@@ -7,6 +7,7 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/com
 import { useToast } from '@/components/ui/use-toast'
 import { LoadingSpinner } from '@/components/ui/loading-spinner'
 import { ChevronDown, ChevronUp, FileUp, Settings2 } from 'lucide-react'
+import { ClubAttendanceSection } from '@/pages/club/ClubAttendanceSection'
 import { ClubDayPanel } from '@/pages/club/ClubDayPanel'
 import { ClubPdfImportPanel } from '@/pages/club/ClubPdfImportPanel'
 import { ClubSettingsPanel } from '@/pages/club/ClubSettingsPanel'
@@ -46,6 +47,7 @@ export default function Club() {
   const [activeSport, setActiveSport] = useState<LessonSport>('tennis')
   const [settingsOpen, setSettingsOpen] = useState(false)
   const [importOpen, setImportOpen] = useState(false)
+  const [clubMainTab, setClubMainTab] = useState<'schedule' | 'attendance'>('schedule')
   const [draftsByWeekday, setDraftsByWeekday] = useState<Record<number, LocalLessonDraft[]>>({})
 
   const [tennisEnabled, setTennisEnabled] = useState(false)
@@ -391,20 +393,8 @@ export default function Club() {
     return (
       <div className="min-h-screen flex-1 bg-background p-4 md:p-6">
         <div className="container mx-auto max-w-3xl space-y-4">
-          <h1 className="text-2xl font-semibold tracking-tight">Klubb</h1>
-          <Card>
-            <CardHeader>
-              <CardTitle className="text-base">Tränarläge</CardTitle>
-              <CardDescription>
-                Du har tränarbehörighet. Veckoschema och inställningar hanteras av klubbansvarig.
-              </CardDescription>
-            </CardHeader>
-            <CardContent>
-              <Button type="button" variant="outline" onClick={() => navigate('/dashboard')}>
-                Till översikt
-              </Button>
-            </CardContent>
-          </Card>
+          <h1 className="text-2xl font-semibold tracking-tight">Närvaro</h1>
+          <ClubAttendanceSection isBoss={false} />
         </div>
       </div>
     )
@@ -417,7 +407,7 @@ export default function Club() {
       <div className="min-h-screen flex-1 bg-background p-4 md:p-6">
         <div className="container mx-auto max-w-4xl space-y-6">
           <div>
-            <h1 className="text-2xl font-semibold tracking-tight">Klubb</h1>
+            <h1 className="text-2xl font-semibold tracking-tight">Klubbschema</h1>
             <p className="mt-1 text-sm text-muted-foreground">Veckoschema och inställningar.</p>
           </div>
           <Card>
@@ -435,38 +425,61 @@ export default function Club() {
       <div className="container mx-auto max-w-4xl space-y-6">
         <div className="flex flex-wrap items-start justify-between gap-3">
           <div>
-            <h1 className="text-2xl font-semibold tracking-tight">Klubb</h1>
+            <h1 className="text-2xl font-semibold tracking-tight">Klubbschema</h1>
             <p className="mt-1 text-sm text-muted-foreground">
-              Planera {activeSportLabel.toLowerCase()} per veckodag.
+              {clubMainTab === 'schedule'
+                ? `Planera ${activeSportLabel.toLowerCase()} per veckodag.`
+                : 'Närvaro, historik och ändringar per dag.'}
             </p>
           </div>
-          <div className="flex flex-wrap gap-2">
-            <Button
-              type="button"
-              variant="outline"
-              size="sm"
-              className="gap-2"
-              onClick={() => setImportOpen((open) => !open)}
-            >
-              <FileUp className="h-4 w-4" />
-              Importera PDF
-              {importOpen ? <ChevronUp className="h-4 w-4" /> : <ChevronDown className="h-4 w-4" />}
-            </Button>
-            <Button
-              type="button"
-              variant="outline"
-              size="sm"
-              className="gap-2"
-              onClick={() => setSettingsOpen((open) => !open)}
-            >
-              <Settings2 className="h-4 w-4" />
-              Inställningar
-              {settingsOpen ? <ChevronUp className="h-4 w-4" /> : <ChevronDown className="h-4 w-4" />}
-            </Button>
-          </div>
+          {clubMainTab === 'schedule' && (
+            <div className="flex flex-wrap gap-2">
+              <Button
+                type="button"
+                variant="outline"
+                size="sm"
+                className="gap-2"
+                onClick={() => setImportOpen((open) => !open)}
+              >
+                <FileUp className="h-4 w-4" />
+                Importera PDF
+                {importOpen ? <ChevronUp className="h-4 w-4" /> : <ChevronDown className="h-4 w-4" />}
+              </Button>
+              <Button
+                type="button"
+                variant="outline"
+                size="sm"
+                className="gap-2"
+                onClick={() => setSettingsOpen((open) => !open)}
+              >
+                <Settings2 className="h-4 w-4" />
+                Inställningar
+                {settingsOpen ? <ChevronUp className="h-4 w-4" /> : <ChevronDown className="h-4 w-4" />}
+              </Button>
+            </div>
+          )}
         </div>
 
-        {importOpen && data && (
+        <div className="flex flex-wrap gap-2 border-b border-border pb-3">
+          <Button
+            type="button"
+            size="sm"
+            variant={clubMainTab === 'schedule' ? 'default' : 'outline'}
+            onClick={() => setClubMainTab('schedule')}
+          >
+            Veckoschema
+          </Button>
+          <Button
+            type="button"
+            size="sm"
+            variant={clubMainTab === 'attendance' ? 'default' : 'outline'}
+            onClick={() => setClubMainTab('attendance')}
+          >
+            Närvaro
+          </Button>
+        </div>
+
+        {clubMainTab === 'schedule' && importOpen && data && (
           <ClubPdfImportPanel
             data={data}
             isBusy={isLoading || isSavingLesson}
@@ -481,7 +494,7 @@ export default function Club() {
           />
         )}
 
-        {settingsOpen && data && (
+        {clubMainTab === 'schedule' && settingsOpen && data && (
           <ClubSettingsPanel
             data={data}
             tennisEnabled={tennisEnabled}
@@ -505,6 +518,9 @@ export default function Club() {
           />
         )}
 
+        {clubMainTab === 'attendance' && <ClubAttendanceSection isBoss />}
+
+        {clubMainTab === 'schedule' && (
         <Card>
           <CardHeader>
             <CardTitle className="text-base">Veckoschema</CardTitle>
@@ -581,6 +597,7 @@ export default function Club() {
             )}
           </CardContent>
         </Card>
+        )}
       </div>
     </div>
   )

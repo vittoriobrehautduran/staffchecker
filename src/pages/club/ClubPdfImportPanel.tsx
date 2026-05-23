@@ -26,7 +26,7 @@ import {
 type Props = {
   data: ClubPayload
   isBusy: boolean
-  onImport: (body: Record<string, unknown>) => Promise<{ importedCount?: number }>
+  onImport: (body: Record<string, unknown>) => Promise<{ importedCount?: number; skippedCount?: number }>
 }
 
 const WEEKDAY_LABEL = Object.fromEntries(WEEKDAYS.map((day) => [day.value, day.label]))
@@ -149,7 +149,9 @@ export function ClubPdfImportPanel({ data, isBusy, onImport }: Props) {
       setPreview(null)
       toast({
         title: 'Import klar',
-        description: `${result.importedCount ?? readyLessons.length} lektioner importerade.`,
+        description: `${result.importedCount ?? readyLessons.length} lektioner importerade${
+          result.skippedCount ? ` (${result.skippedCount} hoppades över)` : ''
+        }.`,
       })
     } catch {
       // onImport visar toast

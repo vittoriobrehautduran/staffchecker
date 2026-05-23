@@ -1,6 +1,16 @@
 import { APIGatewayProxyEvent, APIGatewayProxyResult } from 'aws-lambda'
 import { sql } from './utils/database'
 import { getUserIdFromCognitoSession } from './utils/cognito-auth'
+import {
+  defaultHistoryRange,
+  getAttendanceHistory,
+  getAuditLog,
+  getClubAccess,
+  getDayPayload,
+  getNotifications,
+  markNotificationsRead,
+  updateSessionDay,
+} from './utils/club-attendance'
 
 type ResourceType = 'court' | 'table'
 type SportType = 'tennis' | 'bordtennis' | 'both'
@@ -44,24 +54,13 @@ function addMinutesToTime(startTime: string, minutes: number): string {
 }
 
 async function getBossClubId(userId: number): Promise<number | null> {
-  try {
-    const rows = (await sql`
-      SELECT club_id
-      FROM user_club_memberships
-      WHERE user_id = ${userId}
-        AND permissions @> ARRAY['club_boss']::text[]
-      ORDER BY club_id ASC
-      LIMIT 1
-    `) as { club_id: number }[]
+  const access = await getClubAccess(userId)
+  if (!access?.isBoss) return null
+  return access.clubId
+}
 
-    return rows.length ? rows[0].club_id : null
-  } catch (error: unknown) {
-    const pgError = error as { code?: string }
-    if (pgError?.code === '42P01') {
-      return null
-    }
-    throw error
-  }
+function isValidDateStr(value: string): boolean {
+  return /^\d{4}-\d{2}-\d{2}$/.test(value)
 }
 
 async function getMaxUsedResourceNumber(
@@ -440,6 +439,19 @@ async function findCoachByName(clubId: number, coachName: string) {
   return coaches.find((coach) => coach.name.trim().toLowerCase() === normalized)?.id ?? null
 }
 
+async function ensureUnknownCoachId(clubId: number, sport: LessonSport): Promise<number> {
+  const existing = await findCoachByName(clubId, 'unknown')
+  if (existing) return existing
+
+  const inserted = (await sql`
+    INSERT INTO club_coaches (club_id, name, sport)
+    VALUES (${clubId}, ${'unknown'}, ${sport})
+    RETURNING id
+  `) as { id: number }[]
+
+  return inserted[0].id
+}
+
 async function deleteLessonById(clubId: number, lessonId: number) {
   const rows = (await sql`
     SELECT id, class_id
@@ -495,16 +507,43 @@ export const handler = async (
       }
     }
 
-    const clubId = await getBossClubId(userId)
-    if (!clubId) {
+    const access = await getClubAccess(userId)
+    if (!access) {
       return {
         statusCode: 403,
         headers: corsHeaders(origin),
-        body: JSON.stringify({ message: 'Club boss permission required' }),
+        body: JSON.stringify({ message: 'Club permission required' }),
       }
     }
 
+    const clubId = access.clubId
+    const queryDate = event.queryStringParameters?.date?.trim() || ''
+
     if (event.httpMethod === 'GET') {
+      if (queryDate) {
+        if (!isValidDateStr(queryDate)) {
+          return {
+            statusCode: 400,
+            headers: corsHeaders(origin),
+            body: JSON.stringify({ message: 'date must be YYYY-MM-DD' }),
+          }
+        }
+        const dayPayload = await getDayPayload(clubId, queryDate)
+        return {
+          statusCode: 200,
+          headers: corsHeaders(origin),
+          body: JSON.stringify(dayPayload),
+        }
+      }
+
+      if (!access.isBoss) {
+        return {
+          statusCode: 403,
+          headers: corsHeaders(origin),
+          body: JSON.stringify({ message: 'Club boss permission required' }),
+        }
+      }
+
       const payload = await getClubPayload(clubId)
       return {
         statusCode: 200,
@@ -528,6 +567,129 @@ export const handler = async (
         statusCode: 400,
         headers: corsHeaders(origin),
         body: JSON.stringify({ message: 'operation is required' }),
+      }
+    }
+
+    const bossOnlyOperations = new Set([
+      'update_club_settings',
+      'add_resource',
+      'add_coach',
+      'add_lesson',
+      'update_lesson',
+      'delete_lesson',
+      'import_schedule',
+      'clear_schedule',
+      'get_audit_log',
+      'get_notifications',
+      'mark_notifications_read',
+      'get_attendance_history',
+    ])
+
+    if (bossOnlyOperations.has(operation) && !access.isBoss) {
+      return {
+        statusCode: 403,
+        headers: corsHeaders(origin),
+        body: JSON.stringify({ message: 'Club boss permission required' }),
+      }
+    }
+
+    if (operation === 'get_day') {
+      const dateStr = String(body.date || '').trim()
+      if (!isValidDateStr(dateStr)) {
+        return {
+          statusCode: 400,
+          headers: corsHeaders(origin),
+          body: JSON.stringify({ message: 'date must be YYYY-MM-DD' }),
+        }
+      }
+      const dayPayload = await getDayPayload(clubId, dateStr)
+      return {
+        statusCode: 200,
+        headers: corsHeaders(origin),
+        body: JSON.stringify(dayPayload),
+      }
+    }
+
+    if (operation === 'update_session') {
+      const sessionId = Number(body.sessionId)
+      if (!sessionId) {
+        return {
+          statusCode: 400,
+          headers: corsHeaders(origin),
+          body: JSON.stringify({ message: 'sessionId is required' }),
+        }
+      }
+
+      const dayPayload = await updateSessionDay(clubId, userId, sessionId, {
+        coachIds: Array.isArray(body.coachIds)
+          ? (body.coachIds as unknown[]).map((id) => Number(id)).filter((id) => id > 0)
+          : undefined,
+        players: Array.isArray(body.players)
+          ? (body.players as { sessionPlayerId?: number; name?: string; removed?: boolean }[])
+          : undefined,
+        attendance: Array.isArray(body.attendance)
+          ? (body.attendance as { sessionPlayerId: number; status: 'present' | 'absent' | 'unknown' }[])
+          : undefined,
+      })
+
+      return {
+        statusCode: 200,
+        headers: corsHeaders(origin),
+        body: JSON.stringify(dayPayload),
+      }
+    }
+
+    if (operation === 'get_audit_log') {
+      const defaults = defaultHistoryRange()
+      const fromDate = String(body.fromDate || defaults.fromDate).trim()
+      const toDate = String(body.toDate || defaults.toDate).trim()
+      const entries = await getAuditLog(clubId, fromDate, toDate)
+      return {
+        statusCode: 200,
+        headers: corsHeaders(origin),
+        body: JSON.stringify({ entries }),
+      }
+    }
+
+    if (operation === 'get_notifications') {
+      const notifications = await getNotifications(clubId, userId)
+      return {
+        statusCode: 200,
+        headers: corsHeaders(origin),
+        body: JSON.stringify({ notifications }),
+      }
+    }
+
+    if (operation === 'mark_notifications_read') {
+      const notificationIds = Array.isArray(body.notificationIds)
+        ? (body.notificationIds as unknown[]).map((id) => Number(id)).filter((id) => id > 0)
+        : undefined
+      await markNotificationsRead(clubId, userId, notificationIds)
+      const notifications = await getNotifications(clubId, userId)
+      return {
+        statusCode: 200,
+        headers: corsHeaders(origin),
+        body: JSON.stringify({ notifications }),
+      }
+    }
+
+    if (operation === 'get_attendance_history') {
+      const defaults = defaultHistoryRange()
+      const fromDate = String(body.fromDate || defaults.fromDate).trim()
+      const toDate = String(body.toDate || defaults.toDate).trim()
+      const sessions = await getAttendanceHistory(clubId, fromDate, toDate)
+      return {
+        statusCode: 200,
+        headers: corsHeaders(origin),
+        body: JSON.stringify({ fromDate, toDate, sessions }),
+      }
+    }
+
+    if (!access.isBoss) {
+      return {
+        statusCode: 403,
+        headers: corsHeaders(origin),
+        body: JSON.stringify({ message: 'Club boss permission required' }),
       }
     }
 
@@ -856,6 +1018,7 @@ export const handler = async (
       }
 
       let importedCount = 0
+      let skippedCount = 0
 
       for (const rawLesson of lessonsInput) {
         const lesson = rawLesson as {
@@ -881,9 +1044,18 @@ export const handler = async (
               .filter((name) => name.length > 0)
           : []
 
-        if (sport !== 'tennis' && sport !== 'bordtennis') continue
-        if (weekday < 1 || weekday > 7) continue
-        if (!startTime || playerNames.length === 0) continue
+        if (sport !== 'tennis' && sport !== 'bordtennis') {
+          skippedCount += 1
+          continue
+        }
+        if (weekday < 1 || weekday > 7) {
+          skippedCount += 1
+          continue
+        }
+        if (!startTime || playerNames.length === 0) {
+          skippedCount += 1
+          continue
+        }
 
         let resourceId = Number(lesson.resourceId ?? 0)
         if (!resourceId && createMissingResources) {
@@ -928,20 +1100,25 @@ export const handler = async (
         } else if (lesson.coachName && createMissingCoaches) {
           const coachName = String(lesson.coachName).trim()
           if (looksLikePhoneNumber(coachName)) {
-            continue
+            coachIds.push(await ensureUnknownCoachId(clubId, sport))
+          } else {
+            let resolvedCoachId = await findCoachByName(clubId, coachName)
+            if (!resolvedCoachId) {
+              const inserted = (await sql`
+                INSERT INTO club_coaches (club_id, name, sport)
+                VALUES (${clubId}, ${coachName}, ${sport})
+                RETURNING id
+              `) as { id: number }[]
+              resolvedCoachId = inserted[0].id
+            }
+            if (resolvedCoachId) {
+              coachIds.push(resolvedCoachId)
+            }
           }
-          let resolvedCoachId = await findCoachByName(clubId, coachName)
-          if (!resolvedCoachId) {
-            const inserted = (await sql`
-              INSERT INTO club_coaches (club_id, name, sport)
-              VALUES (${clubId}, ${coachName}, ${sport})
-              RETURNING id
-            `) as { id: number }[]
-            resolvedCoachId = inserted[0].id
-          }
-          if (resolvedCoachId) {
-            coachIds.push(resolvedCoachId)
-          }
+        }
+
+        if (coachIds.length === 0) {
+          coachIds.push(await ensureUnknownCoachId(clubId, sport))
         }
 
         await insertLessonRecord(clubId, {
@@ -962,7 +1139,7 @@ export const handler = async (
       return {
         statusCode: 200,
         headers: corsHeaders(origin),
-        body: JSON.stringify({ ...payload, importedCount }),
+        body: JSON.stringify({ ...payload, importedCount, skippedCount }),
       }
     }
 

@@ -122,7 +122,7 @@ export function AppSidebar({ mobileOpen, onMobileOpenChange }: AppSidebarProps) 
         {user?.hasClubAccess && (
           <NavLink to="/club" className={({ isActive }) => sidebarItemClass(isActive)}>
             <Users className="h-5 w-5 shrink-0 opacity-90" aria-hidden />
-            <span>Klubb</span>
+            <span>{user.hasClubBossAccess ? 'Klubbschema' : 'Närvaro'}</span>
           </NavLink>
         )}
         {user?.hasEmployeeReportsAccess && (
