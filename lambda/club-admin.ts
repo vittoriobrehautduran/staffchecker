@@ -407,6 +407,8 @@ async function deleteAllClubSchedule(clubId: number): Promise<number> {
     WHERE club_id = ${clubId}
   `) as { id: number }[]
 
+  await sql`DELETE FROM club_sessions WHERE club_id = ${clubId}`
+
   for (const template of templates) {
     await deleteLessonById(clubId, template.id)
   }
@@ -452,6 +454,15 @@ async function ensureUnknownCoachId(clubId: number, sport: LessonSport): Promise
   return inserted[0].id
 }
 
+async function deleteSessionsForLesson(clubId: number, classId: number, templateId: number) {
+  // Närvaro-sessions materialiseras från veckoschemat och blockerar annars borttagning av klassen.
+  await sql`
+    DELETE FROM club_sessions
+    WHERE club_id = ${clubId}
+      AND (class_id = ${classId} OR template_id = ${templateId})
+  `
+}
+
 async function deleteLessonById(clubId: number, lessonId: number) {
   const rows = (await sql`
     SELECT id, class_id
@@ -467,6 +478,7 @@ async function deleteLessonById(clubId: number, lessonId: number) {
 
   const classId = rows[0].class_id
 
+  await deleteSessionsForLesson(clubId, classId, lessonId)
   await sql`DELETE FROM club_schedule_template WHERE id = ${lessonId}`
   await sql`DELETE FROM club_class_players WHERE class_id = ${classId}`
   await sql`DELETE FROM club_classes WHERE id = ${classId}`
