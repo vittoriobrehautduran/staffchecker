@@ -10,6 +10,7 @@
     "build:lambda": "node scripts/bundle-lambda.js",
     "deploy:lambda": "node scripts/deploy-lambda.js",
     "set-lambda-env": "node scripts/set-lambda-env.js",
+    "set-lambda-env:staging": "LAMBDA_FUNCTION_PREFIX=timrapport-staging node scripts/set-lambda-env.js",
     "lint": "eslint .",
     "preview": "vite preview"
   },
@@ -30,6 +31,7 @@
     "inflection": "^3.0.2",
     "kysely": "^0.28.10",
     "lucide-react": "^0.563.0",
+    "pdfjs-dist": "^4.10.38",
     "pg": "^8.17.2",
     "postgres": "^3.4.8",
     "react": "^19.2.0",

@@ -2,6 +2,9 @@
 
 interface ImportMetaEnv {
   readonly VITE_API_BASE_URL?: string
+  /** Staging API URL; used by vite.config in development unless VITE_USE_PROD_API=true */
+  readonly VITE_API_BASE_URL_STAGING?: string
+  readonly VITE_USE_PROD_API?: string
   /** API path segment for report submit, e.g. submit-report-staging (Amplify staging only). */
   readonly VITE_REPORT_SUBMIT_PATH?: string
   readonly VITE_AWS_REGION?: string

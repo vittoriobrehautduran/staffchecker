@@ -3,6 +3,7 @@
  * - timrapport-submit-report (prod): BOSS_EMAIL_ADDRESS ändras aldrig härifrån (behåll värdet i AWS).
  * - REPORT_EMAIL_FROM / EMAIL_BACKUP: sätts från .env.local när de finns; annars behålls befintligt Lambda-värde.
  * - timrapport-submit-report-staging: BOSS från BOSS_EMAIL_ADDRESS_STAGING eller BOSS_EMAIL_ADDRESS.
+ * - LAMBDA_FUNCTION_PREFIX=timrapport-staging: DATABASE_URL från DATABASE_URL_STAGING (inte prod DATABASE_URL).
  * - Saknad Lambda: varning + hoppa över (deploya funktionen först).
  */
 import { LambdaClient, UpdateFunctionConfigurationCommand, GetFunctionConfigurationCommand } from '@aws-sdk/client-lambda'
@@ -65,13 +66,27 @@ Object.keys(envVars).forEach(key => {
 })
 
 const LAMBDA_REGION = process.env.AWS_REGION || process.env.AWS_DEFAULT_REGION || 'eu-north-1'
-const PROJECT_NAME = 'timrapport'
+const PROJECT_NAME = process.env.LAMBDA_FUNCTION_PREFIX || 'timrapport'
+const isStagingLambdas = PROJECT_NAME === 'timrapport-staging' || PROJECT_NAME.endsWith('-staging')
 
 const lambdaClient = new LambdaClient({ region: LAMBDA_REGION })
 
+function databaseUrlForLambdas() {
+  if (isStagingLambdas) {
+    return process.env.DATABASE_URL_STAGING
+  }
+  return process.env.DATABASE_URL
+}
+
+function neonHostFromDatabaseUrl(url) {
+  if (!url) return '(not set)'
+  const match = url.match(/@([^/]+)/)
+  return match ? match[1] : '(unknown host)'
+}
+
 // Environment variables needed for all functions
 const commonEnvVars = {
-  DATABASE_URL: process.env.DATABASE_URL,
+  DATABASE_URL: databaseUrlForLambdas(),
   COGNITO_REGION: process.env.COGNITO_REGION || process.env.AWS_REGION || process.env.AWS_DEFAULT_REGION || 'eu-north-1',
   COGNITO_USER_POOL_ID: process.env.COGNITO_USER_POOL_ID,
   COGNITO_CLIENT_ID: process.env.COGNITO_CLIENT_ID,
@@ -95,6 +110,9 @@ const emailFunctions = ['submit-report', 'submit-report-staging']
 
 // Functions that need registration env vars
 const registrationFunctions = ['register-start']
+
+// Boss email for read-only employee report access (get-user-info, list/get-employee-report)
+const reportViewerFunctions = ['list-employee-reports', 'get-employee-report', 'get-user-info']
 
 async function setFunctionEnvironment(functionName) {
   const functionBaseName = functionName.replace(`${PROJECT_NAME}-`, '')
@@ -148,6 +166,17 @@ async function setFunctionEnvironment(functionName) {
       Object.assign(newEnvVars, registrationEnvVars)
     }
 
+    if (reportViewerFunctions.includes(functionBaseName)) {
+      const bossFromEnv = isStagingLambdas
+        ? process.env.BOSS_EMAIL_ADDRESS_STAGING || process.env.BOSS_EMAIL_ADDRESS
+        : process.env.BOSS_EMAIL_ADDRESS
+      if (bossFromEnv) {
+        newEnvVars.BOSS_EMAIL_ADDRESS = bossFromEnv
+      } else if (currentEnvVars.BOSS_EMAIL_ADDRESS !== undefined) {
+        newEnvVars.BOSS_EMAIL_ADDRESS = currentEnvVars.BOSS_EMAIL_ADDRESS
+      }
+    }
+
     // Remove undefined values
     Object.keys(newEnvVars).forEach(key => {
       if (newEnvVars[key] === undefined) {
@@ -182,9 +211,12 @@ async function setAllFunctionEnvironments() {
     `${PROJECT_NAME}-delete-entry`,
     `${PROJECT_NAME}-get-entries`,
     `${PROJECT_NAME}-get-report`,
+    `${PROJECT_NAME}-get-employee-report`,
+    `${PROJECT_NAME}-list-employee-reports`,
     `${PROJECT_NAME}-get-user-info`,
     `${PROJECT_NAME}-update-user-preferences`,
     `${PROJECT_NAME}-cognito-pre-signup`,
+    `${PROJECT_NAME}-club-admin`,
     `${PROJECT_NAME}-register-start`,
     `${PROJECT_NAME}-revert-report`,
     `${PROJECT_NAME}-submit-report`,
@@ -197,9 +229,19 @@ async function setAllFunctionEnvironments() {
   
   // Check required env vars
   if (!commonEnvVars.DATABASE_URL) {
-    console.error('❌ DATABASE_URL not found in .env.local')
+    if (isStagingLambdas) {
+      console.error('❌ DATABASE_URL_STAGING not found in .env.local (required when LAMBDA_FUNCTION_PREFIX=timrapport-staging)')
+    } else {
+      console.error('❌ DATABASE_URL not found in .env.local')
+    }
     process.exit(1)
   }
+
+  console.log(
+    isStagingLambdas
+      ? `📦 Staging Lambdas → Neon host: ${neonHostFromDatabaseUrl(commonEnvVars.DATABASE_URL)}`
+      : `📦 Production Lambdas → Neon host: ${neonHostFromDatabaseUrl(commonEnvVars.DATABASE_URL)}`
+  )
   
   if (!commonEnvVars.COGNITO_USER_POOL_ID) {
     console.error('❌ COGNITO_USER_POOL_ID not found in .env.local')

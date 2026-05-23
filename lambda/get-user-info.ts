@@ -2,7 +2,6 @@ import { APIGatewayProxyEvent, APIGatewayProxyResult } from 'aws-lambda'
 import { sql } from './utils/database'
 import { getUserIdFromCognitoSession, getCognitoUserIdFromRequest } from './utils/cognito-auth'
 
-// Helper function to get CORS origin from request
 function getCorsOrigin(event: APIGatewayProxyEvent): string {
   const requestOrigin = event.headers?.Origin || event.headers?.origin || '*'
   const allowedOrigins = [
@@ -13,12 +12,15 @@ function getCorsOrigin(event: APIGatewayProxyEvent): string {
   return allowedOrigins.includes(requestOrigin) ? requestOrigin : allowedOrigins[0]
 }
 
+type MembershipRow = {
+  permissions: string | null
+}
+
 export const handler = async (
   event: APIGatewayProxyEvent
 ): Promise<APIGatewayProxyResult> => {
   const origin = getCorsOrigin(event)
 
-  // Handle CORS preflight
   if (event.httpMethod === 'OPTIONS') {
     return {
       statusCode: 200,
@@ -76,13 +78,36 @@ export const handler = async (
       }
     }
 
-    // Get user info including admin status
-    const userResult = await sql`
-      SELECT id, email, name, last_name, is_admin, ui_theme
-      FROM users 
-      WHERE id = ${userId}
-      LIMIT 1
-    `
+    let userResult: {
+      id: number
+      email: string
+      name: string
+      last_name: string
+      is_admin: boolean
+      ui_theme: string | null
+      is_salary_manager?: boolean
+      is_report_boss?: boolean
+    }[]
+
+    try {
+      userResult = (await sql`
+        SELECT id, email, name, last_name, is_admin, ui_theme,
+               is_salary_manager, is_report_boss
+        FROM users
+        WHERE id = ${userId}
+        LIMIT 1
+      `) as typeof userResult
+    } catch (columnError: any) {
+      if (columnError?.code !== '42703') {
+        throw columnError
+      }
+      userResult = (await sql`
+        SELECT id, email, name, last_name, is_admin, ui_theme
+        FROM users
+        WHERE id = ${userId}
+        LIMIT 1
+      `) as typeof userResult
+    }
 
     if (userResult.length === 0) {
       return {
@@ -103,6 +128,36 @@ export const handler = async (
     const user = userResult[0]
     const theme = user.ui_theme === 'dark' ? 'dark' : 'light'
 
+    let clubPermissions: string[] = []
+
+    try {
+      const memberships = (await sql`
+        SELECT DISTINCT unnest(m.permissions) AS permissions
+        FROM user_club_memberships m
+        WHERE m.user_id = ${userId}
+      `) as MembershipRow[]
+      clubPermissions = memberships
+        .map((row) => row.permissions)
+        .filter((permission): permission is string => typeof permission === 'string')
+    } catch (membershipError: any) {
+      if (membershipError?.code !== '42P01') {
+        throw membershipError
+      }
+      clubPermissions = []
+    }
+
+    const hasClubBossAccess = clubPermissions.includes('club_boss')
+    const hasClubCoachAccess = clubPermissions.includes('club_coach')
+    const hasClubAccess = hasClubBossAccess || hasClubCoachAccess
+
+    const bossEmail = (process.env.BOSS_EMAIL_ADDRESS || '').trim().toLowerCase()
+    const userEmail = (user.email || '').trim().toLowerCase()
+    const isSalaryManager = !!user.is_salary_manager
+    const isReportBoss = !!user.is_report_boss
+    const isBossEmail = bossEmail.length > 0 && userEmail === bossEmail
+    const hasEmployeeReportsAccess =
+      !!user.is_admin || isSalaryManager || isReportBoss || isBossEmail
+
     return {
       statusCode: 200,
       headers: {
@@ -117,6 +172,12 @@ export const handler = async (
         lastName: user.last_name,
         isAdmin: user.is_admin || false,
         theme,
+        clubPermissions,
+        hasClubAccess,
+        hasClubBossAccess,
+        isSalaryManager,
+        isReportBoss,
+        hasEmployeeReportsAccess,
       }),
     }
   } catch (error: any) {
@@ -128,11 +189,10 @@ export const handler = async (
         'Access-Control-Allow-Origin': origin,
         'Access-Control-Allow-Credentials': 'true',
       },
-      body: JSON.stringify({ 
+      body: JSON.stringify({
         message: 'Internal server error',
-        error: error?.message || 'Unknown error'
+        error: error?.message || 'Unknown error',
       }),
     }
   }
 }
-
