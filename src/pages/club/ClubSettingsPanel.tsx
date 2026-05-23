@@ -3,6 +3,7 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/com
 import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
 import type { ClubCoach, ClubPayload, ClubResource } from './clubTypes'
+import { ClubClearScheduleSection } from './ClubClearScheduleSection'
 
 type Props = {
   data: ClubPayload
@@ -23,6 +24,7 @@ type Props = {
   onAddCourt: () => void
   onAddTable: () => void
   onAddCoach: () => void
+  onClearSchedule: (confirmPhrase: string) => Promise<void>
 }
 
 function formatResourceName(resource: ClubResource, fallbackLabel: string) {
@@ -51,6 +53,7 @@ export function ClubSettingsPanel({
   onAddCourt,
   onAddTable,
   onAddCoach,
+  onClearSchedule,
 }: Props) {
   const tennisCoaches = data.coaches.filter(
     (coach) => coach.sport === 'tennis' || coach.sport === 'both'
@@ -145,6 +148,8 @@ export function ClubSettingsPanel({
             + Tränare
           </Button>
         </div>
+
+        <ClubClearScheduleSection isBusy={isSaving} onClearSchedule={onClearSchedule} />
       </CardContent>
     </Card>
   )

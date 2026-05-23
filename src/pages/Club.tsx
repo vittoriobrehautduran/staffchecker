@@ -195,6 +195,35 @@ export default function Club() {
     toast({ title: 'Tränare tillagd' })
   }
 
+  async function clearClubSchedule(confirmPhrase: string) {
+    try {
+      const result = await apiRequest<ClubPayload & { deletedCount?: number }>('/club-admin', {
+        method: 'POST',
+        body: JSON.stringify({
+          operation: 'clear_schedule',
+          confirmPhrase,
+        }),
+      })
+      applyPayload(result)
+      setDraftsByWeekday({})
+      toast({
+        title: 'Veckoschema rensat',
+        description:
+          result.deletedCount != null && result.deletedCount > 0
+            ? `${result.deletedCount} lektioner togs bort.`
+            : 'Schemat var redan tomt.',
+      })
+    } catch (error: unknown) {
+      const err = error as { message?: string }
+      toast({
+        title: 'Kunde inte rensa schema',
+        description: err?.message || 'Ett fel uppstod',
+        variant: 'destructive',
+      })
+      throw error
+    }
+  }
+
   const lessonsForDay = useMemo(() => {
     if (!data?.lessonsByWeekday) return []
     const dayLessons = data.lessonsByWeekday[String(activeWeekday)] ?? []
@@ -472,6 +501,7 @@ export default function Club() {
             onAddCourt={addCourt}
             onAddTable={addTable}
             onAddCoach={addCoach}
+            onClearSchedule={clearClubSchedule}
           />
         )}
 

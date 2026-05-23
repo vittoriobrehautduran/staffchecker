@@ -399,6 +399,22 @@ async function deleteAllLessonsForSport(clubId: number, sport: LessonSport) {
   }
 }
 
+const CLEAR_SCHEDULE_CONFIRM_PHRASE = 'RADERA SCHEMA'
+
+async function deleteAllClubSchedule(clubId: number): Promise<number> {
+  const templates = (await sql`
+    SELECT id
+    FROM club_schedule_template
+    WHERE club_id = ${clubId}
+  `) as { id: number }[]
+
+  for (const template of templates) {
+    await deleteLessonById(clubId, template.id)
+  }
+
+  return templates.length
+}
+
 function looksLikePhoneNumber(value: string): boolean {
   const trimmed = value.trim()
   if (!trimmed) return false
@@ -947,6 +963,27 @@ export const handler = async (
         statusCode: 200,
         headers: corsHeaders(origin),
         body: JSON.stringify({ ...payload, importedCount }),
+      }
+    }
+
+    if (operation === 'clear_schedule') {
+      const confirmPhrase = String(body.confirmPhrase || '').trim().toUpperCase()
+      if (confirmPhrase !== CLEAR_SCHEDULE_CONFIRM_PHRASE) {
+        return {
+          statusCode: 400,
+          headers: corsHeaders(origin),
+          body: JSON.stringify({
+            message: `Skriv exakt "${CLEAR_SCHEDULE_CONFIRM_PHRASE}" för att bekräfta`,
+          }),
+        }
+      }
+
+      const deletedCount = await deleteAllClubSchedule(clubId)
+      const payload = await getClubPayload(clubId)
+      return {
+        statusCode: 200,
+        headers: corsHeaders(origin),
+        body: JSON.stringify({ ...payload, deletedCount }),
       }
     }
 
