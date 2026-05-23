@@ -1,0 +1,306 @@
+import { Button } from '@/components/ui/button'
+import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
+import { Input } from '@/components/ui/input'
+import { Label } from '@/components/ui/label'
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from '@/components/ui/select'
+import { buildTimeOptions, DURATION_OPTIONS } from './timeSlots'
+import type { ClubLesson, ClubPayload, LessonSport, LocalLessonDraft } from './clubTypes'
+
+const TIME_OPTIONS = buildTimeOptions(20)
+
+type Props = {
+  weekdayLabel: string
+  sportLabel: string
+  data: ClubPayload
+  lessons: ClubLesson[]
+  drafts: LocalLessonDraft[]
+  isLoading: boolean
+  onAddLesson: () => void
+  onUpdateLesson: (lesson: ClubLesson, patch: Partial<ClubLesson> & { playerNames?: string[] }) => void
+  onDeleteLesson: (lessonId: number) => void
+  onUpdateDraft: (localId: string, patch: Partial<LocalLessonDraft>) => void
+  onSaveDraft: (localId: string) => void
+  onRemoveDraft: (localId: string) => void
+  isSavingLesson?: boolean
+}
+
+export function ClubDayPanel({
+  weekdayLabel,
+  sportLabel,
+  data,
+  lessons,
+  drafts,
+  isLoading,
+  onAddLesson,
+  onUpdateLesson,
+  onDeleteLesson,
+  onUpdateDraft,
+  onSaveDraft,
+  onRemoveDraft,
+  isSavingLesson = false,
+}: Props) {
+  const sortedLessons = [...lessons].sort((a, b) => a.startTime.localeCompare(b.startTime))
+
+  return (
+    <div className="space-y-4">
+      {sortedLessons.length === 0 && drafts.length === 0 && (
+        <p className="text-sm text-muted-foreground">
+          Inga {sportLabel.toLowerCase()}-lektioner på {weekdayLabel.toLowerCase()} ännu.
+        </p>
+      )}
+
+      {sortedLessons.map((lesson) => (
+        <LessonEditor
+          key={lesson.id}
+          sport={lesson.sport}
+          data={data}
+          startTime={lesson.startTime}
+          durationMinutes={lesson.durationMinutes}
+          resourceId={lesson.resourceId}
+          coachIds={lesson.coachIds}
+          playerNames={lesson.players.map((player) => player.name)}
+          isLoading={isLoading}
+          onChange={(patch) => onUpdateLesson(lesson, patch)}
+          onDelete={() => onDeleteLesson(lesson.id)}
+        />
+      ))}
+
+      {drafts.map((draft) => (
+        <LessonEditor
+          key={draft.localId}
+          sport={draft.sport}
+          data={data}
+          startTime={draft.startTime}
+          durationMinutes={draft.durationMinutes}
+          resourceId={draft.resourceId}
+          coachIds={draft.coachIds}
+          playerNames={draft.playerNames}
+          isLoading={isLoading}
+          isSavingLesson={isSavingLesson}
+          isDraft
+          onChange={(patch) => onUpdateDraft(draft.localId, patch)}
+          onDelete={() => onRemoveDraft(draft.localId)}
+          onSaveDraft={() => onSaveDraft(draft.localId)}
+        />
+      ))}
+
+      <Button
+        type="button"
+        variant="secondary"
+        className="w-full"
+        disabled={isLoading}
+        onClick={onAddLesson}
+      >
+        + Lägg till lektion
+      </Button>
+    </div>
+  )
+}
+
+type LessonEditorProps = {
+  sport: LessonSport
+  data: ClubPayload
+  startTime: string
+  durationMinutes: number
+  resourceId: number
+  coachIds: number[]
+  playerNames: string[]
+  isLoading: boolean
+  isDraft?: boolean
+  onChange: (patch: {
+    startTime?: string
+    durationMinutes?: number
+    resourceId?: number
+    coachIds?: number[]
+    playerNames?: string[]
+  }) => void
+  onDelete: () => void
+  onSaveDraft?: () => void
+  isSavingLesson?: boolean
+}
+
+function LessonEditor({
+  sport,
+  data,
+  startTime,
+  durationMinutes,
+  resourceId,
+  coachIds,
+  playerNames,
+  isLoading,
+  isDraft,
+  onChange,
+  onDelete,
+  onSaveDraft,
+  isSavingLesson = false,
+}: LessonEditorProps) {
+  const resources = data.resources.filter((resource) =>
+    sport === 'tennis' ? resource.resource_type === 'court' : resource.resource_type === 'table'
+  )
+
+  const coaches = data.coaches.filter(
+    (coach) => coach.sport === sport || coach.sport === 'both'
+  )
+
+  const resourceLabel = sport === 'tennis' ? 'Bana' : 'Bord'
+  const safeStartTime = startTime || '10:00'
+  const safeDuration = durationMinutes > 0 ? durationMinutes : 60
+  const courtSelectValue = resourceId > 0 ? String(resourceId) : undefined
+
+  function resourceDisplayName(resource: (typeof resources)[0]) {
+    if (resource.label?.trim()) {
+      return resource.label.trim()
+    }
+    return `${resourceLabel} ${resource.resource_number}`
+  }
+
+  return (
+    <Card className={isDraft ? 'border-dashed' : undefined}>
+      <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
+        <CardTitle className="text-base">Lektion</CardTitle>
+        <Button type="button" variant="ghost" size="sm" onClick={onDelete} disabled={isLoading}>
+          Ta bort
+        </Button>
+      </CardHeader>
+      <CardContent className="space-y-4">
+        <div className="grid gap-4 sm:grid-cols-2">
+          <div className="space-y-2">
+            <Label>Starttid</Label>
+            <Select value={safeStartTime} onValueChange={(value) => onChange({ startTime: value })}>
+              <SelectTrigger>
+                <SelectValue placeholder="Välj tid" />
+              </SelectTrigger>
+              <SelectContent>
+                {TIME_OPTIONS.map((time) => (
+                  <SelectItem key={time} value={time}>
+                    {time}
+                  </SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
+          </div>
+          <div className="space-y-2">
+            <Label>Längd (min)</Label>
+            <Select
+              value={String(safeDuration)}
+              onValueChange={(value) => onChange({ durationMinutes: Number(value) })}
+            >
+              <SelectTrigger>
+                <SelectValue />
+              </SelectTrigger>
+              <SelectContent>
+                {DURATION_OPTIONS.map((minutes) => (
+                  <SelectItem key={minutes} value={String(minutes)}>
+                    {minutes} min
+                  </SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
+          </div>
+        </div>
+
+        <div className="space-y-2">
+          <Label>Vilken {resourceLabel.toLowerCase()}?</Label>
+          {resources.length === 0 ? (
+            <p className="text-sm text-muted-foreground">
+              Lägg till {resourceLabel.toLowerCase()} under Inställningar först.
+            </p>
+          ) : (
+            <Select
+              value={courtSelectValue}
+              onValueChange={(value) => onChange({ resourceId: Number(value) })}
+            >
+              <SelectTrigger>
+                <SelectValue placeholder={`Välj ${resourceLabel.toLowerCase()}`} />
+              </SelectTrigger>
+              <SelectContent>
+                {resources.map((resource) => (
+                  <SelectItem key={resource.id} value={String(resource.id)}>
+                    {resourceDisplayName(resource)}
+                  </SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
+          )}
+        </div>
+
+        <div className="space-y-2">
+          <Label>Välj förvald tränare</Label>
+          {coaches.length === 0 ? (
+            <p className="text-sm text-muted-foreground">Lägg till tränare under Inställningar.</p>
+          ) : (
+            <Select
+              value={coachIds[0] ? String(coachIds[0]) : undefined}
+              onValueChange={(value) => {
+                onChange({ coachIds: value ? [Number(value)] : [] })
+              }}
+            >
+              <SelectTrigger>
+                <SelectValue placeholder="Välj tränare" />
+              </SelectTrigger>
+              <SelectContent>
+                {coaches.map((coach) => (
+                  <SelectItem key={coach.id} value={String(coach.id)}>
+                    {coach.name}
+                  </SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
+          )}
+        </div>
+
+        <div className="space-y-2">
+          <Label>Spelare</Label>
+            {playerNames.map((name, index) => (
+              <div key={index} className="flex gap-2">
+                <Input
+                  placeholder="Spelarens namn"
+                  value={name}
+                  onChange={(event) => {
+                    const next = [...playerNames]
+                    next[index] = event.target.value
+                    onChange({ playerNames: next })
+                  }}
+                />
+                <Button
+                  type="button"
+                  variant="outline"
+                  size="icon"
+                  onClick={() => onChange({ playerNames: [...playerNames, ''] })}
+                  title="Lägg till spelare"
+                >
+                  +
+                </Button>
+              </div>
+            ))}
+          {playerNames.length === 0 && (
+            <Button
+              type="button"
+              variant="outline"
+              size="sm"
+              onClick={() => onChange({ playerNames: [''] })}
+            >
+              + Spelare
+            </Button>
+          )}
+        </div>
+
+        {isDraft && onSaveDraft && (
+          <Button
+            type="button"
+            onClick={onSaveDraft}
+            disabled={isLoading || isSavingLesson || resourceId <= 0}
+          >
+            Spara lektion
+          </Button>
+        )}
+      </CardContent>
+    </Card>
+  )
+}

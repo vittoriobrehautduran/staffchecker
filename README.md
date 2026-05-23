@@ -56,13 +56,14 @@ npm run dev
 
 **Lokal utveckling med AWS Lambda:**
 - Frontend körs lokalt på `http://localhost:5173`
-- Backend (Lambda) körs på AWS API Gateway
-- Sätt `VITE_API_BASE_URL` i `.env.local` till din API Gateway URL:
+- Backend (Lambda) körs på AWS API Gateway — webbläsaren anropar **inte** Neon direkt
+- **`npm run dev` använder Neon staging som standard** via staging-API (`VITE_API_BASE_URL_STAGING` i `.env.development`, se `vite.config.ts`)
+- För att mot **produktion**-API lokalt: lägg i `.env.local`:
   ```env
+  VITE_USE_PROD_API=true
   VITE_API_BASE_URL=https://ywqlyoek80.execute-api.eu-north-1.amazonaws.com/prod
   ```
-- Alla API-anrop går till din riktiga API Gateway (Lambda-funktioner körs i AWS)
-- Detta liknar lokal serverkörning men använder AWS Lambda istället
+- `DATABASE_URL_STAGING` i `.env.local` behövs för `npm run set-lambda-env:staging`, inte för Vite
 
 **OBS:** 
 - Du kan inte köra Lambda-funktionerna lokalt enkelt (kräver AWS SAM eller Docker)

@@ -3,6 +3,7 @@
  * - timrapport-submit-report (prod): BOSS_EMAIL_ADDRESS ändras aldrig härifrån (behåll värdet i AWS).
  * - REPORT_EMAIL_FROM / EMAIL_BACKUP: från .env.local när satta; annars behålls befintligt Lambda-värde.
  * - timrapport-submit-report-staging: BOSS från BOSS_EMAIL_ADDRESS_STAGING eller BOSS_EMAIL_ADDRESS.
+ * - LAMBDA_FUNCTION_PREFIX=timrapport-staging: DATABASE_URL från DATABASE_URL_STAGING (inte prod DATABASE_URL).
  * - Saknad Lambda: varning + hoppa över (deploya funktionen först).
  */
 import { LambdaClient, UpdateFunctionConfigurationCommand, GetFunctionConfigurationCommand } from '@aws-sdk/client-lambda'
@@ -66,12 +67,26 @@ Object.keys(envVars).forEach(key => {
 
 const LAMBDA_REGION = process.env.AWS_REGION || process.env.AWS_DEFAULT_REGION || 'eu-north-1'
 const PROJECT_NAME = process.env.LAMBDA_FUNCTION_PREFIX || 'timrapport'
+const isStagingLambdas = PROJECT_NAME === 'timrapport-staging' || PROJECT_NAME.endsWith('-staging')
 
 const lambdaClient = new LambdaClient({ region: LAMBDA_REGION })
 
+function databaseUrlForLambdas() {
+  if (isStagingLambdas) {
+    return process.env.DATABASE_URL_STAGING
+  }
+  return process.env.DATABASE_URL
+}
+
+function neonHostFromDatabaseUrl(url) {
+  if (!url) return '(not set)'
+  const match = url.match(/@([^/]+)/)
+  return match ? match[1] : '(unknown host)'
+}
+
 // Environment variables needed for all functions
 const commonEnvVars = {
-  DATABASE_URL: process.env.DATABASE_URL,
+  DATABASE_URL: databaseUrlForLambdas(),
   COGNITO_REGION: process.env.COGNITO_REGION || process.env.AWS_REGION || process.env.AWS_DEFAULT_REGION || 'eu-north-1',
   COGNITO_USER_POOL_ID: process.env.COGNITO_USER_POOL_ID,
   COGNITO_CLIENT_ID: process.env.COGNITO_CLIENT_ID,
@@ -198,9 +213,19 @@ async function setAllFunctionEnvironments() {
   
   // Check required env vars
   if (!commonEnvVars.DATABASE_URL) {
-    console.error('❌ DATABASE_URL not found in .env.local')
+    if (isStagingLambdas) {
+      console.error('❌ DATABASE_URL_STAGING not found in .env.local (required when LAMBDA_FUNCTION_PREFIX=timrapport-staging)')
+    } else {
+      console.error('❌ DATABASE_URL not found in .env.local')
+    }
     process.exit(1)
   }
+
+  console.log(
+    isStagingLambdas
+      ? `📦 Staging Lambdas → Neon host: ${neonHostFromDatabaseUrl(commonEnvVars.DATABASE_URL)}`
+      : `📦 Production Lambdas → Neon host: ${neonHostFromDatabaseUrl(commonEnvVars.DATABASE_URL)}`
+  )
   
   if (!commonEnvVars.COGNITO_USER_POOL_ID) {
     console.error('❌ COGNITO_USER_POOL_ID not found in .env.local')
