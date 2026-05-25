@@ -34,12 +34,6 @@ type Props = {
   ) => Promise<void>
 }
 
-const ATTENDANCE_LABELS: Record<AttendanceStatus, string> = {
-  present: 'Närvarande',
-  absent: 'Frånvarande',
-  unknown: 'Ej markerad',
-}
-
 function activeCoaches(session: DaySession) {
   return session.coaches.filter((coach) => !coach.isRemoved)
 }
@@ -176,50 +170,54 @@ function SessionCard({
         <section className="space-y-2">
           <Label className="text-sm font-medium">Elever och närvaro</Label>
           <div className="space-y-2">
-            {activePlayers(session).map((player) => (
-              <div
-                key={player.id}
-                className={`flex flex-wrap items-center gap-2 rounded-md border p-2 ${
-                  player.isDayAddition ? 'border-amber-400 bg-amber-50/50 dark:bg-amber-950/20' : ''
-                }`}
-              >
-                <span className="min-w-[8rem] flex-1 text-sm font-medium">
-                  {player.name}
-                  {player.isDayAddition && (
-                    <span className="ml-2 text-xs font-normal text-amber-700 dark:text-amber-300">
-                      Ny för dagen
+            {activePlayers(session).map((player) => {
+              const isPresent = player.attendanceStatus === 'present'
+
+              return (
+                <div
+                  key={player.id}
+                  className={`flex items-center gap-3 rounded-md border p-2 ${
+                    player.isDayAddition
+                      ? 'border-amber-400 bg-amber-50/50 dark:bg-amber-950/20'
+                      : ''
+                  }`}
+                >
+                  <label className="flex min-w-0 flex-1 cursor-pointer items-center gap-3">
+                    <input
+                      type="checkbox"
+                      checked={isPresent}
+                      onChange={(event) =>
+                        void setAttendance(
+                          player.id,
+                          event.target.checked ? 'present' : 'unknown'
+                        )
+                      }
+                      disabled={isSaving}
+                      aria-label={`${player.name} närvarande`}
+                      className="h-5 w-5 shrink-0 cursor-pointer rounded-full border-2 border-muted-foreground accent-primary disabled:cursor-not-allowed disabled:opacity-50"
+                    />
+                    <span className="min-w-0 text-sm font-medium">
+                      {player.name}
+                      {player.isDayAddition && (
+                        <span className="ml-2 text-xs font-normal text-amber-700 dark:text-amber-300">
+                          Ny för dagen
+                        </span>
+                      )}
                     </span>
-                  )}
-                </span>
-                <Select
-                  value={player.attendanceStatus}
-                  onValueChange={(value) =>
-                    void setAttendance(player.id, value as AttendanceStatus)
-                  }
-                  disabled={isSaving}
-                >
-                  <SelectTrigger className="w-[11rem]">
-                    <SelectValue />
-                  </SelectTrigger>
-                  <SelectContent>
-                    {(Object.keys(ATTENDANCE_LABELS) as AttendanceStatus[]).map((status) => (
-                      <SelectItem key={status} value={status}>
-                        {ATTENDANCE_LABELS[status]}
-                      </SelectItem>
-                    ))}
-                  </SelectContent>
-                </Select>
-                <Button
-                  type="button"
-                  variant="ghost"
-                  size="sm"
-                  onClick={() => void removePlayer(player.id)}
-                  disabled={isSaving}
-                >
-                  Ta bort idag
-                </Button>
-              </div>
-            ))}
+                  </label>
+                  <Button
+                    type="button"
+                    variant="ghost"
+                    size="sm"
+                    className="shrink-0"
+                    onClick={() => void removePlayer(player.id)}
+                    disabled={isSaving}
+                  >
+                    Ta bort idag
+                  </Button>
+                </div>
+              )
+            })}
           </div>
           {activePlayers(session).length === 0 && (
             <p className="text-sm text-muted-foreground">Inga elever på lektionen</p>

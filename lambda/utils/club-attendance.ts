@@ -66,8 +66,30 @@ function formatTimeValue(value: unknown): string {
 }
 
 function formatDateValue(value: unknown): string {
-  const raw = String(value ?? '')
-  return raw.length >= 10 ? raw.slice(0, 10) : raw
+  if (value instanceof Date) {
+    if (Number.isNaN(value.getTime())) return ''
+    // Postgres `date` comes back as UTC midnight — use UTC parts to avoid off-by-one.
+    const year = value.getUTCFullYear()
+    const month = String(value.getUTCMonth() + 1).padStart(2, '0')
+    const day = String(value.getUTCDate()).padStart(2, '0')
+    return `${year}-${month}-${day}`
+  }
+
+  const raw = String(value ?? '').trim()
+  const isoMatch = raw.match(/^(\d{4}-\d{2}-\d{2})/)
+  if (isoMatch) {
+    return isoMatch[1]
+  }
+
+  const parsed = new Date(raw)
+  if (!Number.isNaN(parsed.getTime())) {
+    const year = parsed.getUTCFullYear()
+    const month = String(parsed.getUTCMonth() + 1).padStart(2, '0')
+    const day = String(parsed.getUTCDate()).padStart(2, '0')
+    return `${year}-${month}-${day}`
+  }
+
+  return ''
 }
 
 function isoWeekdayFromDateStr(dateStr: string): number {
@@ -336,6 +358,10 @@ async function loadSessionPlayers(sessionId: number) {
 }
 
 export async function getDayPayload(clubId: number, dateStr: string) {
+  if (!/^\d{4}-\d{2}-\d{2}$/.test(dateStr)) {
+    throw new Error(`Ogiltigt datum: ${dateStr}`)
+  }
+
   await ensureSessionsForDate(clubId, dateStr)
 
   const cancelled = await isDayCancelled(clubId, dateStr)
@@ -381,10 +407,100 @@ export async function getDayPayload(clubId: number, dateStr: string) {
   `) as { tennis_enabled: boolean; bordtennis_enabled: boolean }[]
 
   const sessionPayload = []
+  const sessionIds = sessions.map((session) => session.id)
+
+  const coachesBySession = new Map<number, Awaited<ReturnType<typeof loadSessionCoaches>>>()
+  const playersBySession = new Map<number, Awaited<ReturnType<typeof loadSessionPlayers>>>()
+
+  if (sessionIds.length > 0) {
+    const allCoaches = (await sql`
+      SELECT
+        sc.id,
+        sc.session_id,
+        sc.coach_id,
+        sc.is_day_addition,
+        sc.is_removed,
+        c.name
+      FROM club_session_coaches sc
+      INNER JOIN club_coaches c ON c.id = sc.coach_id
+      WHERE sc.session_id = ANY(${sessionIds}::int[])
+      ORDER BY sc.session_id ASC, sc.is_removed ASC, c.name ASC, sc.id ASC
+    `) as {
+      id: number
+      session_id: number
+      coach_id: number
+      is_day_addition: boolean
+      is_removed: boolean
+      name: string
+    }[]
+
+    for (const row of allCoaches) {
+      const list = coachesBySession.get(row.session_id) || []
+      list.push({
+        id: row.id,
+        coach_id: row.coach_id,
+        is_day_addition: row.is_day_addition,
+        is_removed: row.is_removed,
+        name: row.name,
+      })
+      coachesBySession.set(row.session_id, list)
+    }
+
+    const allPlayers = (await sql`
+      SELECT
+        sp.id,
+        sp.session_id,
+        sp.player_id,
+        sp.player_name,
+        sp.is_day_addition,
+        sp.is_removed,
+        sp.sort_order,
+        a.status AS attendance_status,
+        a.marked_at,
+        a.marked_by_user_id
+      FROM club_session_players sp
+      LEFT JOIN club_attendance a
+        ON a.session_id = sp.session_id
+        AND a.session_player_id = sp.id
+      WHERE sp.session_id = ANY(${sessionIds}::int[])
+      ORDER BY sp.session_id ASC, sp.is_removed ASC, sp.sort_order ASC, sp.id ASC
+    `) as {
+      id: number
+      session_id: number
+      player_id: number | null
+      player_name: string
+      is_day_addition: boolean
+      is_removed: boolean
+      sort_order: number
+      attendance_status: AttendanceStatus | null
+      marked_at: string | null
+      marked_by_user_id: number | null
+    }[]
+
+    for (const row of allPlayers) {
+      const list = playersBySession.get(row.session_id) || []
+      list.push({
+        id: row.id,
+        player_id: row.player_id,
+        player_name: row.player_name,
+        is_day_addition: row.is_day_addition,
+        is_removed: row.is_removed,
+        sort_order: row.sort_order,
+        attendance_status: row.attendance_status,
+        marked_at: row.marked_at,
+        marked_by_user_id: row.marked_by_user_id,
+      })
+      playersBySession.set(row.session_id, list)
+    }
+  }
+
   for (const session of sessions) {
     const sport =
       session.sport ||
       (session.resource_type === 'court' ? 'tennis' : 'bordtennis')
+
+    const coachRows = coachesBySession.get(session.id) || []
+    const playerRows = playersBySession.get(session.id) || []
 
     sessionPayload.push({
       id: session.id,
@@ -398,14 +514,14 @@ export async function getDayPayload(clubId: number, dateStr: string) {
       resourceLabel: session.resource_label,
       classId: session.class_id,
       className: session.class_name,
-      coaches: (await loadSessionCoaches(session.id)).map((coach) => ({
+      coaches: coachRows.map((coach) => ({
         id: coach.id,
         coachId: coach.coach_id,
         name: coach.name,
         isDayAddition: coach.is_day_addition,
         isRemoved: coach.is_removed,
       })),
-      players: (await loadSessionPlayers(session.id)).map((player) => ({
+      players: playerRows.map((player) => ({
         id: player.id,
         playerId: player.player_id,
         name: player.player_name,

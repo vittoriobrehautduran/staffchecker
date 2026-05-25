@@ -17,6 +17,11 @@ import type {
   LessonSport,
 } from '@/pages/club/clubAttendanceTypes'
 import { todayDateStr } from '@/pages/club/clubAttendanceTypes'
+import {
+  mergeAttendanceDayPayload,
+  readAttendanceDayCache,
+  writeAttendanceDayCache,
+} from '@/lib/clubAttendanceCache'
 
 type BossPanel = 'day' | 'history' | 'changes'
 
@@ -28,35 +33,62 @@ export function ClubAttendanceSection({ isBoss }: Props) {
   const { toast } = useToast()
   const [bossPanel, setBossPanel] = useState<BossPanel>('day')
   const [selectedDate, setSelectedDate] = useState(todayDateStr())
-  const [dayPayload, setDayPayload] = useState<DayPayload | null>(null)
+  const [dayPayload, setDayPayload] = useState<DayPayload | null>(() =>
+    readAttendanceDayCache(todayDateStr())
+  )
+  const [isRefreshingDay, setIsRefreshingDay] = useState(false)
   const [historySessions, setHistorySessions] = useState<AttendanceHistorySession[]>([])
   const [auditEntries, setAuditEntries] = useState<AuditEntry[]>([])
   const [notifications, setNotifications] = useState<ClubNotification[]>([])
-  const [isLoadingDay, setIsLoadingDay] = useState(false)
+  const [isLoadingDay, setIsLoadingDay] = useState(() => !readAttendanceDayCache(todayDateStr()))
   const [isSavingSession, setIsSavingSession] = useState(false)
   const [isLoadingBossPanel, setIsLoadingBossPanel] = useState(false)
   const [activeSport, setActiveSport] = useState<LessonSport>('tennis')
 
+  const applyDayPayload = useCallback((payload: DayPayload) => {
+    setDayPayload((current) => {
+      if (!current || current.date !== payload.date) {
+        writeAttendanceDayCache(payload)
+        return payload
+      }
+      const merged = mergeAttendanceDayPayload(current, payload)
+      writeAttendanceDayCache(merged)
+      return merged
+    })
+  }, [])
+
   const loadDay = useCallback(
-    async (date: string) => {
-      setIsLoadingDay(true)
+    async (date: string, options?: { background?: boolean }) => {
+      const cached = readAttendanceDayCache(date)
+      const showBlockingLoader = !options?.background && !cached
+
+      if (showBlockingLoader) {
+        setIsLoadingDay(true)
+      } else if (options?.background) {
+        setIsRefreshingDay(true)
+      }
+
       try {
-        const payload = await apiRequest<DayPayload>(`/club-admin?date=${encodeURIComponent(date)}`, {
-          method: 'GET',
-        })
-        setDayPayload(payload)
+        const payload = await apiRequest<DayPayload>(
+          `/club-admin?date=${encodeURIComponent(date)}`,
+          { method: 'GET' }
+        )
+        applyDayPayload(payload)
       } catch (error: unknown) {
         const err = error as { message?: string }
-        toast({
-          title: 'Kunde inte ladda närvaro',
-          description: err?.message || 'Ett fel uppstod',
-          variant: 'destructive',
-        })
+        if (!options?.background || !cached) {
+          toast({
+            title: 'Kunde inte ladda närvaro',
+            description: err?.message || 'Ett fel uppstod',
+            variant: 'destructive',
+          })
+        }
       } finally {
         setIsLoadingDay(false)
+        setIsRefreshingDay(false)
       }
     },
-    [toast]
+    [applyDayPayload, toast]
   )
 
   const loadHistory = useCallback(async () => {
@@ -107,7 +139,14 @@ export function ClubAttendanceSection({ isBoss }: Props) {
   }, [toast])
 
   useEffect(() => {
-    void loadDay(selectedDate)
+    const cached = readAttendanceDayCache(selectedDate)
+    if (cached) {
+      setDayPayload(cached)
+      setIsLoadingDay(false)
+      void loadDay(selectedDate, { background: true })
+    } else {
+      void loadDay(selectedDate)
+    }
   }, [selectedDate, loadDay])
 
   useEffect(() => {
@@ -145,7 +184,7 @@ export function ClubAttendanceSection({ isBoss }: Props) {
           ...patch,
         }),
       })
-      setDayPayload(payload)
+      applyDayPayload(payload)
       if (isBoss && bossPanel === 'changes') {
         void loadChanges()
       }
@@ -248,8 +287,22 @@ export function ClubAttendanceSection({ isBoss }: Props) {
                 id="attendance-date"
                 type="date"
                 value={selectedDate}
-                onChange={(event) => setSelectedDate(event.target.value)}
+                onChange={(event) => {
+                  const nextDate = event.target.value
+                  setSelectedDate(nextDate)
+                  const cached = readAttendanceDayCache(nextDate)
+                  if (cached) {
+                    setDayPayload(cached)
+                    setIsLoadingDay(false)
+                  } else {
+                    setDayPayload(null)
+                    setIsLoadingDay(true)
+                  }
+                }}
               />
+              {isRefreshingDay && (
+                <p className="text-xs text-muted-foreground">Uppdaterar i bakgrunden…</p>
+              )}
             </div>
             <ClubAttendanceDayView
               payload={dayPayload}

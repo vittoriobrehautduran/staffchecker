@@ -13,6 +13,11 @@ import { ClubPdfImportPanel } from '@/pages/club/ClubPdfImportPanel'
 import { ClubSettingsPanel } from '@/pages/club/ClubSettingsPanel'
 import type { ClubLesson, ClubPayload, LessonSport, LocalLessonDraft } from '@/pages/club/clubTypes'
 import { normalizeClubPayload, WEEKDAYS } from '@/pages/club/clubTypes'
+import {
+  invalidateClubScheduleCache,
+  readClubScheduleCache,
+  writeClubScheduleCache,
+} from '@/lib/clubScheduleCache'
 
 function newLocalId() {
   return `draft-${Date.now()}-${Math.random().toString(36).slice(2, 9)}`
@@ -38,8 +43,8 @@ export default function Club() {
   const navigate = useNavigate()
   const { toast } = useToast()
 
-  const [data, setData] = useState<ClubPayload | null>(null)
-  const [hasLoadedClub, setHasLoadedClub] = useState(false)
+  const [data, setData] = useState<ClubPayload | null>(() => readClubScheduleCache())
+  const [hasLoadedClub, setHasLoadedClub] = useState(() => !!readClubScheduleCache())
   const [showSlowLoadHint, setShowSlowLoadHint] = useState(false)
   const [isLoading, setIsLoading] = useState(false)
   const [isSavingLesson, setIsSavingLesson] = useState(false)
@@ -64,6 +69,7 @@ export default function Club() {
   const applyPayload = useCallback((raw: ClubPayload) => {
     const payload = normalizeClubPayload(raw)
     setData(payload)
+    writeClubScheduleCache(payload)
     setTennisEnabled(!!payload.club.tennis_enabled)
     setBordtennisEnabled(!!payload.club.bordtennis_enabled)
     setActiveSport((current) => {
@@ -83,25 +89,33 @@ export default function Club() {
     }
   }, [tennisEnabled, bordtennisEnabled, activeSport])
 
-  const loadClubData = useCallback(async () => {
-    setIsLoading(true)
-    try {
-      const payload = await apiRequest<ClubPayload>('/club-admin', { method: 'GET' })
-      applyPayload(payload)
-    } catch (error: unknown) {
-      const err = error as { message?: string }
-      toast({
-        title: 'Kunde inte ladda klubb',
-        description: err?.message || 'Ett fel uppstod',
-        variant: 'destructive',
-      })
-    } finally {
-      setIsLoading(false)
-      setHasLoadedClub(true)
-    }
-  }, [applyPayload, toast])
+  const loadClubData = useCallback(
+    async (options?: { background?: boolean }) => {
+      const hasCache = !!readClubScheduleCache()
+      if (!options?.background && !hasCache) {
+        setIsLoading(true)
+      }
+      try {
+        const payload = await apiRequest<ClubPayload>('/club-admin', { method: 'GET' })
+        applyPayload(payload)
+      } catch (error: unknown) {
+        const err = error as { message?: string }
+        if (!options?.background || !hasCache) {
+          toast({
+            title: 'Kunde inte ladda klubb',
+            description: err?.message || 'Ett fel uppstod',
+            variant: 'destructive',
+          })
+        }
+      } finally {
+        setIsLoading(false)
+        setHasLoadedClub(true)
+      }
+    },
+    [applyPayload, toast]
+  )
 
-  const isInitialClubLoad = canManageClub && !hasLoadedClub
+  const isInitialClubLoad = canManageClub && !hasLoadedClub && !readClubScheduleCache()
 
   useEffect(() => {
     if (!isInitialClubLoad) {
@@ -122,7 +136,14 @@ export default function Club() {
       return
     }
     if (user?.hasClubBossAccess) {
-      void loadClubData()
+      const cached = readClubScheduleCache()
+      if (cached) {
+        applyPayload(cached)
+        setHasLoadedClub(true)
+        void loadClubData({ background: true })
+      } else {
+        void loadClubData()
+      }
     }
   }, [isSignedIn, user, navigate, loadClubData])
 
@@ -199,6 +220,7 @@ export default function Club() {
 
   async function clearClubSchedule(confirmPhrase: string) {
     try {
+      invalidateClubScheduleCache()
       const result = await apiRequest<ClubPayload & { deletedCount?: number }>('/club-admin', {
         method: 'POST',
         body: JSON.stringify({

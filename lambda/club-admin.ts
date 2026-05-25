@@ -193,26 +193,50 @@ async function getLessonsByWeekday(clubId: number) {
     lessonsByWeekday[String(day)] = []
   }
 
+  if (templates.length === 0) {
+    return lessonsByWeekday
+  }
+
+  const templateIds = templates.map((template) => template.id)
+  const classIds = [...new Set(templates.map((template) => template.class_id))]
+
+  const coachRows = (await sql`
+    SELECT tc.template_id, c.id, c.name
+    FROM club_schedule_template_coaches tc
+    INNER JOIN club_coaches c ON c.id = tc.coach_id
+    WHERE tc.template_id = ANY(${templateIds}::int[])
+    ORDER BY tc.template_id ASC, c.id ASC
+  `) as { template_id: number; id: number; name: string }[]
+
+  const playerRows = (await sql`
+    SELECT class_id, id, player_name
+    FROM club_class_players
+    WHERE class_id = ANY(${classIds}::int[])
+      AND is_active = true
+    ORDER BY class_id ASC, sort_order ASC, id ASC
+  `) as { class_id: number; id: number; player_name: string }[]
+
+  const coachesByTemplate = new Map<number, { id: number; name: string }[]>()
+  for (const row of coachRows) {
+    const list = coachesByTemplate.get(row.template_id) || []
+    list.push({ id: row.id, name: row.name })
+    coachesByTemplate.set(row.template_id, list)
+  }
+
+  const playersByClass = new Map<number, { id: number; name: string }[]>()
+  for (const row of playerRows) {
+    const list = playersByClass.get(row.class_id) || []
+    list.push({ id: row.id, name: row.player_name })
+    playersByClass.set(row.class_id, list)
+  }
+
   for (const template of templates) {
     const sport =
       template.sport ||
       (template.resource_type === 'court' ? 'tennis' : 'bordtennis')
 
-    const coachRows = (await sql`
-      SELECT c.id, c.name
-      FROM club_schedule_template_coaches tc
-      INNER JOIN club_coaches c ON c.id = tc.coach_id
-      WHERE tc.template_id = ${template.id}
-      ORDER BY c.id ASC
-    `) as { id: number; name: string }[]
-
-    const playerRows = (await sql`
-      SELECT id, player_name
-      FROM club_class_players
-      WHERE class_id = ${template.class_id}
-        AND is_active = true
-      ORDER BY sort_order ASC, id ASC
-    `) as { id: number; player_name: string }[]
+    const coachRowsForLesson = coachesByTemplate.get(template.id) || []
+    const playerRowsForLesson = playersByClass.get(template.class_id) || []
 
     const startTime = formatTimeValue(template.start_time)
     const endTime = formatTimeValue(template.end_time)
@@ -229,12 +253,9 @@ async function getLessonsByWeekday(clubId: number) {
       resourceLabel: template.resource_label,
       resourceType: template.resource_type,
       classId: template.class_id,
-      coachIds: coachRows.map((coach) => coach.id),
-      coaches: coachRows,
-      players: playerRows.map((player) => ({
-        id: player.id,
-        name: player.player_name,
-      })),
+      coachIds: coachRowsForLesson.map((coach) => coach.id),
+      coaches: coachRowsForLesson,
+      players: playerRowsForLesson,
     }
 
     const key = String(template.weekday)

@@ -219,6 +219,7 @@ async function setAllFunctionEnvironments() {
     `${PROJECT_NAME}-club-admin`,
     `${PROJECT_NAME}-register-start`,
     `${PROJECT_NAME}-revert-report`,
+    `${PROJECT_NAME}-admin-club-cleanup`,
     `${PROJECT_NAME}-submit-report`,
     `${PROJECT_NAME}-submit-report-staging`,
     `${PROJECT_NAME}-update-entry`,
