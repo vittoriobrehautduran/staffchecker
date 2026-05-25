@@ -1,3 +1,4 @@
+import { sql } from './database'
 import { getClubAccess, type ClubAccess } from './club-attendance'
 import { isUserAdmin } from './cognito-auth'
 
