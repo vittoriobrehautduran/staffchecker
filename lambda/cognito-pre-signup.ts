@@ -24,7 +24,7 @@ export const handler = async (event: any) => {
 
     // Save legal consent metadata in our own users table for GDPR accountability.
     // If the user already exists, keep the earliest acceptance timestamp.
-    await sql`
+    const insertedUsers = (await sql`
       INSERT INTO users (name, last_name, email, legal_accepted_at, legal_version)
       VALUES (${normalizedFirstName}, ${normalizedLastName}, ${normalizedEmail}, NOW(), ${LEGAL_VERSION})
       ON CONFLICT (email)
@@ -32,7 +32,14 @@ export const handler = async (event: any) => {
         legal_accepted_at = COALESCE(users.legal_accepted_at, EXCLUDED.legal_accepted_at),
         legal_version = EXCLUDED.legal_version,
         updated_at = CURRENT_TIMESTAMP
-    `
+      RETURNING id
+    `) as { id: number }[]
+
+    const { ensureDefaultClubMembership } = await import('./utils/club-membership')
+    if (insertedUsers.length > 0) {
+      await ensureDefaultClubMembership(insertedUsers[0].id)
+    }
+
     return event
   }
 

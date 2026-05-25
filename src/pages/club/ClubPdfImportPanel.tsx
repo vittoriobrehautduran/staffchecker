@@ -27,11 +27,14 @@ type Props = {
   data: ClubPayload
   isBusy: boolean
   onImport: (body: Record<string, unknown>) => Promise<{ importedCount?: number; skippedCount?: number }>
+  onImportComplete?: () => Promise<void>
 }
+
+const IMPORT_BATCH_SIZE = 40
 
 const WEEKDAY_LABEL = Object.fromEntries(WEEKDAYS.map((day) => [day.value, day.label]))
 
-export function ClubPdfImportPanel({ data, isBusy, onImport }: Props) {
+export function ClubPdfImportPanel({ data, isBusy, onImport, onImportComplete }: Props) {
   const { toast } = useToast()
   const [preview, setPreview] = useState<PdfImportPreview | null>(null)
   const [isParsing, setIsParsing] = useState(false)
@@ -139,18 +142,43 @@ export function ClubPdfImportPanel({ data, isBusy, onImport }: Props) {
 
     setIsImporting(true)
     try {
-      const result = await onImport({
-        operation: 'import_schedule',
-        replaceSports,
-        createMissingCoaches,
-        createMissingResources,
-        lessons: buildImportPayload(readyLessons),
-      })
+      const payload = buildImportPayload(readyLessons)
+      const batchCount = Math.ceil(payload.length / IMPORT_BATCH_SIZE)
+      let totalImported = 0
+      let totalSkipped = 0
+
+      for (let batchIndex = 0; batchIndex < batchCount; batchIndex += 1) {
+        const batchStart = batchIndex * IMPORT_BATCH_SIZE
+        const batchLessons = payload.slice(batchStart, batchStart + IMPORT_BATCH_SIZE)
+
+        if (batchCount > 1) {
+          toast({
+            title: 'Importerar…',
+            description: `Batch ${batchIndex + 1} av ${batchCount} (${batchLessons.length} lektioner)`,
+          })
+        }
+
+        const result = await onImport({
+          operation: 'import_schedule',
+          replaceSports: batchIndex === 0 ? replaceSports : [],
+          createMissingCoaches,
+          createMissingResources,
+          lessons: batchLessons,
+        })
+
+        totalImported += result.importedCount ?? batchLessons.length
+        totalSkipped += result.skippedCount ?? 0
+      }
+
+      if (onImportComplete) {
+        await onImportComplete()
+      }
+
       setPreview(null)
       toast({
         title: 'Import klar',
-        description: `${result.importedCount ?? readyLessons.length} lektioner importerade${
-          result.skippedCount ? ` (${result.skippedCount} hoppades över)` : ''
+        description: `${totalImported} lektioner importerade${
+          totalSkipped ? ` (${totalSkipped} hoppades över)` : ''
         }.`,
       })
     } catch {

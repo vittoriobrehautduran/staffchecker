@@ -1,11 +1,11 @@
 import { APIGatewayProxyEvent, APIGatewayProxyResult } from 'aws-lambda'
 import { sql } from './utils/database'
 import { getUserIdFromCognitoSession } from './utils/cognito-auth'
+import { resolveClubAccess } from './utils/club-membership'
 import {
   defaultHistoryRange,
   getAttendanceHistory,
   getAuditLog,
-  getClubAccess,
   getDayPayload,
   getNotifications,
   markNotificationsRead,
@@ -54,7 +54,7 @@ function addMinutesToTime(startTime: string, minutes: number): string {
 }
 
 async function getBossClubId(userId: number): Promise<number | null> {
-  const access = await getClubAccess(userId)
+  const access = await resolveClubAccess(userId)
   if (!access?.isBoss) return null
   return access.clubId
 }
@@ -375,27 +375,159 @@ async function insertLessonRecord(
     `
   }
 
-  let sortOrder = 0
-  for (const playerName of params.playerNames) {
-    sortOrder += 1
+  if (params.playerNames.length > 0) {
     await sql`
       INSERT INTO club_class_players (class_id, player_name, sort_order)
-      VALUES (${classId}, ${playerName}, ${sortOrder})
+      SELECT ${classId}, name, ordinality::int
+      FROM unnest(${params.playerNames}::text[]) WITH ORDINALITY AS t(name, ordinality)
     `
   }
 }
 
-async function deleteAllLessonsForSport(clubId: number, sport: LessonSport) {
-  const templates = (await sql`
-    SELECT id
+type ImportCaches = {
+  coachByName: Map<string, number>
+  resourceByKey: Map<string, number>
+  unknownCoachBySport: Map<LessonSport, number>
+}
+
+async function createImportCaches(clubId: number): Promise<ImportCaches> {
+  const coaches = (await sql`
+    SELECT id, name
+    FROM club_coaches
+    WHERE club_id = ${clubId}
+      AND is_active = true
+  `) as { id: number; name: string }[]
+
+  const coachByName = new Map<string, number>()
+  for (const coach of coaches) {
+    coachByName.set(coach.name.trim().toLowerCase(), coach.id)
+  }
+
+  const resources = (await sql`
+    SELECT id, resource_type, resource_number
+    FROM club_resources
+    WHERE club_id = ${clubId}
+      AND is_active = true
+  `) as { id: number; resource_type: ResourceType; resource_number: number }[]
+
+  const resourceByKey = new Map<string, number>()
+  for (const resource of resources) {
+    const sport: LessonSport = resource.resource_type === 'court' ? 'tennis' : 'bordtennis'
+    resourceByKey.set(`${sport}:${resource.resource_number}`, resource.id)
+  }
+
+  return {
+    coachByName,
+    resourceByKey,
+    unknownCoachBySport: new Map<LessonSport, number>(),
+  }
+}
+
+async function resolveUnknownCoachId(
+  clubId: number,
+  sport: LessonSport,
+  caches: ImportCaches
+): Promise<number> {
+  const cached = caches.unknownCoachBySport.get(sport)
+  if (cached) return cached
+
+  const coachId = await ensureUnknownCoachId(clubId, sport)
+  caches.unknownCoachBySport.set(sport, coachId)
+  caches.coachByName.set('unknown', coachId)
+  return coachId
+}
+
+async function resolveResourceIdForImport(
+  clubId: number,
+  sport: LessonSport,
+  resourceId: number,
+  resourceNumber: number,
+  venueRaw: string,
+  createMissingResources: boolean,
+  caches: ImportCaches
+): Promise<number> {
+  if (resourceId > 0) return resourceId
+
+  const cacheKey = `${sport}:${resourceNumber}`
+  const cached = caches.resourceByKey.get(cacheKey)
+  if (cached) return cached
+
+  if (!createMissingResources || resourceNumber <= 0) return 0
+
+  const resourceType: ResourceType = sport === 'tennis' ? 'court' : 'table'
+  const label =
+    venueRaw.trim() || `${resourceType === 'court' ? 'Bana' : 'Bord'} ${resourceNumber}`
+
+  const created = (await sql`
+    INSERT INTO club_resources (club_id, resource_type, resource_number, label, is_active)
+    VALUES (${clubId}, ${resourceType}, ${resourceNumber}, ${label}, true)
+    RETURNING id
+  `) as { id: number }[]
+
+  const newId = created[0].id
+  caches.resourceByKey.set(cacheKey, newId)
+  return newId
+}
+
+async function resolveCoachIdsForImport(
+  clubId: number,
+  sport: LessonSport,
+  coachId: number,
+  coachName: string | undefined,
+  createMissingCoaches: boolean,
+  caches: ImportCaches
+): Promise<number[]> {
+  if (coachId > 0) return [coachId]
+
+  if (coachName && createMissingCoaches) {
+    const trimmed = coachName.trim()
+    if (looksLikePhoneNumber(trimmed)) {
+      return [await resolveUnknownCoachId(clubId, sport, caches)]
+    }
+
+    const normalized = trimmed.toLowerCase()
+    const existing = caches.coachByName.get(normalized)
+    if (existing) return [existing]
+
+    const inserted = (await sql`
+      INSERT INTO club_coaches (club_id, name, sport)
+      VALUES (${clubId}, ${trimmed}, ${sport})
+      RETURNING id
+    `) as { id: number }[]
+
+    const newId = inserted[0].id
+    caches.coachByName.set(normalized, newId)
+    return [newId]
+  }
+
+  return [await resolveUnknownCoachId(clubId, sport, caches)]
+}
+
+async function bulkDeleteLessonsForSport(clubId: number, sport: LessonSport) {
+  const rows = (await sql`
+    SELECT id AS template_id, class_id
     FROM club_schedule_template
     WHERE club_id = ${clubId}
       AND sport = ${sport}
-  `) as { id: number }[]
+  `) as { template_id: number; class_id: number }[]
 
-  for (const template of templates) {
-    await deleteLessonById(clubId, template.id)
-  }
+  if (rows.length === 0) return
+
+  const templateIds = rows.map((row) => row.template_id)
+  const classIds = [...new Set(rows.map((row) => row.class_id))]
+
+  await sql`
+    DELETE FROM club_sessions
+    WHERE club_id = ${clubId}
+      AND template_id = ANY(${templateIds}::int[])
+  `
+  await sql`DELETE FROM club_schedule_template WHERE id = ANY(${templateIds}::int[])`
+  await sql`DELETE FROM club_class_players WHERE class_id = ANY(${classIds}::int[])`
+  await sql`DELETE FROM club_classes WHERE id = ANY(${classIds}::int[])`
+}
+
+async function deleteAllLessonsForSport(clubId: number, sport: LessonSport) {
+  await bulkDeleteLessonsForSport(clubId, sport)
 }
 
 const CLEAR_SCHEDULE_CONFIRM_PHRASE = 'RADERA SCHEMA'
@@ -519,7 +651,7 @@ export const handler = async (
       }
     }
 
-    const access = await getClubAccess(userId)
+    const access = await resolveClubAccess(userId)
     if (!access) {
       return {
         statusCode: 403,
@@ -1029,6 +1161,8 @@ export const handler = async (
         await deleteAllLessonsForSport(clubId, sport)
       }
 
+      const importCaches = await createImportCaches(clubId)
+
       let importedCount = 0
       let skippedCount = 0
 
@@ -1069,35 +1203,15 @@ export const handler = async (
           continue
         }
 
-        let resourceId = Number(lesson.resourceId ?? 0)
-        if (!resourceId && createMissingResources) {
-          const resourceNumber = Number(lesson.resourceNumber ?? 0)
-          const resourceType: ResourceType = sport === 'tennis' ? 'court' : 'table'
-          const label = String(lesson.venueRaw || '').trim() || `${resourceType === 'court' ? 'Bana' : 'Bord'} ${resourceNumber}`
-
-          if (resourceNumber > 0) {
-            const existing = (await sql`
-              SELECT id
-              FROM club_resources
-              WHERE club_id = ${clubId}
-                AND resource_type = ${resourceType}
-                AND resource_number = ${resourceNumber}
-                AND is_active = true
-              LIMIT 1
-            `) as { id: number }[]
-
-            if (existing.length) {
-              resourceId = existing[0].id
-            } else {
-              const created = (await sql`
-                INSERT INTO club_resources (club_id, resource_type, resource_number, label, is_active)
-                VALUES (${clubId}, ${resourceType}, ${resourceNumber}, ${label}, true)
-                RETURNING id
-              `) as { id: number }[]
-              resourceId = created[0].id
-            }
-          }
-        }
+        const resourceId = await resolveResourceIdForImport(
+          clubId,
+          sport,
+          Number(lesson.resourceId ?? 0),
+          Number(lesson.resourceNumber ?? 0),
+          String(lesson.venueRaw || ''),
+          createMissingResources,
+          importCaches
+        )
 
         if (!resourceId) {
           throw new Error(
@@ -1105,33 +1219,14 @@ export const handler = async (
           )
         }
 
-        const coachIds: number[] = []
-        const coachId = Number(lesson.coachId ?? 0)
-        if (coachId > 0) {
-          coachIds.push(coachId)
-        } else if (lesson.coachName && createMissingCoaches) {
-          const coachName = String(lesson.coachName).trim()
-          if (looksLikePhoneNumber(coachName)) {
-            coachIds.push(await ensureUnknownCoachId(clubId, sport))
-          } else {
-            let resolvedCoachId = await findCoachByName(clubId, coachName)
-            if (!resolvedCoachId) {
-              const inserted = (await sql`
-                INSERT INTO club_coaches (club_id, name, sport)
-                VALUES (${clubId}, ${coachName}, ${sport})
-                RETURNING id
-              `) as { id: number }[]
-              resolvedCoachId = inserted[0].id
-            }
-            if (resolvedCoachId) {
-              coachIds.push(resolvedCoachId)
-            }
-          }
-        }
-
-        if (coachIds.length === 0) {
-          coachIds.push(await ensureUnknownCoachId(clubId, sport))
-        }
+        const coachIds = await resolveCoachIdsForImport(
+          clubId,
+          sport,
+          Number(lesson.coachId ?? 0),
+          lesson.coachName ? String(lesson.coachName) : undefined,
+          createMissingCoaches,
+          importCaches
+        )
 
         await insertLessonRecord(clubId, {
           weekday,
@@ -1147,11 +1242,10 @@ export const handler = async (
 
       await syncClubResourceCounts(clubId)
 
-      const payload = await getClubPayload(clubId)
       return {
         statusCode: 200,
         headers: corsHeaders(origin),
-        body: JSON.stringify({ ...payload, importedCount, skippedCount }),
+        body: JSON.stringify({ importedCount, skippedCount }),
       }
     }
 

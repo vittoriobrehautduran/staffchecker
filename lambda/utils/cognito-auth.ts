@@ -235,6 +235,8 @@ export async function getUserIdFromCognitoSession(event: APIGatewayProxyEvent): 
         `
 
         if (createdUser.length > 0) {
+          const { ensureDefaultClubMembership } = await import('./club-membership')
+          await ensureDefaultClubMembership(createdUser[0].id)
           return createdUser[0].id
         }
 

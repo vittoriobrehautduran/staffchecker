@@ -484,13 +484,12 @@ export default function Club() {
             data={data}
             isBusy={isLoading || isSavingLesson}
             onImport={async (body) => {
-              const result = await apiRequest<ClubPayload & { importedCount?: number }>('/club-admin', {
+              return apiRequest<{ importedCount?: number; skippedCount?: number }>('/club-admin', {
                 method: 'POST',
                 body: JSON.stringify(body),
               })
-              applyPayload(result)
-              return { importedCount: result.importedCount }
             }}
+            onImportComplete={loadClubData}
           />
         )}
 
