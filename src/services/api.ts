@@ -34,6 +34,79 @@ async function getAccessToken(): Promise<string | null> {
   }
 }
 
+export type ConditionalGetResult<T> =
+  | { unchanged: true; version: string }
+  | { unchanged: false; data: T; version: string }
+
+function normalizeEtagHeader(value: string | null): string {
+  if (!value) return ''
+  return value.trim().replace(/^W\//, '').replace(/^"|"$/g, '')
+}
+
+export async function apiConditionalGet<T>(
+  endpoint: string,
+  ifNoneMatch?: string | null
+): Promise<ConditionalGetResult<T>> {
+  if (!API_BASE_URL) {
+    throw new Error(
+      'VITE_API_BASE_URL är inte konfigurerad. Sätt denna miljövariabel till din API Gateway URL.'
+    )
+  }
+
+  const cleanEndpoint = endpoint.startsWith('/') ? endpoint.slice(1) : endpoint
+  const accessToken = await getAccessToken()
+  let url = `${API_BASE_URL.replace(/\/$/, '')}/${cleanEndpoint}`
+
+  if (accessToken) {
+    const separator = url.includes('?') ? '&' : '?'
+    url += `${separator}_token=${encodeURIComponent(accessToken)}`
+  }
+
+  const headers: Record<string, string> = {
+    'Content-Type': 'application/json',
+  }
+
+  if (accessToken) {
+    headers['Authorization'] = `Bearer ${accessToken}`
+  }
+
+  const etag = ifNoneMatch?.trim()
+  if (etag) {
+    headers['If-None-Match'] = `"${etag.replace(/^"|"$/g, '')}"`
+  } else {
+    const separator = url.includes('?') ? '&' : '?'
+    url += `${separator}_ts=${Date.now()}`
+  }
+
+  const response = await fetch(url, {
+    method: 'GET',
+    cache: 'no-store',
+    headers,
+    credentials: 'omit',
+  })
+
+  if (!response.ok) {
+    const error = await response.json().catch(() => ({ message: 'Ett fel uppstod' }))
+    throw new Error(error.message || `API-förfrågan misslyckades: ${response.statusText}`)
+  }
+
+  const data = (await response.json()) as T & { unchanged?: boolean; version?: string }
+  const headerVersion = normalizeEtagHeader(response.headers.get('ETag'))
+
+  if (data?.unchanged === true) {
+    return {
+      unchanged: true,
+      version: data.version || headerVersion || etag || '',
+    }
+  }
+
+  return {
+    unchanged: false,
+    data: data as T,
+    version: data.version || headerVersion || '',
+  }
+}
+
 export async function apiRequest<T>(
   endpoint: string,
   options: RequestInit = {}

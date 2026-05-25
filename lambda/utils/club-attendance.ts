@@ -1,3 +1,4 @@
+import { createHash } from 'crypto'
 import { sql } from './database'
 
 export type AttendanceStatus = 'present' | 'absent' | 'unknown'
@@ -357,12 +358,98 @@ async function loadSessionPlayers(sessionId: number) {
   }[]
 }
 
-export async function getDayPayload(clubId: number, dateStr: string) {
+export type DayPayloadResponse =
+  | { unchanged: true; date: string; version: string }
+  | {
+      unchanged: false
+      date: string
+      cancelled: boolean
+      tennisEnabled: boolean
+      bordtennisEnabled: boolean
+      sessions: unknown[]
+      coachesCatalog: { id: number; name: string; sport: string }[]
+      version: string
+    }
+
+export function normalizeIfNoneMatch(value?: string | null): string | null {
+  if (!value) return null
+  const trimmed = value.trim()
+  if (!trimmed) return null
+  return trimmed.replace(/^W\//, '').replace(/^"|"$/g, '')
+}
+
+// Cheap fingerprint for a day's närvaro — used before building the full day payload.
+export async function getDayRevision(clubId: number, dateStr: string): Promise<string> {
+  const cancelled = await isDayCancelled(clubId, dateStr)
+
+  const [row] = (await sql`
+    SELECT md5(
+      ${dateStr} || '|' || ${cancelled ? '1' : '0'} || '|' || COALESCE((
+        SELECT string_agg(token, ';' ORDER BY sort_key)
+        FROM (
+          SELECT
+            (s.start_time::text || '|' || s.id::text) AS sort_key,
+            s.id::text || '|' ||
+            COALESCE((
+              SELECT string_agg(
+                sc.coach_id::text || ':' || sc.is_removed::text,
+                ',' ORDER BY sc.coach_id
+              )
+              FROM club_session_coaches sc
+              WHERE sc.session_id = s.id
+            ), '') || '|' ||
+            COALESCE((
+              SELECT string_agg(
+                sp.id::text || ':' || sp.is_removed::text || ':' || COALESCE(a.status, 'unknown'),
+                ',' ORDER BY sp.id
+              )
+              FROM club_session_players sp
+              LEFT JOIN club_attendance a
+                ON a.session_id = s.id
+                AND a.session_player_id = sp.id
+              WHERE sp.session_id = s.id
+            ), '') AS token
+          FROM club_sessions s
+          WHERE s.club_id = ${clubId}
+            AND s.session_date = ${dateStr}::date
+            AND s.status <> 'cancelled'
+        ) lines
+      ), '')
+    ) AS revision
+  `) as { revision: string }[]
+
+  return row?.revision ?? createHash('md5').update(`${clubId}:${dateStr}:empty`).digest('hex')
+}
+
+export async function getDayPayloadForRequest(
+  clubId: number,
+  dateStr: string,
+  ifNoneMatch?: string | null
+): Promise<DayPayloadResponse> {
+  await ensureSessionsForDate(clubId, dateStr)
+  const version = await getDayRevision(clubId, dateStr)
+  const clientVersion = normalizeIfNoneMatch(ifNoneMatch)
+
+  if (clientVersion && clientVersion === version) {
+    return { unchanged: true, date: dateStr, version }
+  }
+
+  const payload = await getDayPayload(clubId, dateStr, { skipEnsure: true })
+  return { unchanged: false, ...payload, version }
+}
+
+export async function getDayPayload(
+  clubId: number,
+  dateStr: string,
+  options?: { skipEnsure?: boolean }
+) {
   if (!/^\d{4}-\d{2}-\d{2}$/.test(dateStr)) {
     throw new Error(`Ogiltigt datum: ${dateStr}`)
   }
 
-  await ensureSessionsForDate(clubId, dateStr)
+  if (!options?.skipEnsure) {
+    await ensureSessionsForDate(clubId, dateStr)
+  }
 
   const cancelled = await isDayCancelled(clubId, dateStr)
 
@@ -774,7 +861,7 @@ export async function updateSessionDay(
     )
   }
 
-  return getDayPayload(clubId, dateStr)
+  return getDayPayloadForRequest(clubId, dateStr)
 }
 
 export async function getAuditLog(clubId: number, fromDate: string, toDate: string) {

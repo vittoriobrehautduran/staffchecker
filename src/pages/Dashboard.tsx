@@ -7,6 +7,11 @@ import { Button } from '@/components/ui/button'
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card'
 import { useToast } from '@/components/ui/use-toast'
 import { apiRequest } from '@/services/api'
+import {
+  readReportMonthCache,
+  toReportMonthKey,
+  writeReportMonthCache,
+} from '@/lib/reportMonthCache'
 import { calculateHours } from '@/utils/validation'
 import { Calendar, Eye, LayoutDashboard } from 'lucide-react'
 import { cn } from '@/lib/utils'
@@ -27,9 +32,6 @@ interface ReportData {
   status: 'draft' | 'submitted'
   entries: Entry[]
 }
-
-const toMonthKey = (year: number, month: number): string =>
-  `${year}-${month.toString().padStart(2, '0')}`
 
 // Match calendar day keys so "dagar med registreringar" lines up with the grid.
 function normalizeEntryDate(entryDate: string): string | null {
@@ -159,51 +161,89 @@ export default function Dashboard() {
   const [currentError, setCurrentError] = useState(false)
   const [previousError, setPreviousError] = useState(false)
   const [isLoading, setIsLoading] = useState(true)
+  const [isRefreshing, setIsRefreshing] = useState(false)
 
-  const loadDashboard = useCallback(async () => {
-    if (!isSignedIn) return
+  const loadDashboard = useCallback(
+    async (options?: { background?: boolean }) => {
+      if (!isSignedIn) return
 
-    setIsLoading(true)
-    setCurrentError(false)
-    setPreviousError(false)
+      const today = new Date()
+      const curMonth = today.getMonth() + 1
+      const curYear = today.getFullYear()
+      const prevRef = addMonths(today, -1)
+      const prevMonth = prevRef.getMonth() + 1
+      const prevYear = prevRef.getFullYear()
 
-    const today = new Date()
-    const curMonth = today.getMonth() + 1
-    const curYear = today.getFullYear()
-    const prevRef = addMonths(today, -1)
-    const prevMonth = prevRef.getMonth() + 1
-    const prevYear = prevRef.getFullYear()
+      const curKey = toReportMonthKey(curYear, curMonth)
+      const prevKey = toReportMonthKey(prevYear, prevMonth)
+      const cachedCur = readReportMonthCache(curKey)
+      const cachedPrev = readReportMonthCache(prevKey)
+      const hasCache = !!cachedCur && !!cachedPrev
 
-    try {
-      const [cur, prev] = await Promise.all([
-        apiRequest<ReportData>(`/get-report?month=${curMonth}&year=${curYear}`, { method: 'GET' }),
-        apiRequest<ReportData>(`/get-report?month=${prevMonth}&year=${prevYear}`, { method: 'GET' }),
-      ])
-      setCurrentReport(cur)
-      setPreviousReport(prev)
-    } catch (e: unknown) {
-      console.error('Dashboard load failed:', e)
-      const message = e instanceof Error ? e.message : 'Ett fel uppstod'
-      toast({
-        title: 'Kunde inte ladda översikten',
-        description: message,
-        variant: 'destructive',
-      })
-      setCurrentError(true)
-      setPreviousError(true)
-      setCurrentReport(null)
-      setPreviousReport(null)
-    } finally {
-      setIsLoading(false)
-    }
-  }, [isSignedIn, toast])
+      if (!options?.background && !hasCache) {
+        setIsLoading(true)
+      } else if (options?.background) {
+        setIsRefreshing(true)
+      }
+
+      if (cachedCur) {
+        setCurrentReport(cachedCur as ReportData)
+        setCurrentError(false)
+      }
+      if (cachedPrev) {
+        setPreviousReport(cachedPrev as ReportData)
+        setPreviousError(false)
+      }
+
+      try {
+        const [cur, prev] = await Promise.all([
+          apiRequest<ReportData>(`/get-report?month=${curMonth}&year=${curYear}`, { method: 'GET' }),
+          apiRequest<ReportData>(`/get-report?month=${prevMonth}&year=${prevYear}`, { method: 'GET' }),
+        ])
+        setCurrentReport(cur)
+        setPreviousReport(prev)
+        writeReportMonthCache(cur)
+        writeReportMonthCache(prev)
+        setCurrentError(false)
+        setPreviousError(false)
+      } catch (e: unknown) {
+        console.error('Dashboard load failed:', e)
+        if (!options?.background || !hasCache) {
+          const message = e instanceof Error ? e.message : 'Ett fel uppstod'
+          toast({
+            title: 'Kunde inte ladda översikten',
+            description: message,
+            variant: 'destructive',
+          })
+          setCurrentError(true)
+          setPreviousError(true)
+          if (!cachedCur) setCurrentReport(null)
+          if (!cachedPrev) setPreviousReport(null)
+        }
+      } finally {
+        setIsLoading(false)
+        setIsRefreshing(false)
+      }
+    },
+    [isSignedIn, toast]
+  )
 
   useEffect(() => {
     if (!isSignedIn) {
       navigate('/login')
       return
     }
-    loadDashboard()
+    const today = new Date()
+    const curKey = toReportMonthKey(today.getFullYear(), today.getMonth() + 1)
+    const prevRef = addMonths(today, -1)
+    const prevKey = toReportMonthKey(prevRef.getFullYear(), prevRef.getMonth() + 1)
+    const hasCache = !!readReportMonthCache(curKey) && !!readReportMonthCache(prevKey)
+
+    if (hasCache) {
+      void loadDashboard({ background: true })
+    } else {
+      void loadDashboard()
+    }
   }, [isSignedIn, navigate, loadDashboard])
 
   if (!isSignedIn) {
@@ -211,7 +251,9 @@ export default function Dashboard() {
   }
 
   const currentMonthKey =
-    currentReport != null ? toMonthKey(currentReport.year, currentReport.month) : toMonthKey(new Date().getFullYear(), new Date().getMonth() + 1)
+    currentReport != null
+      ? toReportMonthKey(currentReport.year, currentReport.month)
+      : toReportMonthKey(new Date().getFullYear(), new Date().getMonth() + 1)
 
   const displayName = user?.name?.trim() || 'du'
 
@@ -229,17 +271,20 @@ export default function Dashboard() {
           <p className="mt-1 text-sm text-muted-foreground">
             Sammanfattning av denna och föregående månad. Öppna kalendern eller förhandsvisning när du vill redigera eller skicka rapporten.
           </p>
+          {isRefreshing && (
+            <p className="mt-1 text-xs text-muted-foreground">Uppdaterar i bakgrunden…</p>
+          )}
         </div>
 
         <div className="grid gap-4 sm:grid-cols-2">
           <MonthSummaryCard
             title="Denna månad"
-            report={isLoading ? null : currentReport}
+            report={isLoading && !currentReport ? null : currentReport}
             loadError={currentError}
           />
           <MonthSummaryCard
             title="Föregående månad"
-            report={isLoading ? null : previousReport}
+            report={isLoading && !previousReport ? null : previousReport}
             loadError={previousError}
           />
         </div>

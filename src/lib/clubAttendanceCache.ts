@@ -1,16 +1,17 @@
-import type { DayPayload, DaySession } from '@/pages/club/clubAttendanceTypes'
+import type { DayPayload } from '@/pages/club/clubAttendanceTypes'
 
-// Närvaro per datum — snabb växling mellan flikar/sidor. Kort TTL eftersom coaches uppdaterar ofta.
+// Närvaro per datum — snabb växling + etag för billig polling mellan tränare.
 const CACHE_TTL_MS = 2 * 60 * 1000
 
 type CacheEntry = {
   payload: DayPayload
+  version: string | null
   cachedAt: number
 }
 
 const cacheByDate = new Map<string, CacheEntry>()
 
-function sessionSnapshot(session: DaySession): string {
+function sessionSnapshot(session: DayPayload['sessions'][number]): string {
   const players = session.players
     .filter((player) => !player.isRemoved)
     .map((player) => `${player.id}:${player.attendanceStatus}`)
@@ -36,9 +37,20 @@ export function readAttendanceDayCache(date: string): DayPayload | null {
   return entry.payload
 }
 
-export function writeAttendanceDayCache(payload: DayPayload) {
+export function readAttendanceDayVersion(date: string): string | null {
+  const entry = cacheByDate.get(date)
+  if (!entry) return null
+  if (Date.now() - entry.cachedAt > CACHE_TTL_MS) {
+    cacheByDate.delete(date)
+    return null
+  }
+  return entry.version ?? entry.payload.version ?? null
+}
+
+export function writeAttendanceDayCache(payload: DayPayload, version?: string | null) {
   cacheByDate.set(payload.date, {
     payload,
+    version: version ?? payload.version ?? null,
     cachedAt: Date.now(),
   })
 }
@@ -52,12 +64,12 @@ export function mergeAttendanceDayPayload(cached: DayPayload, fresh: DayPayload)
   if (cached.date !== fresh.date) return fresh
   if (cached.cancelled !== fresh.cancelled) return fresh
   if (payloadFingerprint(cached) === payloadFingerprint(fresh)) {
-    return cached
+    return { ...cached, version: fresh.version ?? cached.version }
   }
 
   const freshById = new Map(fresh.sessions.map((session) => [session.id, session]))
   const seenIds = new Set<number>()
-  const mergedSessions: DaySession[] = []
+  const mergedSessions: DayPayload['sessions'] = []
 
   for (const oldSession of cached.sessions) {
     const newer = freshById.get(oldSession.id)
@@ -80,5 +92,6 @@ export function mergeAttendanceDayPayload(cached: DayPayload, fresh: DayPayload)
     ...fresh,
     sessions: mergedSessions,
     coachesCatalog: fresh.coachesCatalog,
+    version: fresh.version ?? cached.version,
   }
 }

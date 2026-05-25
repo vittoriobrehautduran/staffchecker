@@ -1,5 +1,5 @@
-import { useCallback, useEffect, useState } from 'react'
-import { apiRequest } from '@/services/api'
+import { useCallback, useEffect, useRef, useState } from 'react'
+import { apiConditionalGet, apiRequest } from '@/services/api'
 import { Button } from '@/components/ui/button'
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card'
 import { Input } from '@/components/ui/input'
@@ -20,10 +20,20 @@ import { todayDateStr } from '@/pages/club/clubAttendanceTypes'
 import {
   mergeAttendanceDayPayload,
   readAttendanceDayCache,
+  readAttendanceDayVersion,
   writeAttendanceDayCache,
 } from '@/lib/clubAttendanceCache'
+import {
+  invalidateClubChangesCache,
+  readAttendanceHistoryCache,
+  readClubChangesCache,
+  writeAttendanceHistoryCache,
+  writeClubChangesCache,
+} from '@/lib/clubBossPanelsCache'
 
 type BossPanel = 'day' | 'history' | 'changes'
+
+const ATTENDANCE_POLL_MS = 18_000
 
 type Props = {
   isBoss: boolean
@@ -43,37 +53,51 @@ export function ClubAttendanceSection({ isBoss }: Props) {
   const [isLoadingDay, setIsLoadingDay] = useState(() => !readAttendanceDayCache(todayDateStr()))
   const [isSavingSession, setIsSavingSession] = useState(false)
   const [isLoadingBossPanel, setIsLoadingBossPanel] = useState(false)
+  const [isRefreshingBossPanel, setIsRefreshingBossPanel] = useState(false)
   const [activeSport, setActiveSport] = useState<LessonSport>('tennis')
 
-  const applyDayPayload = useCallback((payload: DayPayload) => {
+  const applyDayPayload = useCallback((payload: DayPayload, version?: string | null) => {
     setDayPayload((current) => {
+      const resolvedVersion = version ?? payload.version ?? null
       if (!current || current.date !== payload.date) {
-        writeAttendanceDayCache(payload)
+        writeAttendanceDayCache(payload, resolvedVersion)
         return payload
       }
       const merged = mergeAttendanceDayPayload(current, payload)
-      writeAttendanceDayCache(merged)
+      writeAttendanceDayCache(merged, resolvedVersion ?? merged.version)
       return merged
     })
   }, [])
 
   const loadDay = useCallback(
-    async (date: string, options?: { background?: boolean }) => {
+    async (date: string, options?: { background?: boolean; silent?: boolean }) => {
       const cached = readAttendanceDayCache(date)
+      const cachedVersion = readAttendanceDayVersion(date)
       const showBlockingLoader = !options?.background && !cached
 
       if (showBlockingLoader) {
         setIsLoadingDay(true)
-      } else if (options?.background) {
+      } else if (options?.background && !options.silent) {
         setIsRefreshingDay(true)
       }
 
       try {
-        const payload = await apiRequest<DayPayload>(
+        const result = await apiConditionalGet<DayPayload>(
           `/club-admin?date=${encodeURIComponent(date)}`,
-          { method: 'GET' }
+          cachedVersion
         )
-        applyDayPayload(payload)
+
+        if (result.unchanged) {
+          if (result.version && cached) {
+            writeAttendanceDayCache(cached, result.version)
+          }
+          return
+        }
+
+        if (options?.background && options.silent) {
+          setIsRefreshingDay(true)
+        }
+        applyDayPayload(result.data, result.version)
       } catch (error: unknown) {
         const err = error as { message?: string }
         if (!options?.background || !cached) {
@@ -91,52 +115,85 @@ export function ClubAttendanceSection({ isBoss }: Props) {
     [applyDayPayload, toast]
   )
 
-  const loadHistory = useCallback(async () => {
-    setIsLoadingBossPanel(true)
-    try {
-      const result = await apiRequest<{ sessions: AttendanceHistorySession[] }>('/club-admin', {
-        method: 'POST',
-        body: JSON.stringify({ operation: 'get_attendance_history' }),
-      })
-      setHistorySessions(result.sessions || [])
-    } catch (error: unknown) {
-      const err = error as { message?: string }
-      toast({
-        title: 'Kunde inte ladda historik',
-        description: err?.message || 'Ett fel uppstod',
-        variant: 'destructive',
-      })
-    } finally {
-      setIsLoadingBossPanel(false)
-    }
-  }, [toast])
+  const loadHistory = useCallback(
+    async (options?: { background?: boolean }) => {
+      const cached = readAttendanceHistoryCache()
+      const showBlockingLoader = !options?.background && !cached
 
-  const loadChanges = useCallback(async () => {
-    setIsLoadingBossPanel(true)
-    try {
-      const [auditResult, notificationResult] = await Promise.all([
-        apiRequest<{ entries: AuditEntry[] }>('/club-admin', {
+      if (showBlockingLoader) {
+        setIsLoadingBossPanel(true)
+      } else if (options?.background) {
+        setIsRefreshingBossPanel(true)
+      }
+
+      try {
+        const result = await apiRequest<{ sessions: AttendanceHistorySession[] }>('/club-admin', {
           method: 'POST',
-          body: JSON.stringify({ operation: 'get_audit_log' }),
-        }),
-        apiRequest<{ notifications: ClubNotification[] }>('/club-admin', {
-          method: 'POST',
-          body: JSON.stringify({ operation: 'get_notifications' }),
-        }),
-      ])
-      setAuditEntries(auditResult.entries || [])
-      setNotifications(notificationResult.notifications || [])
-    } catch (error: unknown) {
-      const err = error as { message?: string }
-      toast({
-        title: 'Kunde inte ladda ändringar',
-        description: err?.message || 'Ett fel uppstod',
-        variant: 'destructive',
-      })
-    } finally {
-      setIsLoadingBossPanel(false)
-    }
-  }, [toast])
+          body: JSON.stringify({ operation: 'get_attendance_history' }),
+        })
+        const sessions = result.sessions || []
+        setHistorySessions(sessions)
+        writeAttendanceHistoryCache(sessions)
+      } catch (error: unknown) {
+        const err = error as { message?: string }
+        if (!options?.background || !cached) {
+          toast({
+            title: 'Kunde inte ladda historik',
+            description: err?.message || 'Ett fel uppstod',
+            variant: 'destructive',
+          })
+        }
+      } finally {
+        setIsLoadingBossPanel(false)
+        setIsRefreshingBossPanel(false)
+      }
+    },
+    [toast]
+  )
+
+  const loadChanges = useCallback(
+    async (options?: { background?: boolean }) => {
+      const cached = readClubChangesCache()
+      const showBlockingLoader = !options?.background && !cached
+
+      if (showBlockingLoader) {
+        setIsLoadingBossPanel(true)
+      } else if (options?.background) {
+        setIsRefreshingBossPanel(true)
+      }
+
+      try {
+        const [auditResult, notificationResult] = await Promise.all([
+          apiRequest<{ entries: AuditEntry[] }>('/club-admin', {
+            method: 'POST',
+            body: JSON.stringify({ operation: 'get_audit_log' }),
+          }),
+          apiRequest<{ notifications: ClubNotification[] }>('/club-admin', {
+            method: 'POST',
+            body: JSON.stringify({ operation: 'get_notifications' }),
+          }),
+        ])
+        const entries = auditResult.entries || []
+        const notifs = notificationResult.notifications || []
+        setAuditEntries(entries)
+        setNotifications(notifs)
+        writeClubChangesCache(entries, notifs)
+      } catch (error: unknown) {
+        const err = error as { message?: string }
+        if (!options?.background || !cached) {
+          toast({
+            title: 'Kunde inte ladda ändringar',
+            description: err?.message || 'Ett fel uppstod',
+            variant: 'destructive',
+          })
+        }
+      } finally {
+        setIsLoadingBossPanel(false)
+        setIsRefreshingBossPanel(false)
+      }
+    },
+    [toast]
+  )
 
   useEffect(() => {
     const cached = readAttendanceDayCache(selectedDate)
@@ -148,6 +205,25 @@ export function ClubAttendanceSection({ isBoss }: Props) {
       void loadDay(selectedDate)
     }
   }, [selectedDate, loadDay])
+
+  const pollInFlightRef = useRef(false)
+
+  // Poll while närvaro is open so coaches see each other's changes within ~18s.
+  useEffect(() => {
+    const onDayPanel = !isBoss || bossPanel === 'day'
+    if (!onDayPanel) return
+
+    const poll = () => {
+      if (document.visibilityState !== 'visible' || pollInFlightRef.current) return
+      pollInFlightRef.current = true
+      void loadDay(selectedDate, { background: true, silent: true }).finally(() => {
+        pollInFlightRef.current = false
+      })
+    }
+
+    const intervalId = window.setInterval(poll, ATTENDANCE_POLL_MS)
+    return () => window.clearInterval(intervalId)
+  }, [isBoss, bossPanel, selectedDate, loadDay])
 
   useEffect(() => {
     if (!dayPayload) return
@@ -162,8 +238,28 @@ export function ClubAttendanceSection({ isBoss }: Props) {
 
   useEffect(() => {
     if (!isBoss) return
-    if (bossPanel === 'history') void loadHistory()
-    if (bossPanel === 'changes') void loadChanges()
+    if (bossPanel === 'history') {
+      const cached = readAttendanceHistoryCache()
+      if (cached) {
+        setHistorySessions(cached)
+        setIsLoadingBossPanel(false)
+        void loadHistory({ background: true })
+      } else {
+        void loadHistory()
+      }
+      return
+    }
+    if (bossPanel === 'changes') {
+      const cached = readClubChangesCache()
+      if (cached) {
+        setAuditEntries(cached.auditEntries)
+        setNotifications(cached.notifications)
+        setIsLoadingBossPanel(false)
+        void loadChanges({ background: true })
+      } else {
+        void loadChanges()
+      }
+    }
   }, [isBoss, bossPanel, loadHistory, loadChanges])
 
   async function saveSession(
@@ -184,9 +280,10 @@ export function ClubAttendanceSection({ isBoss }: Props) {
           ...patch,
         }),
       })
-      applyDayPayload(payload)
+      applyDayPayload(payload, payload.version)
       if (isBoss && bossPanel === 'changes') {
-        void loadChanges()
+        invalidateClubChangesCache()
+        void loadChanges({ background: true })
       }
     } catch (error: unknown) {
       const err = error as { message?: string }
@@ -206,7 +303,12 @@ export function ClubAttendanceSection({ isBoss }: Props) {
         method: 'POST',
         body: JSON.stringify({ operation: 'mark_notifications_read' }),
       })
-      setNotifications(result.notifications || [])
+      const notifs = result.notifications || []
+      setNotifications(notifs)
+      const cachedChanges = readClubChangesCache()
+      if (cachedChanges) {
+        writeClubChangesCache(cachedChanges.auditEntries, notifs)
+      }
     } catch (error: unknown) {
       const err = error as { message?: string }
       toast({
@@ -316,16 +418,26 @@ export function ClubAttendanceSection({ isBoss }: Props) {
       )}
 
       {isBoss && bossPanel === 'history' && (
-        <ClubAttendanceHistoryPanel sessions={historySessions} isLoading={isLoadingBossPanel} />
+        <>
+          {isRefreshingBossPanel && (
+            <p className="text-xs text-muted-foreground">Uppdaterar i bakgrunden…</p>
+          )}
+          <ClubAttendanceHistoryPanel sessions={historySessions} isLoading={isLoadingBossPanel} />
+        </>
       )}
 
       {isBoss && bossPanel === 'changes' && (
-        <ClubChangesPanel
-          auditEntries={auditEntries}
-          notifications={notifications}
-          isLoading={isLoadingBossPanel}
-          onMarkAllRead={() => void markAllNotificationsRead()}
-        />
+        <>
+          {isRefreshingBossPanel && (
+            <p className="text-xs text-muted-foreground">Uppdaterar i bakgrunden…</p>
+          )}
+          <ClubChangesPanel
+            auditEntries={auditEntries}
+            notifications={notifications}
+            isLoading={isLoadingBossPanel}
+            onMarkAllRead={() => void markAllNotificationsRead()}
+          />
+        </>
       )}
     </div>
   )

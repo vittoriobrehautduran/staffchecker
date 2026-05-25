@@ -41,6 +41,7 @@ export type DayPayload = {
   bordtennisEnabled: boolean
   sessions: DaySession[]
   coachesCatalog: { id: number; name: string; sport: string }[]
+  version?: string
 }
 
 export type LessonSport = 'tennis' | 'bordtennis'

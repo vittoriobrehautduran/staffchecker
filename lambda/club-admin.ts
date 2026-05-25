@@ -6,7 +6,7 @@ import {
   defaultHistoryRange,
   getAttendanceHistory,
   getAuditLog,
-  getDayPayload,
+  getDayPayloadForRequest,
   getNotifications,
   markNotificationsRead,
   updateSessionDay,
@@ -26,11 +26,13 @@ function getCorsOrigin(event: APIGatewayProxyEvent): string {
   return allowedOrigins.includes(requestOrigin) ? requestOrigin : allowedOrigins[0]
 }
 
-function corsHeaders(origin: string) {
+function corsHeaders(origin: string, extra?: { etag?: string }) {
   return {
     'Content-Type': 'application/json',
     'Access-Control-Allow-Origin': origin,
     'Access-Control-Allow-Credentials': 'true',
+    'Access-Control-Expose-Headers': 'ETag',
+    ...(extra?.etag ? { ETag: `"${extra.etag}"` } : {}),
   }
 }
 
@@ -648,7 +650,7 @@ export const handler = async (
       headers: {
         ...corsHeaders(origin),
         'Access-Control-Allow-Methods': 'GET, POST, OPTIONS',
-        'Access-Control-Allow-Headers': 'Content-Type, Authorization',
+        'Access-Control-Allow-Headers': 'Content-Type, Authorization, If-None-Match',
       },
       body: '',
     }
@@ -693,10 +695,30 @@ export const handler = async (
             body: JSON.stringify({ message: 'date must be YYYY-MM-DD' }),
           }
         }
-        const dayPayload = await getDayPayload(clubId, queryDate)
+        const ifNoneMatch =
+          event.headers?.['If-None-Match'] ||
+          event.headers?.['if-none-match'] ||
+          event.queryStringParameters?.ifNoneMatch ||
+          ''
+
+        const dayResult = await getDayPayloadForRequest(clubId, queryDate, ifNoneMatch)
+
+        if (dayResult.unchanged) {
+          return {
+            statusCode: 200,
+            headers: corsHeaders(origin, { etag: dayResult.version }),
+            body: JSON.stringify({
+              unchanged: true,
+              date: dayResult.date,
+              version: dayResult.version,
+            }),
+          }
+        }
+
+        const { unchanged: _unchanged, ...dayPayload } = dayResult
         return {
           statusCode: 200,
-          headers: corsHeaders(origin),
+          headers: corsHeaders(origin, { etag: dayResult.version }),
           body: JSON.stringify(dayPayload),
         }
       }
@@ -767,10 +789,22 @@ export const handler = async (
           body: JSON.stringify({ message: 'date must be YYYY-MM-DD' }),
         }
       }
-      const dayPayload = await getDayPayload(clubId, dateStr)
+      const dayResult = await getDayPayloadForRequest(clubId, dateStr)
+      if (dayResult.unchanged) {
+        return {
+          statusCode: 200,
+          headers: corsHeaders(origin, { etag: dayResult.version }),
+          body: JSON.stringify({
+            unchanged: true,
+            date: dayResult.date,
+            version: dayResult.version,
+          }),
+        }
+      }
+      const { unchanged: _unchanged, ...dayPayload } = dayResult
       return {
         statusCode: 200,
-        headers: corsHeaders(origin),
+        headers: corsHeaders(origin, { etag: dayResult.version }),
         body: JSON.stringify(dayPayload),
       }
     }
@@ -785,7 +819,7 @@ export const handler = async (
         }
       }
 
-      const dayPayload = await updateSessionDay(clubId, userId, sessionId, {
+      const dayResult = await updateSessionDay(clubId, userId, sessionId, {
         coachIds: Array.isArray(body.coachIds)
           ? (body.coachIds as unknown[]).map((id) => Number(id)).filter((id) => id > 0)
           : undefined,
@@ -797,9 +831,22 @@ export const handler = async (
           : undefined,
       })
 
+      if (dayResult.unchanged) {
+        return {
+          statusCode: 200,
+          headers: corsHeaders(origin, { etag: dayResult.version }),
+          body: JSON.stringify({
+            unchanged: true,
+            date: dayResult.date,
+            version: dayResult.version,
+          }),
+        }
+      }
+
+      const { unchanged: _unchanged, ...dayPayload } = dayResult
       return {
         statusCode: 200,
-        headers: corsHeaders(origin),
+        headers: corsHeaders(origin, { etag: dayResult.version }),
         body: JSON.stringify(dayPayload),
       }
     }
