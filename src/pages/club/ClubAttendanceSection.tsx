@@ -18,6 +18,10 @@ import type {
 } from '@/pages/club/clubAttendanceTypes'
 import { todayDateStr } from '@/pages/club/clubAttendanceTypes'
 import {
+  isAttendanceOnlyPatch,
+  patchSessionPlayerAttendance,
+} from '@/pages/club/clubAttendanceOptimistic'
+import {
   mergeAttendanceDayPayload,
   readAttendanceDayCache,
   readAttendanceDayVersion,
@@ -36,6 +40,8 @@ type BossPanel = 'day' | 'history' | 'changes'
 // How often we check for other coaches' changes. ETag keeps idle polls cheap.
 // True push (sub-second) would need WebSocket — see plan for chat/realtime later.
 const ATTENDANCE_POLL_MS = 2_000
+// Batch rapid checkbox clicks into one save per lesson.
+const ATTENDANCE_FLUSH_MS = 450
 
 type Props = {
   isBoss: boolean
@@ -57,6 +63,10 @@ export function ClubAttendanceSection({ isBoss }: Props) {
   const [isLoadingBossPanel, setIsLoadingBossPanel] = useState(false)
   const [isRefreshingBossPanel, setIsRefreshingBossPanel] = useState(false)
   const [activeSport, setActiveSport] = useState<LessonSport>('tennis')
+
+  const pendingAttendanceRef = useRef<Map<number, Map<number, AttendanceStatus>>>(new Map())
+  const attendanceFlushTimerRef = useRef<Map<number, number>>(new Map())
+  const attendanceFlushInFlightRef = useRef<Set<number>>(new Set())
 
   const applyDayPayload = useCallback((payload: DayPayload, version?: string | null) => {
     setDayPayload((current) => {
@@ -274,6 +284,98 @@ export function ClubAttendanceSection({ isBoss }: Props) {
     }
   }, [isBoss, bossPanel, loadHistory, loadChanges])
 
+  const flushAttendanceForSession = useCallback(
+    async (sessionId: number) => {
+      if (attendanceFlushInFlightRef.current.has(sessionId)) return
+
+      const pendingForSession = pendingAttendanceRef.current.get(sessionId)
+      if (!pendingForSession?.size) return
+
+      const attendance = [...pendingForSession.entries()].map(([sessionPlayerId, status]) => ({
+        sessionPlayerId,
+        status,
+      }))
+      pendingForSession.clear()
+
+      attendanceFlushInFlightRef.current.add(sessionId)
+      try {
+        const payload = await apiRequest<DayPayload>('/club-admin', {
+          method: 'POST',
+          body: JSON.stringify({
+            operation: 'update_session',
+            sessionId,
+            attendance,
+          }),
+        })
+        applyDayPayload(payload, payload.version)
+        if (isBoss && bossPanel === 'changes') {
+          invalidateClubChangesCache()
+          void loadChanges({ background: true })
+        }
+      } catch (error: unknown) {
+        const err = error as { message?: string }
+        toast({
+          title: 'Kunde inte spara närvaro',
+          description: err?.message || 'Ett fel uppstod',
+          variant: 'destructive',
+        })
+        void loadDay(selectedDate, { background: true, silent: true })
+      } finally {
+        attendanceFlushInFlightRef.current.delete(sessionId)
+
+        const stillPending = pendingAttendanceRef.current.get(sessionId)
+        if (stillPending?.size) {
+          void flushAttendanceForSession(sessionId)
+        }
+      }
+    },
+    [applyDayPayload, bossPanel, isBoss, loadChanges, loadDay, selectedDate, toast]
+  )
+
+  const queueAttendanceSave = useCallback(
+    (sessionId: number, sessionPlayerId: number, status: AttendanceStatus) => {
+      setDayPayload((current) => {
+        if (!current) return current
+        const next = patchSessionPlayerAttendance(
+          current,
+          sessionId,
+          sessionPlayerId,
+          status
+        )
+        writeAttendanceDayCache(next, next.version)
+        return next
+      })
+
+      let pendingForSession = pendingAttendanceRef.current.get(sessionId)
+      if (!pendingForSession) {
+        pendingForSession = new Map()
+        pendingAttendanceRef.current.set(sessionId, pendingForSession)
+      }
+      pendingForSession.set(sessionPlayerId, status)
+
+      const existingTimer = attendanceFlushTimerRef.current.get(sessionId)
+      if (existingTimer) window.clearTimeout(existingTimer)
+
+      attendanceFlushTimerRef.current.set(
+        sessionId,
+        window.setTimeout(() => {
+          attendanceFlushTimerRef.current.delete(sessionId)
+          void flushAttendanceForSession(sessionId)
+        }, ATTENDANCE_FLUSH_MS)
+      )
+    },
+    [flushAttendanceForSession]
+  )
+
+  useEffect(() => {
+    return () => {
+      for (const timer of attendanceFlushTimerRef.current.values()) {
+        window.clearTimeout(timer)
+      }
+      attendanceFlushTimerRef.current.clear()
+    }
+  }, [])
+
   async function saveSession(
     sessionId: number,
     patch: {
@@ -282,6 +384,13 @@ export function ClubAttendanceSection({ isBoss }: Props) {
       attendance?: { sessionPlayerId: number; status: AttendanceStatus }[]
     }
   ) {
+    if (isAttendanceOnlyPatch(patch)) {
+      for (const row of patch.attendance || []) {
+        queueAttendanceSave(sessionId, row.sessionPlayerId, row.status)
+      }
+      return
+    }
+
     setIsSavingSession(true)
     try {
       const payload = await apiRequest<DayPayload>('/club-admin', {

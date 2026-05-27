@@ -63,8 +63,8 @@ function SessionCard({
     await onSaveSession(session.id, { coachIds: nextCoachIds })
   }
 
-  async function setAttendance(sessionPlayerId: number, status: AttendanceStatus) {
-    await onSaveSession(session.id, {
+  function setAttendance(sessionPlayerId: number, status: AttendanceStatus) {
+    void onSaveSession(session.id, {
       attendance: [{ sessionPlayerId, status }],
     })
   }
@@ -187,12 +187,8 @@ function SessionCard({
                       type="checkbox"
                       checked={isPresent}
                       onChange={(event) =>
-                        void setAttendance(
-                          player.id,
-                          event.target.checked ? 'present' : 'unknown'
-                        )
+                        setAttendance(player.id, event.target.checked ? 'present' : 'unknown')
                       }
-                      disabled={isSaving}
                       aria-label={`${player.name} närvarande`}
                       className="h-5 w-5 shrink-0 cursor-pointer rounded-full border-2 border-muted-foreground accent-primary disabled:cursor-not-allowed disabled:opacity-50"
                     />
