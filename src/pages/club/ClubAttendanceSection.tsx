@@ -30,6 +30,7 @@ import {
   readClubChangesCache,
   writeClubChangesCache,
 } from '@/lib/clubBossPanelsCache'
+import { attendanceErrorMessage } from '@/lib/apiErrors'
 
 type BossPanel = 'day' | 'changes'
 
@@ -62,22 +63,32 @@ export function ClubAttendanceSection({ isBoss }: Props) {
   const pendingAttendanceRef = useRef<Map<number, Map<number, AttendanceStatus>>>(new Map())
   const attendanceFlushTimerRef = useRef<Map<number, number>>(new Map())
   const attendanceFlushInFlightRef = useRef<Set<number>>(new Set())
+  const selectedDateRef = useRef(selectedDate)
+  const loadDayRequestRef = useRef(0)
+
+  useEffect(() => {
+    selectedDateRef.current = selectedDate
+  }, [selectedDate])
 
   const applyDayPayload = useCallback((payload: DayPayload, version?: string | null) => {
+    const resolvedVersion = version ?? payload.version ?? null
+    writeAttendanceDayCache(payload, resolvedVersion)
+
+    if (payload.date !== selectedDateRef.current) {
+      return
+    }
+
     setDayPayload((current) => {
-      const resolvedVersion = version ?? payload.version ?? null
       if (!current || current.date !== payload.date) {
-        writeAttendanceDayCache(payload, resolvedVersion)
         return payload
       }
-      const merged = mergeAttendanceDayPayload(current, payload)
-      writeAttendanceDayCache(merged, resolvedVersion ?? merged.version)
-      return merged
+      return mergeAttendanceDayPayload(current, payload)
     })
   }, [])
 
   const loadDay = useCallback(
     async (date: string, options?: { background?: boolean; silent?: boolean }) => {
+      const requestId = ++loadDayRequestRef.current
       const cached = readAttendanceDayCache(date)
       const cachedVersion = readAttendanceDayVersion(date)
       const showBlockingLoader = !options?.background && !cached
@@ -94,9 +105,14 @@ export function ClubAttendanceSection({ isBoss }: Props) {
           cachedVersion
         )
 
+        if (requestId !== loadDayRequestRef.current) return
+
         if (result.unchanged) {
           if (result.version && cached) {
             writeAttendanceDayCache(cached, result.version)
+          }
+          if (date === selectedDateRef.current && cached) {
+            setDayPayload(cached)
           }
           return
         }
@@ -106,17 +122,20 @@ export function ClubAttendanceSection({ isBoss }: Props) {
         }
         applyDayPayload(result.data, result.version)
       } catch (error: unknown) {
-        const err = error as { message?: string }
+        if (requestId !== loadDayRequestRef.current) return
         if (!options?.background || !cached) {
+          const { title, description } = attendanceErrorMessage(error, 'load')
           toast({
-            title: 'Kunde inte ladda närvaro',
-            description: err?.message || 'Ett fel uppstod',
+            title,
+            description,
             variant: 'destructive',
           })
         }
       } finally {
-        setIsLoadingDay(false)
-        setIsRefreshingDay(false)
+        if (requestId === loadDayRequestRef.current) {
+          setIsLoadingDay(false)
+          setIsRefreshingDay(false)
+        }
       }
     },
     [applyDayPayload, toast]
@@ -242,6 +261,7 @@ export function ClubAttendanceSection({ isBoss }: Props) {
         status,
       }))
       pendingForSession.clear()
+      const saveForDate = selectedDateRef.current
 
       attendanceFlushInFlightRef.current.add(sessionId)
       try {
@@ -259,13 +279,14 @@ export function ClubAttendanceSection({ isBoss }: Props) {
           void loadChanges({ background: true })
         }
       } catch (error: unknown) {
-        const err = error as { message?: string }
+        if (saveForDate !== selectedDateRef.current) return
+        const { title, description } = attendanceErrorMessage(error, 'save')
         toast({
-          title: 'Kunde inte spara närvaro',
-          description: err?.message || 'Ett fel uppstod',
+          title,
+          description,
           variant: 'destructive',
         })
-        void loadDay(selectedDate, { background: true, silent: true })
+        void loadDay(saveForDate, { background: true, silent: true })
       } finally {
         attendanceFlushInFlightRef.current.delete(sessionId)
 
@@ -313,6 +334,17 @@ export function ClubAttendanceSection({ isBoss }: Props) {
     [flushAttendanceForSession]
   )
 
+  const flushAllPendingAttendance = useCallback(() => {
+    for (const timer of attendanceFlushTimerRef.current.values()) {
+      window.clearTimeout(timer)
+    }
+    attendanceFlushTimerRef.current.clear()
+
+    for (const sessionId of [...pendingAttendanceRef.current.keys()]) {
+      void flushAttendanceForSession(sessionId)
+    }
+  }, [flushAttendanceForSession])
+
   useEffect(() => {
     return () => {
       for (const timer of attendanceFlushTimerRef.current.values()) {
@@ -353,10 +385,10 @@ export function ClubAttendanceSection({ isBoss }: Props) {
         void loadChanges({ background: true })
       }
     } catch (error: unknown) {
-      const err = error as { message?: string }
+      const { title, description } = attendanceErrorMessage(error, 'save')
       toast({
-        title: 'Kunde inte spara',
-        description: err?.message || 'Ett fel uppstod',
+        title,
+        description,
         variant: 'destructive',
       })
     } finally {
@@ -450,7 +482,13 @@ export function ClubAttendanceSection({ isBoss }: Props) {
                 value={selectedDate}
                 onChange={(event) => {
                   const nextDate = event.target.value
+                  if (!nextDate || nextDate === selectedDate) return
+
+                  flushAllPendingAttendance()
+                  loadDayRequestRef.current += 1
+                  selectedDateRef.current = nextDate
                   setSelectedDate(nextDate)
+
                   const cached = readAttendanceDayCache(nextDate)
                   if (cached) {
                     setDayPayload(cached)

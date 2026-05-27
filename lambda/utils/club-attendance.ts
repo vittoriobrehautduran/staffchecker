@@ -176,19 +176,25 @@ async function ensureSessionRoster(sessionId: number, classId: number, templateI
   `) as { id: number; player_name: string; sort_order: number }[]
 
   for (const player of classPlayers) {
-    await sql`
-      INSERT INTO club_session_players (
-        session_id, player_id, player_name, is_day_addition, is_removed, sort_order
-      )
-      VALUES (
-        ${sessionId},
-        ${player.id},
-        ${player.player_name},
-        false,
-        false,
-        ${player.sort_order}
-      )
-    `
+    try {
+      await sql`
+        INSERT INTO club_session_players (
+          session_id, player_id, player_name, is_day_addition, is_removed, sort_order
+        )
+        VALUES (
+          ${sessionId},
+          ${player.id},
+          ${player.player_name},
+          false,
+          false,
+          ${player.sort_order}
+        )
+      `
+    } catch (error: unknown) {
+      const err = error as { code?: string }
+      // Another parallel request may have inserted the same roster row first.
+      if (err?.code !== '23505') throw error
+    }
   }
 
   const coachIds: number[] = []
@@ -426,7 +432,13 @@ export async function getDayPayloadForRequest(
   dateStr: string,
   ifNoneMatch?: string | null
 ): Promise<DayPayloadResponse> {
-  await ensureSessionsForDate(clubId, dateStr)
+  try {
+    await ensureSessionsForDate(clubId, dateStr)
+  } catch (error: unknown) {
+    const err = error as { code?: string }
+    // Two coaches loading the same new day at once can race on session creation.
+    if (err?.code !== '23505') throw error
+  }
   const version = await getDayRevision(clubId, dateStr)
   const clientVersion = normalizeIfNoneMatch(ifNoneMatch)
 
