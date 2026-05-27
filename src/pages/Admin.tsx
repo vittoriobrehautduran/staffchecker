@@ -15,6 +15,7 @@ type CleanupPreview = {
   clubName: string
   clubSlug: string
   retentionDays: number
+  deleteAll: boolean
   cutoffDate: string
   sessions: number
   auditLogEntries: number
@@ -56,10 +57,10 @@ export default function Admin() {
 
   const loadCleanupPreview = useCallback(async () => {
     const retentionDays = Number(cleanupRetentionDays)
-    if (!Number.isFinite(retentionDays) || retentionDays < 1 || retentionDays > 3650) {
+    if (!Number.isFinite(retentionDays) || retentionDays < 0 || retentionDays > 3650) {
       toast({
         title: 'Ogiltigt antal dagar',
-        description: 'Ange mellan 1 och 3650 dagar.',
+        description: 'Ange mellan 0 och 3650 dagar.',
         variant: 'destructive',
       })
       return
@@ -412,15 +413,15 @@ export default function Admin() {
               <Input
                 id="cleanup-retention-days"
                 type="number"
-                min={1}
+                min={0}
                 max={3650}
                 value={cleanupRetentionDays}
                 onChange={(event) => setCleanupRetentionDays(event.target.value)}
                 disabled={isLoadingCleanupPreview || isRunningCleanup}
               />
               <p className="text-xs text-muted-foreground">
-                Allt med datum före gränsdatumet raderas. Standard från klubbens inställning är ofta
-                60 dagar.
+                Allt med datum före gränsdatumet raderas. Sätt 0 för att radera all klubbnärvarodata
+                (även framtida dagliga lektioner).
               </p>
             </div>
 
@@ -435,10 +436,17 @@ export default function Admin() {
 
             {cleanupPreview && (
               <div className="rounded-md border bg-muted/30 p-4 text-sm space-y-1">
-                <p>
-                  <strong>{cleanupPreview.clubName}</strong> — raderar data före{' '}
-                  <strong>{cleanupPreview.cutoffDate}</strong>
-                </p>
+                {cleanupPreview.deleteAll ? (
+                  <p>
+                    <strong>{cleanupPreview.clubName}</strong> — raderar{' '}
+                    <strong>all klubbnärvarodata</strong>
+                  </p>
+                ) : (
+                  <p>
+                    <strong>{cleanupPreview.clubName}</strong> — raderar data före{' '}
+                    <strong>{cleanupPreview.cutoffDate}</strong>
+                  </p>
+                )}
                 <p>Lektioner (dagar): {cleanupPreview.sessions}</p>
                 <p>Ändringslogg: {cleanupPreview.auditLogEntries}</p>
                 <p>Notifieringar: {cleanupPreview.notifications}</p>

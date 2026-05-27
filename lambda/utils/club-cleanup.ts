@@ -23,6 +23,7 @@ export type ClubCleanupPreview = {
   clubName: string
   clubSlug: string
   retentionDays: number
+  deleteAll: boolean
   cutoffDate: string
   sessions: number
   auditLogEntries: number
@@ -78,12 +79,14 @@ export async function getClubCleanupPreview(
   `) as { id: number; name: string; slug: string; retention_days: number }[]
 
   const club = clubs[0]
+  const safeRetentionInput =
+    retentionDays != null && Number.isFinite(retentionDays)
+      ? Math.max(0, Math.floor(retentionDays))
+      : undefined
   const effectiveRetention =
-    retentionDays != null && retentionDays > 0
-      ? Math.floor(retentionDays)
-      : Math.max(1, club.retention_days ?? 60)
-
-  const cutoffDate = cutoffDateFromRetentionDays(effectiveRetention)
+    safeRetentionInput != null ? safeRetentionInput : Math.max(1, club.retention_days ?? 60)
+  const deleteAll = effectiveRetention === 0
+  const cutoffDate = deleteAll ? '9999-12-31' : cutoffDateFromRetentionDays(effectiveRetention)
   const counts = await countRows(clubId, cutoffDate)
 
   return {
@@ -91,6 +94,7 @@ export async function getClubCleanupPreview(
     clubName: club.name,
     clubSlug: club.slug,
     retentionDays: effectiveRetention,
+    deleteAll,
     cutoffDate,
     ...counts,
   }

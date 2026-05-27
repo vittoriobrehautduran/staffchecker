@@ -6,10 +6,8 @@ import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
 import { useToast } from '@/components/ui/use-toast'
 import { ClubAttendanceDayView } from '@/pages/club/ClubAttendanceDayView'
-import { ClubAttendanceHistoryPanel } from '@/pages/club/ClubAttendanceHistoryPanel'
 import { ClubChangesPanel } from '@/pages/club/ClubChangesPanel'
 import type {
-  AttendanceHistorySession,
   AttendanceStatus,
   AuditEntry,
   ClubNotification,
@@ -29,13 +27,11 @@ import {
 } from '@/lib/clubAttendanceCache'
 import {
   invalidateClubChangesCache,
-  readAttendanceHistoryCache,
   readClubChangesCache,
-  writeAttendanceHistoryCache,
   writeClubChangesCache,
 } from '@/lib/clubBossPanelsCache'
 
-type BossPanel = 'day' | 'history' | 'changes'
+type BossPanel = 'day' | 'changes'
 
 // How often we check for other coaches' changes. ETag keeps idle polls cheap.
 // True push (sub-second) would need WebSocket — see plan for chat/realtime later.
@@ -55,7 +51,6 @@ export function ClubAttendanceSection({ isBoss }: Props) {
     readAttendanceDayCache(todayDateStr())
   )
   const [isRefreshingDay, setIsRefreshingDay] = useState(false)
-  const [historySessions, setHistorySessions] = useState<AttendanceHistorySession[]>([])
   const [auditEntries, setAuditEntries] = useState<AuditEntry[]>([])
   const [notifications, setNotifications] = useState<ClubNotification[]>([])
   const [isLoadingDay, setIsLoadingDay] = useState(() => !readAttendanceDayCache(todayDateStr()))
@@ -125,42 +120,6 @@ export function ClubAttendanceSection({ isBoss }: Props) {
       }
     },
     [applyDayPayload, toast]
-  )
-
-  const loadHistory = useCallback(
-    async (options?: { background?: boolean }) => {
-      const cached = readAttendanceHistoryCache()
-      const showBlockingLoader = !options?.background && !cached
-
-      if (showBlockingLoader) {
-        setIsLoadingBossPanel(true)
-      } else if (options?.background) {
-        setIsRefreshingBossPanel(true)
-      }
-
-      try {
-        const result = await apiRequest<{ sessions: AttendanceHistorySession[] }>('/club-admin', {
-          method: 'POST',
-          body: JSON.stringify({ operation: 'get_attendance_history' }),
-        })
-        const sessions = result.sessions || []
-        setHistorySessions(sessions)
-        writeAttendanceHistoryCache(sessions)
-      } catch (error: unknown) {
-        const err = error as { message?: string }
-        if (!options?.background || !cached) {
-          toast({
-            title: 'Kunde inte ladda historik',
-            description: err?.message || 'Ett fel uppstod',
-            variant: 'destructive',
-          })
-        }
-      } finally {
-        setIsLoadingBossPanel(false)
-        setIsRefreshingBossPanel(false)
-      }
-    },
-    [toast]
   )
 
   const loadChanges = useCallback(
@@ -259,30 +218,17 @@ export function ClubAttendanceSection({ isBoss }: Props) {
   }, [dayPayload, activeSport])
 
   useEffect(() => {
-    if (!isBoss) return
-    if (bossPanel === 'history') {
-      const cached = readAttendanceHistoryCache()
-      if (cached) {
-        setHistorySessions(cached)
-        setIsLoadingBossPanel(false)
-        void loadHistory({ background: true })
-      } else {
-        void loadHistory()
-      }
-      return
+    if (!isBoss || bossPanel !== 'changes') return
+    const cached = readClubChangesCache()
+    if (cached) {
+      setAuditEntries(cached.auditEntries)
+      setNotifications(cached.notifications)
+      setIsLoadingBossPanel(false)
+      void loadChanges({ background: true })
+    } else {
+      void loadChanges()
     }
-    if (bossPanel === 'changes') {
-      const cached = readClubChangesCache()
-      if (cached) {
-        setAuditEntries(cached.auditEntries)
-        setNotifications(cached.notifications)
-        setIsLoadingBossPanel(false)
-        void loadChanges({ background: true })
-      } else {
-        void loadChanges()
-      }
-    }
-  }, [isBoss, bossPanel, loadHistory, loadChanges])
+  }, [isBoss, bossPanel, loadChanges])
 
   const flushAttendanceForSession = useCallback(
     async (sessionId: number) => {
@@ -455,14 +401,6 @@ export function ClubAttendanceSection({ isBoss }: Props) {
           <Button
             type="button"
             size="sm"
-            variant={bossPanel === 'history' ? 'default' : 'outline'}
-            onClick={() => setBossPanel('history')}
-          >
-            Historik (30 dagar)
-          </Button>
-          <Button
-            type="button"
-            size="sm"
             variant={bossPanel === 'changes' ? 'default' : 'outline'}
             onClick={() => setBossPanel('changes')}
           >
@@ -536,15 +474,6 @@ export function ClubAttendanceSection({ isBoss }: Props) {
             />
           </CardContent>
         </Card>
-      )}
-
-      {isBoss && bossPanel === 'history' && (
-        <>
-          {isRefreshingBossPanel && (
-            <p className="text-xs text-muted-foreground">Uppdaterar i bakgrunden…</p>
-          )}
-          <ClubAttendanceHistoryPanel sessions={historySessions} isLoading={isLoadingBossPanel} />
-        </>
       )}
 
       {isBoss && bossPanel === 'changes' && (
