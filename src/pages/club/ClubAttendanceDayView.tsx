@@ -292,10 +292,24 @@ export function ClubAttendanceDayView({
   }
 
   if (payload.cancelled) {
+    const heading =
+      payload.closureType === 'lov'
+        ? payload.closureLabel || 'Lov'
+        : payload.closureType === 'rod_dag'
+          ? payload.closureLabel || 'Röd dag'
+          : 'Dagen är stängd'
+    const detail =
+      payload.closureType === 'lov'
+        ? 'Ingen skola denna dag — lektioner visas inte i närvaro.'
+        : payload.closureType === 'rod_dag'
+          ? 'Röd dag — lektioner visas inte i närvaro.'
+          : 'Lektioner visas inte i närvaro.'
+
     return (
       <Card>
-        <CardContent className="py-6">
-          <p className="text-sm text-muted-foreground">Dagen är markerad som inställd.</p>
+        <CardContent className="py-6 space-y-1">
+          <p className="text-sm font-medium">{heading}</p>
+          <p className="text-sm text-muted-foreground">{detail}</p>
         </CardContent>
       </Card>
     )

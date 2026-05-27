@@ -1,4 +1,5 @@
 import { createHash } from 'crypto'
+import { getDayClosure } from './club-closures'
 import { sql } from './database'
 
 export type AttendanceStatus = 'present' | 'absent' | 'unknown'
@@ -147,17 +148,6 @@ export async function notifyClubBosses(
   `
 }
 
-async function isDayCancelled(clubId: number, dateStr: string): Promise<boolean> {
-  const rows = (await sql`
-    SELECT 1
-    FROM club_cancelled_days
-    WHERE club_id = ${clubId}
-      AND cancel_date = ${dateStr}::date
-    LIMIT 1
-  `) as { '?column?': number }[]
-  return rows.length > 0
-}
-
 async function ensureSessionRoster(sessionId: number, classId: number, templateId: number | null) {
   const existing = (await sql`
     SELECT COUNT(*)::int AS count
@@ -270,7 +260,8 @@ async function upsertSessionFromTemplate(
 }
 
 export async function ensureSessionsForDate(clubId: number, dateStr: string): Promise<void> {
-  if (await isDayCancelled(clubId, dateStr)) return
+  const closure = await getDayClosure(clubId, dateStr)
+  if (closure.closed) return
 
   const weekday = isoWeekdayFromDateStr(dateStr)
   const templates = (await sql`
@@ -370,6 +361,8 @@ export type DayPayloadResponse =
       unchanged: false
       date: string
       cancelled: boolean
+      closureType: 'lov' | 'rod_dag' | null
+      closureLabel: string | null
       tennisEnabled: boolean
       bordtennisEnabled: boolean
       sessions: unknown[]
@@ -386,11 +379,14 @@ export function normalizeIfNoneMatch(value?: string | null): string | null {
 
 // Cheap fingerprint for a day's närvaro — used before building the full day payload.
 export async function getDayRevision(clubId: number, dateStr: string): Promise<string> {
-  const cancelled = await isDayCancelled(clubId, dateStr)
+  const closure = await getDayClosure(clubId, dateStr)
+  const closureToken = closure.closed
+    ? `${closure.type ?? 'closed'}:${closure.label ?? ''}`
+    : 'open'
 
   const [row] = (await sql`
     SELECT md5(
-      ${dateStr} || '|' || ${cancelled ? '1' : '0'} || '|' || COALESCE((
+      ${dateStr} || '|' || ${closureToken} || '|' || COALESCE((
         SELECT string_agg(token, ';' ORDER BY sort_key)
         FROM (
           SELECT
@@ -463,7 +459,8 @@ export async function getDayPayload(
     await ensureSessionsForDate(clubId, dateStr)
   }
 
-  const cancelled = await isDayCancelled(clubId, dateStr)
+  const closure = await getDayClosure(clubId, dateStr)
+  const cancelled = closure.closed
 
   const sessions = (await sql`
     SELECT
@@ -635,6 +632,8 @@ export async function getDayPayload(
   return {
     date: dateStr,
     cancelled,
+    closureType: closure.type,
+    closureLabel: closure.label,
     tennisEnabled: !!clubRow?.tennis_enabled,
     bordtennisEnabled: !!clubRow?.bordtennis_enabled,
     sessions: sessionPayload,

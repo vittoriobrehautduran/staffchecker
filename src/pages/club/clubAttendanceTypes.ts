@@ -34,14 +34,36 @@ export type DaySession = {
   players: DaySessionPlayer[]
 }
 
+export type ClosureType = 'lov' | 'rod_dag'
+
 export type DayPayload = {
   date: string
   cancelled: boolean
+  closureType?: ClosureType | null
+  closureLabel?: string | null
   tennisEnabled: boolean
   bordtennisEnabled: boolean
   sessions: DaySession[]
   coachesCatalog: { id: number; name: string; sport: string }[]
   version?: string
+}
+
+export type RodDayRow = {
+  id: number
+  date: string
+  label: string | null
+}
+
+export type LovRangeRow = {
+  id: number
+  fromDate: string
+  toDate: string
+  label: string | null
+}
+
+export type ClubClosuresPayload = {
+  rodDays: RodDayRow[]
+  lovRanges: LovRangeRow[]
 }
 
 export type LessonSport = 'tennis' | 'bordtennis'

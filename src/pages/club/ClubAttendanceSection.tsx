@@ -7,6 +7,7 @@ import { Label } from '@/components/ui/label'
 import { useToast } from '@/components/ui/use-toast'
 import { ClubAttendanceDayView } from '@/pages/club/ClubAttendanceDayView'
 import { ClubChangesPanel } from '@/pages/club/ClubChangesPanel'
+import { ClubClosuresPanel } from '@/pages/club/ClubClosuresPanel'
 import type {
   AttendanceStatus,
   AuditEntry,
@@ -32,7 +33,7 @@ import {
 } from '@/lib/clubBossPanelsCache'
 import { attendanceErrorMessage } from '@/lib/apiErrors'
 
-type BossPanel = 'day' | 'changes'
+type BossPanel = 'day' | 'changes' | 'closures'
 
 // How often we check for other coaches' changes. ETag keeps idle polls cheap.
 // True push (sub-second) would need WebSocket — see plan for chat/realtime later.
@@ -438,6 +439,14 @@ export function ClubAttendanceSection({ isBoss }: Props) {
           >
             Ändringar
           </Button>
+          <Button
+            type="button"
+            size="sm"
+            variant={bossPanel === 'closures' ? 'default' : 'outline'}
+            onClick={() => setBossPanel('closures')}
+          >
+            Lov & röda dagar
+          </Button>
         </div>
       )}
 
@@ -526,6 +535,14 @@ export function ClubAttendanceSection({ isBoss }: Props) {
             onMarkAllRead={() => void markAllNotificationsRead()}
           />
         </>
+      )}
+
+      {isBoss && bossPanel === 'closures' && (
+        <ClubClosuresPanel
+          onClosuresChanged={() => {
+            void loadDay(selectedDateRef.current, { background: true, silent: true })
+          }}
+        />
       )}
     </div>
   )

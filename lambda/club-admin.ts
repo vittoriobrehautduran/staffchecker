@@ -11,6 +11,13 @@ import {
   markNotificationsRead,
   updateSessionDay,
 } from './utils/club-attendance'
+import {
+  addLovRange,
+  addRodDay,
+  listClubClosures,
+  removeLovRange,
+  removeRodDay,
+} from './utils/club-closures'
 
 type ResourceType = 'court' | 'table'
 type SportType = 'tennis' | 'bordtennis' | 'both'
@@ -770,6 +777,11 @@ export const handler = async (
       'get_notifications',
       'mark_notifications_read',
       'get_attendance_history',
+      'get_closures',
+      'add_rod_dag',
+      'add_lov_range',
+      'remove_rod_dag',
+      'remove_lov_range',
     ])
 
     if (bossOnlyOperations.has(operation) && !access.isBoss) {
@@ -894,6 +906,99 @@ export const handler = async (
         statusCode: 200,
         headers: corsHeaders(origin),
         body: JSON.stringify({ fromDate, toDate, sessions }),
+      }
+    }
+
+    if (operation === 'get_closures') {
+      const closures = await listClubClosures(clubId)
+      return {
+        statusCode: 200,
+        headers: corsHeaders(origin),
+        body: JSON.stringify(closures),
+      }
+    }
+
+    if (operation === 'add_rod_dag') {
+      const dateStr = String(body.date || '').trim()
+      if (!isValidDateStr(dateStr)) {
+        return {
+          statusCode: 400,
+          headers: corsHeaders(origin),
+          body: JSON.stringify({ message: 'date must be YYYY-MM-DD' }),
+        }
+      }
+      const label = body.label != null ? String(body.label).trim() : null
+      await addRodDay(clubId, dateStr, userId, label || null)
+      const closures = await listClubClosures(clubId)
+      return {
+        statusCode: 200,
+        headers: corsHeaders(origin),
+        body: JSON.stringify(closures),
+      }
+    }
+
+    if (operation === 'remove_rod_dag') {
+      const dateStr = String(body.date || '').trim()
+      if (!isValidDateStr(dateStr)) {
+        return {
+          statusCode: 400,
+          headers: corsHeaders(origin),
+          body: JSON.stringify({ message: 'date must be YYYY-MM-DD' }),
+        }
+      }
+      await removeRodDay(clubId, dateStr)
+      const closures = await listClubClosures(clubId)
+      return {
+        statusCode: 200,
+        headers: corsHeaders(origin),
+        body: JSON.stringify(closures),
+      }
+    }
+
+    if (operation === 'add_lov_range') {
+      const fromDate = String(body.fromDate || '').trim()
+      const toDate = String(body.toDate || '').trim()
+      if (!isValidDateStr(fromDate) || !isValidDateStr(toDate)) {
+        return {
+          statusCode: 400,
+          headers: corsHeaders(origin),
+          body: JSON.stringify({ message: 'fromDate and toDate must be YYYY-MM-DD' }),
+        }
+      }
+      const label = body.label != null ? String(body.label).trim() : null
+      try {
+        await addLovRange(clubId, fromDate, toDate, userId, label || null)
+      } catch (error: unknown) {
+        const message = error instanceof Error ? error.message : 'Kunde inte spara lov'
+        return {
+          statusCode: 400,
+          headers: corsHeaders(origin),
+          body: JSON.stringify({ message }),
+        }
+      }
+      const closures = await listClubClosures(clubId)
+      return {
+        statusCode: 200,
+        headers: corsHeaders(origin),
+        body: JSON.stringify(closures),
+      }
+    }
+
+    if (operation === 'remove_lov_range') {
+      const rangeId = Number(body.rangeId)
+      if (!rangeId) {
+        return {
+          statusCode: 400,
+          headers: corsHeaders(origin),
+          body: JSON.stringify({ message: 'rangeId is required' }),
+        }
+      }
+      await removeLovRange(clubId, rangeId)
+      const closures = await listClubClosures(clubId)
+      return {
+        statusCode: 200,
+        headers: corsHeaders(origin),
+        body: JSON.stringify(closures),
       }
     }
 

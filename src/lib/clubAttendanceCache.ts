@@ -59,10 +59,16 @@ export function invalidateAttendanceDayCache(date: string) {
   cacheByDate.delete(date)
 }
 
+export function clearAttendanceDayCache() {
+  cacheByDate.clear()
+}
+
 // Keep unchanged sessions referentially stable so React skips re-rendering those cards.
 export function mergeAttendanceDayPayload(cached: DayPayload, fresh: DayPayload): DayPayload {
   if (cached.date !== fresh.date) return fresh
   if (cached.cancelled !== fresh.cancelled) return fresh
+  if (cached.closureType !== fresh.closureType) return fresh
+  if (cached.closureLabel !== fresh.closureLabel) return fresh
   if (payloadFingerprint(cached) === payloadFingerprint(fresh)) {
     return { ...cached, version: fresh.version ?? cached.version }
   }
