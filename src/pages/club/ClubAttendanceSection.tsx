@@ -33,7 +33,9 @@ import {
 
 type BossPanel = 'day' | 'history' | 'changes'
 
-const ATTENDANCE_POLL_MS = 18_000
+// How often we check for other coaches' changes. ETag keeps idle polls cheap.
+// True push (sub-second) would need WebSocket — see plan for chat/realtime later.
+const ATTENDANCE_POLL_MS = 2_000
 
 type Props = {
   isBoss: boolean
@@ -208,7 +210,7 @@ export function ClubAttendanceSection({ isBoss }: Props) {
 
   const pollInFlightRef = useRef(false)
 
-  // Poll while närvaro is open so coaches see each other's changes within ~18s.
+  // Poll while närvaro is open — other coaches' checkboxes update within a few seconds.
   useEffect(() => {
     const onDayPanel = !isBoss || bossPanel === 'day'
     if (!onDayPanel) return
@@ -222,7 +224,17 @@ export function ClubAttendanceSection({ isBoss }: Props) {
     }
 
     const intervalId = window.setInterval(poll, ATTENDANCE_POLL_MS)
-    return () => window.clearInterval(intervalId)
+    const onVisibleAgain = () => {
+      if (document.visibilityState === 'visible') poll()
+    }
+    window.addEventListener('focus', onVisibleAgain)
+    document.addEventListener('visibilitychange', onVisibleAgain)
+
+    return () => {
+      window.clearInterval(intervalId)
+      window.removeEventListener('focus', onVisibleAgain)
+      document.removeEventListener('visibilitychange', onVisibleAgain)
+    }
   }, [isBoss, bossPanel, selectedDate, loadDay])
 
   useEffect(() => {
