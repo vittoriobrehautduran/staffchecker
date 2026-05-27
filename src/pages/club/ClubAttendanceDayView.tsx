@@ -294,7 +294,7 @@ export function ClubAttendanceDayView({
   if (payload.cancelled) {
     const heading =
       payload.closureType === 'lov'
-        ? payload.closureLabel || 'Lov'
+        ? payload.closureLabel || 'lov/tävling'
         : payload.closureType === 'rod_dag'
           ? payload.closureLabel || 'Röd dag'
           : 'Dagen är stängd'

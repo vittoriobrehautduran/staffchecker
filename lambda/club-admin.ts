@@ -768,6 +768,7 @@ export const handler = async (
       'update_club_settings',
       'add_resource',
       'add_coach',
+      'delete_coach',
       'add_lesson',
       'update_lesson',
       'delete_lesson',
@@ -777,7 +778,6 @@ export const handler = async (
       'get_notifications',
       'mark_notifications_read',
       'get_attendance_history',
-      'get_closures',
       'add_rod_dag',
       'add_lov_range',
       'remove_rod_dag',
@@ -1110,6 +1110,56 @@ export const handler = async (
       await sql`
         INSERT INTO club_coaches (club_id, name, sport)
         VALUES (${clubId}, ${coachName}, ${sport})
+      `
+    }
+
+    if (operation === 'delete_coach') {
+      const coachId = Number(body.coachId)
+      if (!coachId) {
+        return {
+          statusCode: 400,
+          headers: corsHeaders(origin),
+          body: JSON.stringify({ message: 'coachId krävs' }),
+        }
+      }
+
+      const coachRows = (await sql`
+        SELECT id, name
+        FROM club_coaches
+        WHERE id = ${coachId}
+          AND club_id = ${clubId}
+          AND is_active = true
+        LIMIT 1
+      `) as { id: number; name: string }[]
+
+      if (!coachRows.length) {
+        return {
+          statusCode: 404,
+          headers: corsHeaders(origin),
+          body: JSON.stringify({ message: 'Tränaren hittades inte' }),
+        }
+      }
+
+      await sql`
+        DELETE FROM club_schedule_template_coaches
+        WHERE coach_id = ${coachId}
+          AND template_id IN (
+            SELECT id FROM club_schedule_template WHERE club_id = ${clubId}
+          )
+      `
+
+      await sql`
+        UPDATE club_schedule_template
+        SET default_coach_id = NULL, updated_at = CURRENT_TIMESTAMP
+        WHERE club_id = ${clubId}
+          AND default_coach_id = ${coachId}
+      `
+
+      await sql`
+        UPDATE club_coaches
+        SET is_active = false, updated_at = CURRENT_TIMESTAMP
+        WHERE id = ${coachId}
+          AND club_id = ${clubId}
       `
     }
 

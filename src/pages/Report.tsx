@@ -1,4 +1,4 @@
-import { useState, useRef, useEffect } from 'react'
+import { useState, useRef, useEffect, useMemo } from 'react'
 import { useAuth } from '@/contexts/AuthContext'
 import { useLocation, useNavigate } from 'react-router-dom'
 import { format, startOfMonth, endOfMonth, eachDayOfInterval, addMonths } from 'date-fns'
@@ -10,6 +10,13 @@ import { Eye } from 'lucide-react'
 import { DateModal } from '@/components/Calendar/DateModal'
 import { useToast } from '@/components/ui/use-toast'
 import { apiRequest } from '@/services/api'
+import {
+  buildClosureDayMap,
+  closureTypeDisplayLabel,
+  getClosureForDate,
+  listClosureSummariesForMonth,
+} from '@/lib/clubClosuresCalendar'
+import type { ClubClosuresPayload } from '@/pages/club/clubAttendanceTypes'
 
 type EntryType = 'work' | 'leave' | 'compensation'
 type WorkType = 'cafe' | 'coaching_tennis' | 'coaching_bordtennis' | 'privat_traning' | 'administration' | 'cleaning' | 'annat'
@@ -53,6 +60,15 @@ type ReportLocationState = {
 }
 
 // Parse "yyyy-MM" safely and fall back to current month if invalid.
+function formatClosureDateLabel(dateStr: string): string {
+  const [year, month, day] = dateStr.split('-').map(Number)
+  if (!year || !month || !day) return dateStr
+  return new Date(year, month - 1, day).toLocaleDateString('sv-SE', {
+    day: 'numeric',
+    month: 'short',
+  })
+}
+
 const getInitialCalendarMonth = (monthKey?: string): Date => {
   if (!monthKey || !/^\d{4}-\d{2}$/.test(monthKey)) {
     return startOfMonth(new Date())
@@ -85,6 +101,10 @@ export default function Report() {
   const [reportStatus, setReportStatus] = useState<'draft' | 'submitted'>('draft')
   const [isModalOpen, setIsModalOpen] = useState(false)
   const [monthEntries, setMonthEntries] = useState<MonthEntries>({})
+  const [clubClosures, setClubClosures] = useState<ClubClosuresPayload>({
+    rodDays: [],
+    lovRanges: [],
+  })
   const [isLoadingEntries, setIsLoadingEntries] = useState(false)
   const [showNotification, setShowNotification] = useState(true)
   const loadingRef = useRef(false)
@@ -101,6 +121,18 @@ export default function Report() {
     mq.addEventListener('change', apply)
     return () => mq.removeEventListener('change', apply)
   }, [])
+
+  const closureMap = useMemo(() => buildClosureDayMap(clubClosures), [clubClosures])
+
+  const monthClosureSummaries = useMemo(
+    () =>
+      listClosureSummariesForMonth(
+        clubClosures,
+        currentDate.getFullYear(),
+        currentDate.getMonth()
+      ),
+    [clubClosures, currentDate]
+  )
 
   if (!isSignedIn) {
     navigate('/login')
@@ -128,9 +160,12 @@ export default function Report() {
         year: number
         status: 'draft' | 'submitted'
         entries: Entry[]
+        clubClosures?: ClubClosuresPayload
       }>(`/get-report?month=${month}&year=${year}`, {
         method: 'GET',
       })
+
+      setClubClosures(reportData?.clubClosures ?? { rodDays: [], lovRanges: [] })
 
       // Group entries by date
       const entriesMap: MonthEntries = {}
@@ -345,12 +380,28 @@ export default function Report() {
     }
   }
 
-  const tileContent = ({ date }: { date: Date }) => {
+  const tileContent = ({ date, view }: { date: Date; view: string }) => {
+    if (view !== 'month') return null
+
     const dateStr = format(date, 'yyyy-MM-dd')
     const dayData = monthEntries[dateStr]
-    
+    const closure = getClosureForDate(closureMap, dateStr)
+
+    const closureTag = closure ? (
+      <div
+        className={`mx-auto mb-0.5 max-w-full truncate px-0.5 text-center text-[9px] font-semibold leading-tight sm:text-[10px] ${
+          closure.type === 'lov'
+            ? 'text-amber-900 dark:text-amber-200'
+            : 'text-rose-900 dark:text-rose-200'
+        }`}
+        title={closure.label}
+      >
+        {closure.label}
+      </div>
+    ) : null
+
     if (!dayData || dayData.entries.length === 0) {
-      return null
+      return closureTag
     }
 
     const hasLeave = dayData.entries.some(e => e.entry_type === 'leave')
@@ -384,6 +435,7 @@ export default function Report() {
 
     return (
       <div className="mt-2 w-full text-center">
+        {closureTag}
         <div
           className={`rounded-md px-1 py-0.5 text-xs font-bold sm:px-2 sm:py-1 sm:text-sm ${badgeClassName}`}
         >
@@ -398,9 +450,12 @@ export default function Report() {
     )
   }
 
-  const tileClassName = ({ date }: { date: Date }) => {
+  const tileClassName = ({ date, view }: { date: Date; view: string }) => {
+    if (view !== 'month') return ''
+
     const dateStr = format(date, 'yyyy-MM-dd')
     const dayData = monthEntries[dateStr]
+    const closure = getClosureForDate(closureMap, dateStr)
     const dateMonth = format(date, 'yyyy-MM')
     const nextMonth = format(addMonths(today, 1), 'yyyy-MM')
     const earliestMonth = format(addMonths(today, -6), 'yyyy-MM')
@@ -444,7 +499,11 @@ export default function Report() {
         classes.push('report-tile-empty')
       }
     }
-    
+
+    if (closure) {
+      classes.push(closure.type === 'lov' ? 'report-tile-club-lov' : 'report-tile-club-rod')
+    }
+
     return classes.join(' ')
   }
 
@@ -526,6 +585,36 @@ export default function Report() {
             className="report-dashboard-calendar w-full border-0"
             showWeekNumbers={true}
           />
+
+          {monthClosureSummaries.length > 0 && (
+            <div className="mt-4 space-y-2 border-t border-border pt-4">
+              <p className="text-xs font-semibold text-muted-foreground">Denna månad</p>
+              <ul className="space-y-1.5 text-sm">
+                {monthClosureSummaries.map((entry) => (
+                  <li
+                    key={`${entry.type}-${entry.fromDate}-${entry.toDate}-${entry.label}`}
+                    className="flex flex-wrap items-baseline gap-x-2"
+                  >
+                    <span
+                      className={`shrink-0 rounded px-1.5 py-0.5 text-[10px] font-medium ${
+                        entry.type === 'lov'
+                          ? 'bg-amber-500/15 text-amber-900 dark:text-amber-100'
+                          : 'bg-rose-500/15 text-rose-900 dark:text-rose-100'
+                      }`}
+                    >
+                      {closureTypeDisplayLabel(entry.type)}
+                    </span>
+                    <span className="font-medium">{entry.label}</span>
+                    <span className="text-muted-foreground">
+                      {entry.fromDate === entry.toDate
+                        ? formatClosureDateLabel(entry.fromDate)
+                        : `${formatClosureDateLabel(entry.fromDate)} – ${formatClosureDateLabel(entry.toDate)}`}
+                    </span>
+                  </li>
+                ))}
+              </ul>
+            </div>
+          )}
         </div>
       </div>
 

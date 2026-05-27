@@ -7,7 +7,6 @@ import { Label } from '@/components/ui/label'
 import { useToast } from '@/components/ui/use-toast'
 import { ClubAttendanceDayView } from '@/pages/club/ClubAttendanceDayView'
 import { ClubChangesPanel } from '@/pages/club/ClubChangesPanel'
-import { ClubClosuresPanel } from '@/pages/club/ClubClosuresPanel'
 import type {
   AttendanceStatus,
   AuditEntry,
@@ -33,7 +32,7 @@ import {
 } from '@/lib/clubBossPanelsCache'
 import { attendanceErrorMessage } from '@/lib/apiErrors'
 
-type BossPanel = 'day' | 'changes' | 'closures'
+type BossPanel = 'day' | 'changes'
 
 // How often we check for other coaches' changes. ETag keeps idle polls cheap.
 // True push (sub-second) would need WebSocket — see plan for chat/realtime later.
@@ -346,6 +345,27 @@ export function ClubAttendanceSection({ isBoss }: Props) {
     }
   }, [flushAttendanceForSession])
 
+  const selectAttendanceDate = useCallback(
+    (nextDate: string) => {
+      if (!nextDate || nextDate === selectedDateRef.current) return
+
+      flushAllPendingAttendance()
+      loadDayRequestRef.current += 1
+      selectedDateRef.current = nextDate
+      setSelectedDate(nextDate)
+
+      const cached = readAttendanceDayCache(nextDate)
+      if (cached) {
+        setDayPayload(cached)
+        setIsLoadingDay(false)
+      } else {
+        setDayPayload(null)
+        setIsLoadingDay(true)
+      }
+    },
+    [flushAllPendingAttendance]
+  )
+
   useEffect(() => {
     return () => {
       for (const timer of attendanceFlushTimerRef.current.values()) {
@@ -439,14 +459,6 @@ export function ClubAttendanceSection({ isBoss }: Props) {
           >
             Ändringar
           </Button>
-          <Button
-            type="button"
-            size="sm"
-            variant={bossPanel === 'closures' ? 'default' : 'outline'}
-            onClick={() => setBossPanel('closures')}
-          >
-            Lov & röda dagar
-          </Button>
         </div>
       )}
 
@@ -489,24 +501,7 @@ export function ClubAttendanceSection({ isBoss }: Props) {
                 id="attendance-date"
                 type="date"
                 value={selectedDate}
-                onChange={(event) => {
-                  const nextDate = event.target.value
-                  if (!nextDate || nextDate === selectedDate) return
-
-                  flushAllPendingAttendance()
-                  loadDayRequestRef.current += 1
-                  selectedDateRef.current = nextDate
-                  setSelectedDate(nextDate)
-
-                  const cached = readAttendanceDayCache(nextDate)
-                  if (cached) {
-                    setDayPayload(cached)
-                    setIsLoadingDay(false)
-                  } else {
-                    setDayPayload(null)
-                    setIsLoadingDay(true)
-                  }
-                }}
+                onChange={(event) => selectAttendanceDate(event.target.value)}
               />
               {isRefreshingDay && (
                 <p className="text-xs text-muted-foreground">Uppdaterar i bakgrunden…</p>
@@ -537,13 +532,6 @@ export function ClubAttendanceSection({ isBoss }: Props) {
         </>
       )}
 
-      {isBoss && bossPanel === 'closures' && (
-        <ClubClosuresPanel
-          onClosuresChanged={() => {
-            void loadDay(selectedDateRef.current, { background: true, silent: true })
-          }}
-        />
-      )}
     </div>
   )
 }

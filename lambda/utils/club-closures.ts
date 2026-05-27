@@ -67,7 +67,7 @@ export async function getDayClosure(clubId: number, dateStr: string): Promise<Da
     return {
       closed: true,
       type: 'lov',
-      label: label || 'Lov',
+      label: label || 'lov/tävling',
     }
   }
 
@@ -165,7 +165,7 @@ export async function addLovRange(
       ${clubId},
       ${fromDate}::date,
       ${toDate}::date,
-      ${label?.trim() || 'Lov'},
+      ${label?.trim() || 'lov/tävling'},
       ${userId}
     )
   `

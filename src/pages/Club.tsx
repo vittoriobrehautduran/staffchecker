@@ -218,6 +218,14 @@ export default function Club() {
     toast({ title: 'Tränare tillagd' })
   }
 
+  async function removeCoach(coachId: number) {
+    await postClubAdmin({
+      operation: 'delete_coach',
+      coachId,
+    })
+    toast({ title: 'Tränare borttagen' })
+  }
+
   async function clearClubSchedule(confirmPhrase: string) {
     try {
       invalidateClubScheduleCache()
@@ -454,8 +462,8 @@ export default function Club() {
                 : 'Närvaro, historik och ändringar per dag.'}
             </p>
           </div>
-          {clubMainTab === 'schedule' && (
-            <div className="flex flex-wrap gap-2">
+          <div className="flex flex-wrap gap-2">
+            {clubMainTab === 'schedule' && (
               <Button
                 type="button"
                 variant="outline"
@@ -467,19 +475,19 @@ export default function Club() {
                 Importera PDF
                 {importOpen ? <ChevronUp className="h-4 w-4" /> : <ChevronDown className="h-4 w-4" />}
               </Button>
-              <Button
-                type="button"
-                variant="outline"
-                size="sm"
-                className="gap-2"
-                onClick={() => setSettingsOpen((open) => !open)}
-              >
-                <Settings2 className="h-4 w-4" />
-                Inställningar
-                {settingsOpen ? <ChevronUp className="h-4 w-4" /> : <ChevronDown className="h-4 w-4" />}
-              </Button>
-            </div>
-          )}
+            )}
+            <Button
+              type="button"
+              variant={settingsOpen ? 'secondary' : 'outline'}
+              size="sm"
+              className="gap-2"
+              onClick={() => setSettingsOpen((open) => !open)}
+            >
+              <Settings2 className="h-4 w-4" />
+              Inställningar
+              {settingsOpen ? <ChevronUp className="h-4 w-4" /> : <ChevronDown className="h-4 w-4" />}
+            </Button>
+          </div>
         </div>
 
         <div className="flex flex-wrap gap-2 border-b border-border pb-3">
@@ -515,7 +523,7 @@ export default function Club() {
           />
         )}
 
-        {clubMainTab === 'schedule' && settingsOpen && data && (
+        {settingsOpen && data && (
           <ClubSettingsPanel
             data={data}
             tennisEnabled={tennisEnabled}
@@ -535,6 +543,7 @@ export default function Club() {
             onAddCourt={addCourt}
             onAddTable={addTable}
             onAddCoach={addCoach}
+            onRemoveCoach={(coachId) => void removeCoach(coachId)}
             onClearSchedule={clearClubSchedule}
           />
         )}

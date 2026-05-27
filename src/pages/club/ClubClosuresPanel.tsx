@@ -1,12 +1,13 @@
 import { useCallback, useEffect, useState } from 'react'
 import { apiRequest } from '@/services/api'
 import { Button } from '@/components/ui/button'
-import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card'
 import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
 import { LoadingSpinner } from '@/components/ui/loading-spinner'
 import { useToast } from '@/components/ui/use-toast'
 import { clearAttendanceDayCache } from '@/lib/clubAttendanceCache'
+import { LOV_CLOSURE_DEFAULT_LABEL, ROD_CLOSURE_DEFAULT_LABEL } from '@/lib/clubClosuresCalendar'
+import { invalidateClubClosuresCache } from '@/lib/clubClosuresCache'
 import type { ClubClosuresPayload } from '@/pages/club/clubAttendanceTypes'
 import { todayDateStr } from '@/pages/club/clubAttendanceTypes'
 
@@ -20,6 +21,25 @@ function formatSvDate(dateStr: string): string {
   return new Date(year, month - 1, day).toLocaleDateString('sv-SE')
 }
 
+function ClosureListItem({
+  label,
+  onRemove,
+  disabled,
+}: {
+  label: string
+  onRemove: () => void
+  disabled: boolean
+}) {
+  return (
+    <li className="flex flex-wrap items-center justify-between gap-2 rounded-md border border-border/60 bg-muted/30 px-3 py-2 text-sm">
+      <span>{label}</span>
+      <Button type="button" variant="ghost" size="sm" disabled={disabled} onClick={onRemove}>
+        Ta bort
+      </Button>
+    </li>
+  )
+}
+
 export function ClubClosuresPanel({ onClosuresChanged }: Props) {
   const { toast } = useToast()
   const [closures, setClosures] = useState<ClubClosuresPayload | null>(null)
@@ -28,10 +48,10 @@ export function ClubClosuresPanel({ onClosuresChanged }: Props) {
 
   const [lovFrom, setLovFrom] = useState('')
   const [lovTo, setLovTo] = useState('')
-  const [lovLabel, setLovLabel] = useState('Lov')
+  const [lovLabel, setLovLabel] = useState('')
 
   const [rodDate, setRodDate] = useState(todayDateStr())
-  const [rodLabel, setRodLabel] = useState('Röd dag')
+  const [rodLabel, setRodLabel] = useState('')
 
   const loadClosures = useCallback(async () => {
     setIsLoading(true)
@@ -44,7 +64,7 @@ export function ClubClosuresPanel({ onClosuresChanged }: Props) {
     } catch (error: unknown) {
       const err = error as { message?: string }
       toast({
-        title: 'Kunde inte ladda lov och röda dagar',
+        title: 'Kunde inte ladda stängda dagar',
         description: err?.message || 'Ett fel uppstod',
         variant: 'destructive',
       })
@@ -60,6 +80,7 @@ export function ClubClosuresPanel({ onClosuresChanged }: Props) {
   const afterChange = (next: ClubClosuresPayload) => {
     setClosures(next)
     clearAttendanceDayCache()
+    invalidateClubClosuresCache()
     onClosuresChanged?.()
   }
 
@@ -67,7 +88,7 @@ export function ClubClosuresPanel({ onClosuresChanged }: Props) {
     if (!lovFrom || !lovTo) {
       toast({
         title: 'Välj datum',
-        description: 'Ange både start- och slutdatum för lov.',
+        description: 'Ange både start- och slutdatum.',
         variant: 'destructive',
       })
       return
@@ -81,11 +102,11 @@ export function ClubClosuresPanel({ onClosuresChanged }: Props) {
           operation: 'add_lov_range',
           fromDate: lovFrom,
           toDate: lovTo,
-          label: lovLabel.trim() || 'Lov',
+          label: lovLabel.trim() || LOV_CLOSURE_DEFAULT_LABEL,
         }),
       })
       afterChange(result)
-      toast({ title: 'Lov sparat', description: `${formatSvDate(lovFrom)} – ${formatSvDate(lovTo)}` })
+      toast({ title: 'Lov sparat' })
       setLovFrom('')
       setLovTo('')
     } catch (error: unknown) {
@@ -104,7 +125,7 @@ export function ClubClosuresPanel({ onClosuresChanged }: Props) {
     if (!rodDate) {
       toast({
         title: 'Välj datum',
-        description: 'Ange datum för röd dag.',
+        description: 'Ange ett datum för röd dag.',
         variant: 'destructive',
       })
       return
@@ -117,11 +138,11 @@ export function ClubClosuresPanel({ onClosuresChanged }: Props) {
         body: JSON.stringify({
           operation: 'add_rod_dag',
           date: rodDate,
-          label: rodLabel.trim() || 'Röd dag',
+          label: rodLabel.trim() || ROD_CLOSURE_DEFAULT_LABEL,
         }),
       })
       afterChange(result)
-      toast({ title: 'Röd dag sparad', description: formatSvDate(rodDate) })
+      toast({ title: 'Röd dag sparad' })
     } catch (error: unknown) {
       const err = error as { message?: string }
       toast({
@@ -142,7 +163,6 @@ export function ClubClosuresPanel({ onClosuresChanged }: Props) {
         body: JSON.stringify({ operation: 'remove_lov_range', rangeId }),
       })
       afterChange(result)
-      toast({ title: 'Lov borttaget' })
     } catch (error: unknown) {
       const err = error as { message?: string }
       toast({
@@ -163,7 +183,6 @@ export function ClubClosuresPanel({ onClosuresChanged }: Props) {
         body: JSON.stringify({ operation: 'remove_rod_dag', date }),
       })
       afterChange(result)
-      toast({ title: 'Röd dag borttagen' })
     } catch (error: unknown) {
       const err = error as { message?: string }
       toast({
@@ -178,9 +197,9 @@ export function ClubClosuresPanel({ onClosuresChanged }: Props) {
 
   if (isLoading) {
     return (
-      <div className="flex items-center gap-3 py-8">
-        <LoadingSpinner />
-        <span className="text-sm text-muted-foreground">Laddar lov och röda dagar…</span>
+      <div className="flex items-center gap-2 py-4">
+        <LoadingSpinner size="sm" />
+        <span className="text-sm text-muted-foreground">Laddar…</span>
       </div>
     )
   }
@@ -190,146 +209,113 @@ export function ClubClosuresPanel({ onClosuresChanged }: Props) {
 
   return (
     <div className="space-y-6">
-      <Card>
-        <CardHeader>
-          <CardTitle className="text-base">Lov</CardTitle>
-          <CardDescription>
-            Markera en period utan skola. Tränare ser inga lektioner i närvaro under dessa datum.
-          </CardDescription>
-        </CardHeader>
-        <CardContent className="space-y-4">
-          <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
-            <div className="space-y-2">
-              <Label htmlFor="lov-from">Från</Label>
-              <Input
-                id="lov-from"
-                type="date"
-                value={lovFrom}
-                onChange={(event) => setLovFrom(event.target.value)}
-                disabled={isSaving}
-              />
-            </div>
-            <div className="space-y-2">
-              <Label htmlFor="lov-to">Till</Label>
-              <Input
-                id="lov-to"
-                type="date"
-                value={lovTo}
-                onChange={(event) => setLovTo(event.target.value)}
-                disabled={isSaving}
-              />
-            </div>
-            <div className="space-y-2 sm:col-span-2">
-              <Label htmlFor="lov-label">Benämning (valfritt)</Label>
-              <Input
-                id="lov-label"
-                value={lovLabel}
-                onChange={(event) => setLovLabel(event.target.value)}
-                placeholder="t.ex. Sommarlov"
-                disabled={isSaving}
-              />
-            </div>
+      <div className="space-y-3">
+        <p className="text-xs font-medium uppercase tracking-wide text-muted-foreground">
+          Lov/tävling
+        </p>
+        <p className="text-sm text-muted-foreground">
+          Period utan skola — tränare ser inga lektioner i närvaro.
+        </p>
+        <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
+          <div className="space-y-1.5">
+            <Label htmlFor="lov-from" className="text-xs">
+              Från
+            </Label>
+            <Input
+              id="lov-from"
+              type="date"
+              value={lovFrom}
+              onChange={(event) => setLovFrom(event.target.value)}
+              disabled={isSaving}
+            />
           </div>
-          <Button type="button" onClick={() => void addLov()} disabled={isSaving}>
-            Spara lov
-          </Button>
-        </CardContent>
-      </Card>
-
-      <Card>
-        <CardHeader>
-          <CardTitle className="text-base">Röd dag</CardTitle>
-          <CardDescription>
-            Stäng en enskild dag, t.ex. helgdag. Samma effekt som lov men för ett datum i taget.
-          </CardDescription>
-        </CardHeader>
-        <CardContent className="space-y-4">
-          <div className="grid gap-4 sm:grid-cols-2 max-w-xl">
-            <div className="space-y-2">
-              <Label htmlFor="rod-date">Datum</Label>
-              <Input
-                id="rod-date"
-                type="date"
-                value={rodDate}
-                onChange={(event) => setRodDate(event.target.value)}
-                disabled={isSaving}
-              />
-            </div>
-            <div className="space-y-2">
-              <Label htmlFor="rod-label">Benämning (valfritt)</Label>
-              <Input
-                id="rod-label"
-                value={rodLabel}
-                onChange={(event) => setRodLabel(event.target.value)}
-                placeholder="Röd dag"
-                disabled={isSaving}
-              />
-            </div>
+          <div className="space-y-1.5">
+            <Label htmlFor="lov-to" className="text-xs">
+              Till
+            </Label>
+            <Input
+              id="lov-to"
+              type="date"
+              value={lovTo}
+              onChange={(event) => setLovTo(event.target.value)}
+              disabled={isSaving}
+            />
           </div>
-          <Button type="button" variant="secondary" onClick={() => void addRodDag()} disabled={isSaving}>
-            Spara röd dag
-          </Button>
-        </CardContent>
-      </Card>
-
-      <section className="space-y-3">
-        <h2 className="text-sm font-semibold">Planerade lov</h2>
-        {lovRanges.length === 0 ? (
-          <p className="text-sm text-muted-foreground">Inga lovperioder registrerade.</p>
-        ) : (
-          <div className="space-y-2">
+          <div className="space-y-1.5 sm:col-span-2">
+            <Label htmlFor="lov-label" className="text-xs">
+              Namn
+            </Label>
+            <Input
+              id="lov-label"
+              value={lovLabel}
+              onChange={(event) => setLovLabel(event.target.value)}
+              placeholder="t.ex. Sommarlov, Klubbmästerskap 2026"
+              disabled={isSaving}
+            />
+          </div>
+        </div>
+        <Button type="button" size="sm" onClick={() => void addLov()} disabled={isSaving}>
+          Lägg till lov
+        </Button>
+        {lovRanges.length > 0 && (
+          <ul className="space-y-2 pt-1">
             {lovRanges.map((range) => (
-              <Card key={range.id}>
-                <CardContent className="flex flex-wrap items-center justify-between gap-2 py-4">
-                  <div>
-                    <p className="text-sm font-medium">
-                      {range.label || 'Lov'} — {formatSvDate(range.fromDate)} –{' '}
-                      {formatSvDate(range.toDate)}
-                    </p>
-                  </div>
-                  <Button
-                    type="button"
-                    variant="outline"
-                    size="sm"
-                    disabled={isSaving}
-                    onClick={() => void removeLov(range.id)}
-                  >
-                    Ta bort
-                  </Button>
-                </CardContent>
-              </Card>
+              <ClosureListItem
+                key={range.id}
+                label={`${range.label || LOV_CLOSURE_DEFAULT_LABEL} · ${formatSvDate(range.fromDate)} – ${formatSvDate(range.toDate)}`}
+                disabled={isSaving}
+                onRemove={() => void removeLov(range.id)}
+              />
             ))}
-          </div>
+          </ul>
         )}
-      </section>
+      </div>
 
-      <section className="space-y-3">
-        <h2 className="text-sm font-semibold">Röda dagar</h2>
-        {rodDays.length === 0 ? (
-          <p className="text-sm text-muted-foreground">Inga röda dagar registrerade.</p>
-        ) : (
-          <div className="space-y-2">
-            {rodDays.map((day) => (
-              <Card key={day.id}>
-                <CardContent className="flex flex-wrap items-center justify-between gap-2 py-4">
-                  <p className="text-sm font-medium">
-                    {day.label || 'Röd dag'} — {formatSvDate(day.date)}
-                  </p>
-                  <Button
-                    type="button"
-                    variant="outline"
-                    size="sm"
-                    disabled={isSaving}
-                    onClick={() => void removeRod(day.date)}
-                  >
-                    Ta bort
-                  </Button>
-                </CardContent>
-              </Card>
-            ))}
+      <div className="space-y-3 border-t border-border/60 pt-6">
+        <p className="text-xs font-medium uppercase tracking-wide text-muted-foreground">Röd dag</p>
+        <p className="text-sm text-muted-foreground">Enstaka dag utan skola, t.ex. helgdag.</p>
+        <div className="grid gap-3 sm:grid-cols-2 max-w-lg">
+          <div className="space-y-1.5">
+            <Label htmlFor="rod-date" className="text-xs">
+              Datum
+            </Label>
+            <Input
+              id="rod-date"
+              type="date"
+              value={rodDate}
+              onChange={(event) => setRodDate(event.target.value)}
+              disabled={isSaving}
+            />
           </div>
+          <div className="space-y-1.5">
+            <Label htmlFor="rod-label" className="text-xs">
+              Namn
+            </Label>
+            <Input
+              id="rod-label"
+              value={rodLabel}
+              onChange={(event) => setRodLabel(event.target.value)}
+              placeholder="t.ex. Klubbmästerskap 2026, Julafton"
+              disabled={isSaving}
+            />
+          </div>
+        </div>
+        <Button type="button" size="sm" variant="secondary" onClick={() => void addRodDag()} disabled={isSaving}>
+          Lägg till röd dag
+        </Button>
+        {rodDays.length > 0 && (
+          <ul className="space-y-2 pt-1">
+            {rodDays.map((day) => (
+              <ClosureListItem
+                key={day.id}
+                label={`${day.label || ROD_CLOSURE_DEFAULT_LABEL} · ${formatSvDate(day.date)}`}
+                disabled={isSaving}
+                onRemove={() => void removeRod(day.date)}
+              />
+            ))}
+          </ul>
         )}
-      </section>
+      </div>
     </div>
   )
 }

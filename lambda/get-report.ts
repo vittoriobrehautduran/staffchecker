@@ -1,4 +1,6 @@
 import { APIGatewayProxyEvent, APIGatewayProxyResult } from 'aws-lambda'
+import { listClubClosures } from './utils/club-closures'
+import { ensureDefaultClubMembership, getUserPrimaryClubId } from './utils/club-membership'
 import { sql } from './utils/database'
 import { getUserIdFromCognitoSession } from './utils/cognito-auth'
 
@@ -160,6 +162,20 @@ export const handler = async (
       ORDER BY date, time_from
     `
 
+    let clubClosures: Awaited<ReturnType<typeof listClubClosures>> = { rodDays: [], lovRanges: [] }
+    try {
+      let clubId = await getUserPrimaryClubId(userId)
+      if (!clubId) {
+        await ensureDefaultClubMembership(userId)
+        clubId = await getUserPrimaryClubId(userId)
+      }
+      if (clubId) {
+        clubClosures = await listClubClosures(clubId)
+      }
+    } catch (closureError: unknown) {
+      console.warn('Could not load club closures for report calendar:', closureError)
+    }
+
     return {
       statusCode: 200,
       headers: {
@@ -171,6 +187,7 @@ export const handler = async (
         year,
         status,
         entries,
+        clubClosures,
       }),
     }
   } catch (error: any) {
