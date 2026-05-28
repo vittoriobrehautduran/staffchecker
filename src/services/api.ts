@@ -38,6 +38,28 @@ export type ConditionalGetResult<T> =
   | { unchanged: true; version: string }
   | { unchanged: false; data: T; version: string }
 
+type ApiErrorBody = {
+  message?: string
+  code?: string
+  received?: Record<string, boolean>
+}
+
+async function readApiError(response: Response): Promise<ApiErrorBody> {
+  try {
+    const body: unknown = await response.json()
+    if (body && typeof body === 'object') {
+      return body as ApiErrorBody
+    }
+  } catch {
+    // Response body was not JSON.
+  }
+  return { message: 'Ett fel uppstod' }
+}
+
+async function readJsonResponse<T>(response: Response): Promise<T> {
+  return (await response.json()) as T
+}
+
 function normalizeEtagHeader(value: string | null): string {
   if (!value) return ''
   return value.trim().replace(/^W\//, '').replace(/^"|"$/g, '')
@@ -86,11 +108,11 @@ export async function apiConditionalGet<T>(
   })
 
   if (!response.ok) {
-    const error = await response.json().catch(() => ({ message: 'Ett fel uppstod' }))
+    const error = await readApiError(response)
     throw new Error(error.message || `API-förfrågan misslyckades: ${response.statusText}`)
   }
 
-  const data = (await response.json()) as T & { unchanged?: boolean; version?: string }
+  const data = await readJsonResponse<T & { unchanged?: boolean; version?: string }>(response)
   const headerVersion = normalizeEtagHeader(response.headers.get('ETag'))
 
   if (data?.unchanged === true) {
@@ -161,40 +183,29 @@ export async function apiRequest<T>(
     })
 
     if (!response.ok) {
-      const error = await response.json().catch(() => ({ 
-        message: 'Ett fel uppstod' 
-      }))
-      
-      // If we have detailed error info, include it
+      const error = await readApiError(response)
+
       if (error.received) {
         const missing = Object.entries(error.received)
           .filter(([_, present]) => !present)
           .map(([field]) => field)
           .join(', ')
-        throw new Error(`${error.message}. Saknade fält: ${missing}`)
-      }
-      
-      // OAuth / Google login succeeded in Cognito but this email is not registered in the app DB.
-      if (response.status === 403) {
-        const code = (error as { code?: string }).code
-        if (code === 'USER_NOT_REGISTERED') {
-          const err = new Error(
-            (error as { message?: string }).message ||
-              'Det finns inget konto kopplat till den här inloggningen.'
-          ) as Error & { code?: string }
-          err.code = 'USER_NOT_REGISTERED'
-          throw err
-        }
+        throw new Error(`${error.message ?? 'Ett fel uppstod'}. Saknade fält: ${missing}`)
       }
 
-      // Handle 401 Unauthorized - token might be expired
+      if (response.status === 403 && error.code === 'USER_NOT_REGISTERED') {
+        const err = new Error(
+          error.message || 'Det finns inget konto kopplat till den här inloggningen.'
+        ) as Error & { code?: string }
+        err.code = 'USER_NOT_REGISTERED'
+        throw err
+      }
+
       if (response.status === 401) {
-        // Clear stored token and try to refresh
         localStorage.removeItem('cognito-id-token')
         const { fetchAuthSession } = await import('aws-amplify/auth')
         const session = await fetchAuthSession()
         if (session.tokens?.idToken) {
-          // Retry with new ID token
           const newToken = typeof session.tokens.idToken === 'string'
             ? session.tokens.idToken
             : session.tokens.idToken.toString()
@@ -203,17 +214,17 @@ export async function apiRequest<T>(
           url = url.replace(/_token=[^&]*/, `_token=${encodeURIComponent(newToken)}`)
           const retryResponse = await fetch(url, { ...options, headers, credentials: 'omit' })
           if (retryResponse.ok) {
-            return retryResponse.json()
+            return readJsonResponse<T>(retryResponse)
           }
         }
         throw new Error('Sessionen har gått ut. Logga in igen.')
       }
-      
+
       throw new Error(error.message || `API-förfrågan misslyckades: ${response.statusText}`)
     }
 
-    return response.json()
-  } catch (error: any) {
+    return readJsonResponse<T>(response)
+  } catch (error: unknown) {
     throw error
   }
 }
