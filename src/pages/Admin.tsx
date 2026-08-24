@@ -486,6 +486,14 @@ export default function Admin() {
                 försvinner. Timrapporter påverkas inte.
               </p>
             </div>
+            <div className="rounded-md border border-border bg-muted/30 p-4 text-sm text-muted-foreground">
+              <p>
+                <strong>Automatisk rensning:</strong> Lambda <code>scheduled-club-cleanup</code>{' '}
+                kan köras via EventBridge (t.ex. varje natt) och rensar enligt{' '}
+                <code>clubs.retention_days</code> (standard 60). Manuell rensning ovan används
+                vid behov.
+              </p>
+            </div>
           </CardContent>
         </Card>
       </div>

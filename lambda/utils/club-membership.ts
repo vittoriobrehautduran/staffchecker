@@ -127,6 +127,69 @@ export async function getReportRecipientEmailsForUser(userId: number): Promise<s
 }
 
 // Club API access: coach/boss permissions, or app admin as boss on the user's club.
+export type ClubMemberRow = {
+  userId: number
+  name: string
+  lastName: string
+  email: string
+  permissions: string[]
+}
+
+// Users linked to this club (for boss permission management).
+export async function getClubMembers(clubId: number): Promise<ClubMemberRow[]> {
+  const rows = (await sql`
+    SELECT
+      u.id,
+      u.name,
+      u.last_name,
+      u.email,
+      m.permissions
+    FROM user_club_memberships m
+    INNER JOIN users u ON u.id = m.user_id
+    WHERE m.club_id = ${clubId}
+    ORDER BY u.last_name ASC, u.name ASC, u.email ASC
+  `) as {
+    id: number
+    name: string
+    last_name: string
+    email: string
+    permissions: string[]
+  }[]
+
+  return rows.map((row) => ({
+    userId: row.id,
+    name: row.name,
+    lastName: row.last_name,
+    email: row.email,
+    permissions: row.permissions || [],
+  }))
+}
+
+const VALID_CLUB_PERMISSIONS = new Set(['club_boss', 'club_coach'])
+
+export async function updateClubMemberPermissions(
+  clubId: number,
+  targetUserId: number,
+  permissions: string[]
+): Promise<ClubMemberRow[]> {
+  const normalized = [...new Set(permissions.filter((p) => VALID_CLUB_PERMISSIONS.has(p)))]
+
+  const updated = (await sql`
+    UPDATE user_club_memberships
+    SET permissions = ${normalized}::text[],
+        updated_at = CURRENT_TIMESTAMP
+    WHERE club_id = ${clubId}
+      AND user_id = ${targetUserId}
+    RETURNING user_id
+  `) as { user_id: number }[]
+
+  if (updated.length === 0) {
+    throw new Error('Användaren tillhör inte klubben')
+  }
+
+  return getClubMembers(clubId)
+}
+
 export async function resolveClubAccess(userId: number): Promise<ClubAccess | null> {
   const access = await getClubAccess(userId)
   if (access) {

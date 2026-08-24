@@ -178,7 +178,7 @@ function SessionCard({
           <Label className="text-sm font-medium">Elever och närvaro</Label>
           <div className="space-y-2">
             {activePlayers(session).map((player) => {
-              const isPresent = player.attendanceStatus === 'present'
+              const status = player.attendanceStatus
 
               return (
                 <div
@@ -188,26 +188,52 @@ function SessionCard({
                       ? 'border-amber-400 bg-amber-50/50 dark:bg-amber-950/20'
                       : ''
                   }`}
+                  data-testid={`player-row-${player.id}`}
                 >
-                  <label className="flex min-w-0 flex-1 cursor-pointer items-center gap-3">
-                    <input
-                      type="checkbox"
-                      checked={isPresent}
-                      onChange={(event) =>
-                        setAttendance(player.id, event.target.checked ? 'present' : 'unknown')
-                      }
-                      aria-label={`${player.name} närvarande`}
-                      className="h-5 w-5 shrink-0 cursor-pointer rounded-full border-2 border-muted-foreground accent-primary disabled:cursor-not-allowed disabled:opacity-50"
-                    />
-                    <span className="min-w-0 text-sm font-medium">
-                      {player.name}
-                      {player.isDayAddition && (
-                        <span className="ml-2 text-xs font-normal text-amber-700 dark:text-amber-300">
-                          Ny för dagen
-                        </span>
-                      )}
-                    </span>
-                  </label>
+                  <span className="min-w-0 flex-1 text-sm font-medium">
+                    {player.name}
+                    {player.isDayAddition && (
+                      <span className="ml-2 text-xs font-normal text-amber-700 dark:text-amber-300">
+                        Ny för dagen
+                      </span>
+                    )}
+                  </span>
+                  <div
+                    className="flex shrink-0 gap-1"
+                    role="group"
+                    aria-label={`Närvaro för ${player.name}`}
+                  >
+                    {(
+                      [
+                        ['present', 'Närvarande', 'bg-green-600 text-white'],
+                        ['absent', 'Frånvarande', 'bg-red-600 text-white'],
+                        ['unknown', 'Okänd', 'bg-muted text-muted-foreground'],
+                      ] as const
+                    ).map(([value, label, activeClass]) => {
+                      const isActive = status === value
+                      return (
+                        <button
+                          key={value}
+                          type="button"
+                          title={label}
+                          aria-label={`${player.name}: ${label}`}
+                          aria-pressed={isActive}
+                          disabled={isSaving}
+                          data-testid={`attendance-${player.id}-${value}`}
+                          className={`rounded px-2 py-1 text-xs font-medium transition-colors ${
+                            isActive
+                              ? activeClass
+                              : 'border border-border bg-background hover:bg-muted/60'
+                          }`}
+                          onClick={() => {
+                            if (status !== value) setAttendance(player.id, value)
+                          }}
+                        >
+                          {value === 'present' ? '✓' : value === 'absent' ? '✗' : '?'}
+                        </button>
+                      )
+                    })}
+                  </div>
                   <DropdownMenu>
                     <DropdownMenuTrigger asChild>
                       <Button

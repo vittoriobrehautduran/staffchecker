@@ -1,7 +1,11 @@
 import { APIGatewayProxyEvent, APIGatewayProxyResult } from 'aws-lambda'
 import { sql } from './utils/database'
 import { getUserIdFromCognitoSession } from './utils/cognito-auth'
-import { resolveClubAccess } from './utils/club-membership'
+import {
+  resolveClubAccess,
+  getClubMembers,
+  updateClubMemberPermissions,
+} from './utils/club-membership'
 import {
   defaultHistoryRange,
   getAttendanceHistory,
@@ -778,6 +782,8 @@ export const handler = async (
       'get_notifications',
       'mark_notifications_read',
       'get_attendance_history',
+      'get_club_members',
+      'update_club_member_permissions',
       'add_rod_dag',
       'add_lov_range',
       'remove_rod_dag',
@@ -906,6 +912,37 @@ export const handler = async (
         statusCode: 200,
         headers: corsHeaders(origin),
         body: JSON.stringify({ fromDate, toDate, sessions }),
+      }
+    }
+
+    if (operation === 'get_club_members') {
+      const members = await getClubMembers(clubId)
+      return {
+        statusCode: 200,
+        headers: corsHeaders(origin),
+        body: JSON.stringify({ members }),
+      }
+    }
+
+    if (operation === 'update_club_member_permissions') {
+      const targetUserId = Number(body.userId)
+      if (!targetUserId) {
+        return {
+          statusCode: 400,
+          headers: corsHeaders(origin),
+          body: JSON.stringify({ message: 'userId is required' }),
+        }
+      }
+
+      const permissions = Array.isArray(body.permissions)
+        ? (body.permissions as unknown[]).map((p) => String(p).trim()).filter(Boolean)
+        : []
+
+      const members = await updateClubMemberPermissions(clubId, targetUserId, permissions)
+      return {
+        statusCode: 200,
+        headers: corsHeaders(origin),
+        body: JSON.stringify({ members }),
       }
     }
 

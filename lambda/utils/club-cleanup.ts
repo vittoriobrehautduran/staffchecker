@@ -132,3 +132,29 @@ export async function runClubCleanup(
 
   return preview
 }
+
+// Nightly job: purge old data for every club using each club's retention_days.
+export async function runScheduledCleanupForAllClubs(): Promise<
+  { clubSlug: string; clubName: string; deleted: ClubCleanupPreview }[]
+> {
+  const clubs = (await sql`
+    SELECT slug, name, retention_days
+    FROM clubs
+    ORDER BY id ASC
+  `) as { slug: string; name: string; retention_days: number }[]
+
+  const results: { clubSlug: string; clubName: string; deleted: ClubCleanupPreview }[] = []
+
+  for (const club of clubs) {
+    const preview = await getClubCleanupPreview(club.slug, club.retention_days)
+    const hasWork =
+      preview.sessions > 0 || preview.auditLogEntries > 0 || preview.notifications > 0
+
+    if (!hasWork) continue
+
+    const deleted = await runClubCleanup(club.slug, club.retention_days)
+    results.push({ clubSlug: club.slug, clubName: club.name, deleted })
+  }
+
+  return results
+}

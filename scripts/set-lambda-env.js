@@ -111,6 +111,14 @@ const emailFunctions = ['submit-report', 'submit-report-staging']
 // Functions that need registration env vars
 const registrationFunctions = ['register-start']
 
+const backupFunctions = ['scheduled-db-backup', 'scheduled-club-cleanup']
+
+const backupEnvVars = {
+  BACKUP_S3_BUCKET: process.env.BACKUP_S3_BUCKET,
+  BACKUP_S3_PREFIX: process.env.BACKUP_S3_PREFIX || 'timrapport/db',
+  BACKUP_RETENTION_DAYS: process.env.BACKUP_RETENTION_DAYS || '40',
+}
+
 // Boss email for read-only employee report access (get-user-info, list/get-employee-report)
 const reportViewerFunctions = ['list-employee-reports', 'get-employee-report', 'get-user-info']
 
@@ -177,6 +185,15 @@ async function setFunctionEnvironment(functionName) {
       }
     }
 
+    if (backupFunctions.includes(functionBaseName)) {
+      Object.assign(newEnvVars, backupEnvVars)
+      if (!backupEnvVars.BACKUP_S3_BUCKET) {
+        console.warn(
+          `⚠️  ${functionName}: BACKUP_S3_BUCKET saknas i .env.local — backup-Lambdan kan inte ladda upp till S3`
+        )
+      }
+    }
+
     // Remove undefined values
     Object.keys(newEnvVars).forEach(key => {
       if (newEnvVars[key] === undefined) {
@@ -220,6 +237,8 @@ async function setAllFunctionEnvironments() {
     `${PROJECT_NAME}-register-start`,
     `${PROJECT_NAME}-revert-report`,
     `${PROJECT_NAME}-admin-club-cleanup`,
+    `${PROJECT_NAME}-scheduled-club-cleanup`,
+    `${PROJECT_NAME}-scheduled-db-backup`,
     `${PROJECT_NAME}-submit-report`,
     `${PROJECT_NAME}-submit-report-staging`,
     `${PROJECT_NAME}-update-entry`,

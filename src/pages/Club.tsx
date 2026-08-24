@@ -424,7 +424,7 @@ export default function Club() {
       <div className="min-h-screen flex-1 bg-background p-4 md:p-6">
         <div className="container mx-auto max-w-3xl space-y-4">
           <h1 className="text-2xl font-semibold tracking-tight">Närvaro</h1>
-          <ClubAttendanceSection isBoss={false} />
+          <ClubAttendanceSection isBoss={false} clubName={data?.club.name} />
         </div>
       </div>
     )
@@ -504,6 +504,7 @@ export default function Club() {
             size="sm"
             variant={clubMainTab === 'attendance' ? 'default' : 'outline'}
             onClick={() => setClubMainTab('attendance')}
+            data-testid="club-tab-attendance"
           >
             Närvaro
           </Button>
@@ -548,7 +549,9 @@ export default function Club() {
           />
         )}
 
-        {clubMainTab === 'attendance' && <ClubAttendanceSection isBoss />}
+        {clubMainTab === 'attendance' && (
+          <ClubAttendanceSection isBoss clubName={data?.club.name} />
+        )}
 
         {clubMainTab === 'schedule' && (
         <Card>

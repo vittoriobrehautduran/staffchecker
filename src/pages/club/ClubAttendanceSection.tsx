@@ -7,8 +7,10 @@ import { Label } from '@/components/ui/label'
 import { useToast } from '@/components/ui/use-toast'
 import { ClubAttendanceDayView } from '@/pages/club/ClubAttendanceDayView'
 import { ClubChangesPanel } from '@/pages/club/ClubChangesPanel'
+import { ClubAttendanceHistoryPanel } from '@/pages/club/ClubAttendanceHistoryPanel'
 import type {
   AttendanceStatus,
+  AttendanceHistorySession,
   AuditEntry,
   ClubNotification,
   DayPayload,
@@ -31,8 +33,9 @@ import {
   writeClubChangesCache,
 } from '@/lib/clubBossPanelsCache'
 import { attendanceErrorMessage } from '@/lib/apiErrors'
+import { exportDayToCsv } from '@/pages/club/attendanceExport'
 
-type BossPanel = 'day' | 'changes'
+type BossPanel = 'day' | 'changes' | 'history'
 
 // How often we check for other coaches' changes. ETag keeps idle polls cheap.
 // True push (sub-second) would need WebSocket — see plan for chat/realtime later.
@@ -42,9 +45,10 @@ const ATTENDANCE_FLUSH_MS = 450
 
 type Props = {
   isBoss: boolean
+  clubName?: string
 }
 
-export function ClubAttendanceSection({ isBoss }: Props) {
+export function ClubAttendanceSection({ isBoss, clubName }: Props) {
   const { toast } = useToast()
   const [bossPanel, setBossPanel] = useState<BossPanel>('day')
   const [selectedDate, setSelectedDate] = useState(todayDateStr())
@@ -59,6 +63,8 @@ export function ClubAttendanceSection({ isBoss }: Props) {
   const [isLoadingBossPanel, setIsLoadingBossPanel] = useState(false)
   const [isRefreshingBossPanel, setIsRefreshingBossPanel] = useState(false)
   const [activeSport, setActiveSport] = useState<LessonSport>('tennis')
+
+  const [isExportingDay, setIsExportingDay] = useState(false)
 
   const pendingAttendanceRef = useRef<Map<number, Map<number, AttendanceStatus>>>(new Map())
   const attendanceFlushTimerRef = useRef<Map<number, number>>(new Map())
@@ -439,6 +445,34 @@ export function ClubAttendanceSection({ isBoss }: Props) {
     }
   }
 
+  async function exportCurrentDayCsv() {
+    setIsExportingDay(true)
+    try {
+      const result = await apiRequest<{
+        fromDate: string
+        toDate: string
+        sessions: AttendanceHistorySession[]
+      }>('/club-admin', {
+        method: 'POST',
+        body: JSON.stringify({
+          operation: 'get_attendance_history',
+          fromDate: selectedDate,
+          toDate: selectedDate,
+        }),
+      })
+      exportDayToCsv(result.sessions || [], selectedDate)
+    } catch (error: unknown) {
+      const err = error as { message?: string }
+      toast({
+        title: 'Kunde inte exportera',
+        description: err?.message || 'Ett fel uppstod',
+        variant: 'destructive',
+      })
+    } finally {
+      setIsExportingDay(false)
+    }
+  }
+
   return (
     <div className="space-y-4">
       {isBoss && (
@@ -458,6 +492,15 @@ export function ClubAttendanceSection({ isBoss }: Props) {
             onClick={() => setBossPanel('changes')}
           >
             Ändringar
+          </Button>
+          <Button
+            type="button"
+            size="sm"
+            variant={bossPanel === 'history' ? 'default' : 'outline'}
+            onClick={() => setBossPanel('history')}
+            data-testid="attendance-history-tab"
+          >
+            Historik
           </Button>
         </div>
       )}
@@ -502,11 +545,24 @@ export function ClubAttendanceSection({ isBoss }: Props) {
                 type="date"
                 value={selectedDate}
                 onChange={(event) => selectAttendanceDate(event.target.value)}
+                data-testid="attendance-date-input"
               />
               {isRefreshingDay && (
                 <p className="text-xs text-muted-foreground">Uppdaterar i bakgrunden…</p>
               )}
             </div>
+            {isBoss && (
+              <Button
+                type="button"
+                variant="outline"
+                size="sm"
+                onClick={() => void exportCurrentDayCsv()}
+                disabled={isExportingDay || isLoadingDay}
+                data-testid="attendance-export-day-csv"
+              >
+                {isExportingDay ? 'Exporterar…' : 'Exportera dag (CSV)'}
+              </Button>
+            )}
             <ClubAttendanceDayView
               payload={dayPayload}
               activeSport={activeSport}
@@ -530,6 +586,10 @@ export function ClubAttendanceSection({ isBoss }: Props) {
             onMarkAllRead={() => void markAllNotificationsRead()}
           />
         </>
+      )}
+
+      {isBoss && bossPanel === 'history' && (
+        <ClubAttendanceHistoryPanel clubName={clubName} />
       )}
 
     </div>
