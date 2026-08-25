@@ -32,6 +32,7 @@ export type ClubLesson = {
   resourceLabel: string | null
   resourceType: 'court' | 'table'
   classId: number
+  className: string | null
   coachIds: number[]
   coaches: { id: number; name: string }[]
   players: ClubLessonPlayer[]
@@ -62,6 +63,7 @@ export type LocalLessonDraft = {
   resourceId: number
   coachIds: number[]
   playerNames: string[]
+  className: string
 }
 
 // API may return a partial payload (e.g. older club-admin Lambda without lessonsByWeekday).
@@ -74,7 +76,10 @@ export function normalizeClubPayload(raw: Partial<ClubPayload> & { club: ClubPay
   if (raw.lessonsByWeekday && typeof raw.lessonsByWeekday === 'object') {
     for (const [key, lessons] of Object.entries(raw.lessonsByWeekday)) {
       if (Array.isArray(lessons)) {
-        lessonsByWeekday[key] = lessons
+        lessonsByWeekday[key] = lessons.map((lesson) => ({
+          ...lesson,
+          className: lesson.className ?? null,
+        }))
       }
     }
   }

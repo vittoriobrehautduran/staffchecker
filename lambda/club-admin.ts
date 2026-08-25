@@ -22,6 +22,7 @@ import {
   removeLovRange,
   removeRodDay,
 } from './utils/club-closures'
+import { reviewScheduleImportWithAi } from './utils/schedule-import-review'
 
 type ResourceType = 'court' | 'table'
 type SportType = 'tennis' | 'bordtennis' | 'both'
@@ -180,11 +181,13 @@ async function getLessonsByWeekday(clubId: number) {
       t.resource_id,
       t.class_id,
       t.sport,
+      c.name AS class_name,
       r.resource_type,
       r.resource_number,
       r.label AS resource_label
     FROM club_schedule_template t
     INNER JOIN club_resources r ON r.id = t.resource_id
+    LEFT JOIN club_classes c ON c.id = t.class_id
     WHERE t.club_id = ${clubId}
       AND t.is_active = true
     ORDER BY t.weekday ASC, t.start_time ASC, t.id ASC
@@ -196,6 +199,7 @@ async function getLessonsByWeekday(clubId: number) {
     resource_id: number
     class_id: number
     sport: LessonSport | null
+    class_name: string | null
     resource_type: ResourceType
     resource_number: number
     resource_label: string | null
@@ -266,6 +270,7 @@ async function getLessonsByWeekday(clubId: number) {
       resourceLabel: template.resource_label,
       resourceType: template.resource_type,
       classId: template.class_id,
+      className: template.class_name || null,
       coachIds: coachRowsForLesson.map((coach) => coach.id),
       coaches: coachRowsForLesson,
       players: playerRowsForLesson,
@@ -359,13 +364,15 @@ async function insertLessonRecord(
     resourceId: number
     coachIds: number[]
     playerNames: string[]
+    className?: string | null
   }
 ) {
   const startTime = formatTimeValue(params.startTime)
   const durationMinutes = Math.max(20, params.durationMinutes)
   const endTime = addMinutesToTime(startTime, durationMinutes)
   const weekdayNames = ['', 'Mån', 'Tis', 'Ons', 'Tor', 'Fre', 'Lör', 'Sön']
-  const classLabel = `${weekdayNames[params.weekday]} ${startTime} ${params.sport}`
+  const fallbackLabel = `${weekdayNames[params.weekday]} ${startTime} ${params.sport}`
+  const classLabel = (params.className || '').trim() || fallbackLabel
 
   const newClasses = (await sql`
     INSERT INTO club_classes (club_id, name, sport)
@@ -777,6 +784,7 @@ export const handler = async (
       'update_lesson',
       'delete_lesson',
       'import_schedule',
+      'review_schedule_import',
       'clear_schedule',
       'get_audit_log',
       'get_notifications',
@@ -1214,6 +1222,8 @@ export const handler = async (
             .map((name) => String(name).trim())
             .filter((name) => name.length > 0)
         : []
+      const requestedClassName =
+        body.className != null ? String(body.className).trim() : ''
 
       if (weekday < 1 || weekday > 7) {
         return {
@@ -1273,10 +1283,11 @@ export const handler = async (
 
       const endTime = addMinutesToTime(startTime, durationMinutes)
       const weekdayNames = ['', 'Mån', 'Tis', 'Ons', 'Tor', 'Fre', 'Lör', 'Sön']
-      const classLabel = `${weekdayNames[weekday]} ${startTime} ${sport}`
+      const fallbackLabel = `${weekdayNames[weekday]} ${startTime} ${sport}`
 
       let lessonId = Number(body.lessonId ?? 0)
       let classId = 0
+      let classLabel = requestedClassName || fallbackLabel
 
       if (operation === 'update_lesson') {
         if (!lessonId) {
@@ -1288,12 +1299,13 @@ export const handler = async (
         }
 
         const existing = (await sql`
-          SELECT id, class_id
-          FROM club_schedule_template
-          WHERE id = ${lessonId}
-            AND club_id = ${clubId}
+          SELECT t.id, t.class_id, c.name AS class_name
+          FROM club_schedule_template t
+          LEFT JOIN club_classes c ON c.id = t.class_id
+          WHERE t.id = ${lessonId}
+            AND t.club_id = ${clubId}
           LIMIT 1
-        `) as { id: number; class_id: number }[]
+        `) as { id: number; class_id: number; class_name: string | null }[]
 
         if (!existing.length) {
           return {
@@ -1304,6 +1316,8 @@ export const handler = async (
         }
 
         classId = existing[0].class_id
+        // Keep existing class name unless boss typed a new one.
+        classLabel = requestedClassName || existing[0].class_name?.trim() || fallbackLabel
 
         await sql`
           UPDATE club_classes
@@ -1390,6 +1404,82 @@ export const handler = async (
         }
       }
       await deleteLessonById(clubId, lessonId)
+    }
+
+    if (operation === 'review_schedule_import') {
+      const reviewInput = body.review as
+        | {
+            pagesProcessed?: number
+            linesParsed?: number
+            lessonCount?: number
+            coachCount?: number
+            includedCount?: number
+            previewWarnings?: string[]
+            lessons?: unknown[]
+          }
+        | undefined
+
+      if (!reviewInput || !Array.isArray(reviewInput.lessons)) {
+        return {
+          statusCode: 400,
+          headers: corsHeaders(origin),
+          body: JSON.stringify({ message: 'review.lessons krävs' }),
+        }
+      }
+
+      const lessons = reviewInput.lessons.slice(0, 120).map((raw) => {
+        const lesson = raw as Record<string, unknown>
+        const samplePlayers = Array.isArray(lesson.samplePlayers)
+          ? (lesson.samplePlayers as unknown[]).map((name) => String(name).trim()).filter(Boolean).slice(0, 3)
+          : []
+        const warnings = Array.isArray(lesson.warnings)
+          ? (lesson.warnings as unknown[]).map((w) => String(w)).filter(Boolean).slice(0, 5)
+          : []
+
+        return {
+          sport: String(lesson.sport || ''),
+          weekday: Number(lesson.weekday) || 0,
+          startTime: String(lesson.startTime || ''),
+          endTime: String(lesson.endTime || ''),
+          venue: String(lesson.venue || ''),
+          coachName: lesson.coachName != null ? String(lesson.coachName) : null,
+          playerCount: Number(lesson.playerCount) || 0,
+          samplePlayers,
+          status: String(lesson.status || ''),
+          warnings,
+          included: lesson.included !== false,
+        }
+      })
+
+      try {
+        const result = await reviewScheduleImportWithAi({
+          pagesProcessed: Number(reviewInput.pagesProcessed) || 0,
+          linesParsed: Number(reviewInput.linesParsed) || 0,
+          lessonCount: Number(reviewInput.lessonCount) || lessons.length,
+          coachCount: Number(reviewInput.coachCount) || 0,
+          includedCount:
+            Number(reviewInput.includedCount) ||
+            lessons.filter((lesson) => lesson.included).length,
+          previewWarnings: Array.isArray(reviewInput.previewWarnings)
+            ? reviewInput.previewWarnings.map((w) => String(w)).slice(0, 20)
+            : [],
+          lessons,
+        })
+        return {
+          statusCode: 200,
+          headers: corsHeaders(origin),
+          body: JSON.stringify(result),
+        }
+      } catch (error: unknown) {
+        const err = error as { message?: string }
+        return {
+          statusCode: 502,
+          headers: corsHeaders(origin),
+          body: JSON.stringify({
+            message: err?.message || 'AI-granskning misslyckades',
+          }),
+        }
+      }
     }
 
     if (operation === 'import_schedule') {
@@ -1530,11 +1620,10 @@ export const handler = async (
       }
     }
 
-    const payload = await getClubPayload(clubId)
     return {
-      statusCode: 200,
+      statusCode: 400,
       headers: corsHeaders(origin),
-      body: JSON.stringify(payload),
+      body: JSON.stringify({ message: `Okänd operation: ${operation}` }),
     }
   } catch (error: unknown) {
     const err = error as { message?: string; code?: string }

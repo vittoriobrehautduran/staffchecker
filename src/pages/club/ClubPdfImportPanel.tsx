@@ -10,7 +10,8 @@ import {
   SelectValue,
 } from '@/components/ui/select'
 import { useToast } from '@/components/ui/use-toast'
-import { FileUp, Loader2 } from 'lucide-react'
+import { FileUp, Loader2, Sparkles } from 'lucide-react'
+import { apiRequest } from '@/services/api'
 import type { ClubPayload, LessonSport } from './clubTypes'
 import { WEEKDAYS } from './clubTypes'
 import {
@@ -22,6 +23,10 @@ import {
   type PdfImportLesson,
   type PdfImportPreview,
 } from './pdfScheduleImport'
+import {
+  buildAiReviewPayload,
+  type AiScheduleReviewResult,
+} from './scheduleImportAiReview'
 
 type Props = {
   data: ClubPayload
@@ -31,6 +36,9 @@ type Props = {
 }
 
 const IMPORT_BATCH_SIZE = 40
+
+// Flip to true when OpenAI is wired on club-admin and ready to use.
+const AI_REVIEW_ENABLED = false
 
 const WEEKDAY_LABEL = Object.fromEntries(WEEKDAYS.map((day) => [day.value, day.label]))
 
@@ -44,6 +52,8 @@ export function ClubPdfImportPanel({ data, isBusy, onImport, onImportComplete }:
   const [createMissingCoaches, setCreateMissingCoaches] = useState(true)
   const [createMissingResources, setCreateMissingResources] = useState(true)
   const [filterSport, setFilterSport] = useState<'all' | LessonSport>('all')
+  const [aiReview, setAiReview] = useState<AiScheduleReviewResult | null>(null)
+  const [isAiReviewing, setIsAiReviewing] = useState(false)
 
   const includedCount = useMemo(
     () => preview?.lessons.filter((lesson) => lesson.included).length ?? 0,
@@ -72,6 +82,7 @@ export function ClubPdfImportPanel({ data, isBusy, onImport, onImportComplete }:
       const parsed = await parseSchedulePdf(file, data.club.default_slot_duration_minutes)
       const enriched = enrichPdfPreview(parsed, data)
       setPreview(enriched)
+      setAiReview(null)
       toast({
         title: 'PDF analyserad',
         description: `${enriched.lessons.length} lektioner från ${enriched.pagesProcessed} sidor.`,
@@ -86,6 +97,60 @@ export function ClubPdfImportPanel({ data, isBusy, onImport, onImportComplete }:
       setPreview(null)
     } finally {
       setIsParsing(false)
+    }
+  }
+
+  async function handleAiReview() {
+    if (!preview) return
+    setIsAiReviewing(true)
+    setAiReview(null)
+    try {
+      const raw = await apiRequest<Partial<AiScheduleReviewResult>>('/club-admin', {
+        method: 'POST',
+        body: JSON.stringify({
+          operation: 'review_schedule_import',
+          review: buildAiReviewPayload(preview),
+        }),
+      })
+
+      // Old club-admin builds fall through to the club payload — reject that shape.
+      const verdict = raw?.verdict
+      if (verdict !== 'ok' && verdict !== 'needs_review' && verdict !== 'likely_broken') {
+        throw new Error(
+          'Servern svarade utan AI-resultat. Deploya club-admin Lambda och kör set-lambda-env med OPENAI_API_KEY.'
+        )
+      }
+
+      const result: AiScheduleReviewResult = {
+        verdict,
+        summary: String(raw.summary || '').trim() || 'Ingen sammanfattning.',
+        issues: Array.isArray(raw.issues) ? raw.issues.map(String).filter(Boolean) : [],
+        suggestions: Array.isArray(raw.suggestions)
+          ? raw.suggestions.map(String).filter(Boolean)
+          : [],
+        model: String(raw.model || ''),
+      }
+
+      setAiReview(result)
+      toast({
+        title:
+          result.verdict === 'ok'
+            ? 'AI: ser OK ut'
+            : result.verdict === 'likely_broken'
+              ? 'AI: troligen trasigt'
+              : 'AI: granska vidare',
+        description: result.summary,
+        variant: result.verdict === 'likely_broken' ? 'destructive' : 'default',
+      })
+    } catch (error: unknown) {
+      const err = error as { message?: string }
+      toast({
+        title: 'AI-granskning misslyckades',
+        description: err?.message || 'Ett fel uppstod',
+        variant: 'destructive',
+      })
+    } finally {
+      setIsAiReviewing(false)
     }
   }
 
@@ -175,6 +240,7 @@ export function ClubPdfImportPanel({ data, isBusy, onImport, onImportComplete }:
       }
 
       setPreview(null)
+      setAiReview(null)
       toast({
         title: 'Import klar',
         description: `${totalImported} lektioner importerade${
@@ -244,6 +310,88 @@ export function ClubPdfImportPanel({ data, isBusy, onImport, onImportComplete }:
                 </ul>
               )}
             </div>
+
+            <div className="flex flex-wrap items-center gap-2">
+              <Button
+                type="button"
+                variant="outline"
+                size="sm"
+                className={`gap-2 ${AI_REVIEW_ENABLED ? '' : 'opacity-50'}`}
+                disabled={!AI_REVIEW_ENABLED || isAiReviewing || isImporting || isBusy}
+                onClick={() => {
+                  if (!AI_REVIEW_ENABLED) return
+                  void handleAiReview()
+                }}
+                title={
+                  AI_REVIEW_ENABLED
+                    ? undefined
+                    : 'AI-granskning är tillfälligt avstängd'
+                }
+                data-testid="pdf-ai-review-button"
+              >
+                {isAiReviewing ? (
+                  <Loader2 className="h-4 w-4 animate-spin" />
+                ) : (
+                  <Sparkles className="h-4 w-4" />
+                )}
+                {isAiReviewing ? 'AI granskar…' : 'Granska med AI'}
+              </Button>
+              <p className="text-xs text-muted-foreground">
+                {AI_REVIEW_ENABLED
+                  ? 'Valfritt: AI kollar om parse-resultatet ser rimligt ut (importerar inte).'
+                  : 'AI-granskning är tillfälligt otillgänglig.'}
+              </p>
+            </div>
+
+            {aiReview && (
+              <div
+                className={`rounded-lg border p-3 text-sm space-y-2 ${
+                  aiReview.verdict === 'ok'
+                    ? 'border-green-600/40 bg-green-500/10'
+                    : aiReview.verdict === 'likely_broken'
+                      ? 'border-destructive/40 bg-destructive/10'
+                      : 'border-amber-500/40 bg-amber-500/10'
+                }`}
+                data-testid="pdf-ai-review-result"
+              >
+                <p className="font-medium">
+                  AI-bedömning:{' '}
+                  {aiReview.verdict === 'ok'
+                    ? 'OK'
+                    : aiReview.verdict === 'likely_broken'
+                      ? 'Troligen trasigt'
+                      : 'Behöver granskas'}
+                </p>
+                <p>{aiReview.summary}</p>
+                {(aiReview.issues?.length ?? 0) > 0 && (
+                  <div>
+                    <p className="text-xs font-medium uppercase tracking-wide text-muted-foreground">
+                      Problem
+                    </p>
+                    <ul className="mt-1 list-disc space-y-1 pl-5">
+                      {aiReview.issues.map((issue) => (
+                        <li key={issue}>{issue}</li>
+                      ))}
+                    </ul>
+                  </div>
+                )}
+                {(aiReview.suggestions?.length ?? 0) > 0 && (
+                  <div>
+                    <p className="text-xs font-medium uppercase tracking-wide text-muted-foreground">
+                      Förslag
+                    </p>
+                    <ul className="mt-1 list-disc space-y-1 pl-5">
+                      {aiReview.suggestions.map((suggestion) => (
+                        <li key={suggestion}>{suggestion}</li>
+                      ))}
+                    </ul>
+                  </div>
+                )}
+                {aiReview.model ? (
+                  <p className="text-xs text-muted-foreground">Modell: {aiReview.model}</p>
+                ) : null}
+              </div>
+            )}
 
             <div className="flex flex-wrap gap-4 text-sm">
               <label className="flex items-center gap-2">

@@ -135,7 +135,7 @@ export type ClubMemberRow = {
   permissions: string[]
 }
 
-// Users linked to this club (for boss permission management).
+// All app accounts, with this club's permissions (empty if not granted yet).
 export async function getClubMembers(clubId: number): Promise<ClubMemberRow[]> {
   const rows = (await sql`
     SELECT
@@ -143,10 +143,11 @@ export async function getClubMembers(clubId: number): Promise<ClubMemberRow[]> {
       u.name,
       u.last_name,
       u.email,
-      m.permissions
-    FROM user_club_memberships m
-    INNER JOIN users u ON u.id = m.user_id
-    WHERE m.club_id = ${clubId}
+      COALESCE(m.permissions, '{}'::text[]) AS permissions
+    FROM users u
+    LEFT JOIN user_club_memberships m
+      ON m.user_id = u.id
+     AND m.club_id = ${clubId}
     ORDER BY u.last_name ASC, u.name ASC, u.email ASC
   `) as {
     id: number
@@ -174,18 +175,14 @@ export async function updateClubMemberPermissions(
 ): Promise<ClubMemberRow[]> {
   const normalized = [...new Set(permissions.filter((p) => VALID_CLUB_PERMISSIONS.has(p)))]
 
-  const updated = (await sql`
-    UPDATE user_club_memberships
-    SET permissions = ${normalized}::text[],
+  // Create membership if missing so boss can grant access to any app account.
+  await sql`
+    INSERT INTO user_club_memberships (user_id, club_id, permissions)
+    VALUES (${targetUserId}, ${clubId}, ${normalized}::text[])
+    ON CONFLICT (user_id, club_id) DO UPDATE
+    SET permissions = EXCLUDED.permissions,
         updated_at = CURRENT_TIMESTAMP
-    WHERE club_id = ${clubId}
-      AND user_id = ${targetUserId}
-    RETURNING user_id
-  `) as { user_id: number }[]
-
-  if (updated.length === 0) {
-    throw new Error('Användaren tillhör inte klubben')
-  }
+  `
 
   return getClubMembers(clubId)
 }

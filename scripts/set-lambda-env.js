@@ -119,6 +119,12 @@ const backupEnvVars = {
   BACKUP_RETENTION_DAYS: process.env.BACKUP_RETENTION_DAYS || '40',
 }
 
+const aiReviewEnvVars = {
+  OPENAI_API_KEY: process.env.OPENAI_API_KEY,
+  OPENAI_MODEL: process.env.OPENAI_MODEL || 'gpt-4o-mini',
+  OPENAI_BASE_URL: process.env.OPENAI_BASE_URL,
+}
+
 // Boss email for read-only employee report access (get-user-info, list/get-employee-report)
 const reportViewerFunctions = ['list-employee-reports', 'get-employee-report', 'get-user-info']
 
@@ -190,6 +196,15 @@ async function setFunctionEnvironment(functionName) {
       if (!backupEnvVars.BACKUP_S3_BUCKET) {
         console.warn(
           `⚠️  ${functionName}: BACKUP_S3_BUCKET saknas i .env.local — backup-Lambdan kan inte ladda upp till S3`
+        )
+      }
+    }
+
+    if (functionBaseName === 'club-admin') {
+      Object.assign(newEnvVars, aiReviewEnvVars)
+      if (!aiReviewEnvVars.OPENAI_API_KEY) {
+        console.warn(
+          `⚠️  ${functionName}: OPENAI_API_KEY saknas — "Granska med AI" fungerar inte förrän nyckeln sätts`
         )
       }
     }

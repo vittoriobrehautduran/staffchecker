@@ -6,11 +6,12 @@ import { Button } from '@/components/ui/button'
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card'
 import { useToast } from '@/components/ui/use-toast'
 import { LoadingSpinner } from '@/components/ui/loading-spinner'
-import { ChevronDown, ChevronUp, FileUp, Settings2 } from 'lucide-react'
+import { ChevronDown, ChevronUp, FileUp, Settings2, UserCog } from 'lucide-react'
 import { ClubAttendanceSection } from '@/pages/club/ClubAttendanceSection'
 import { ClubDayPanel } from '@/pages/club/ClubDayPanel'
 import { ClubPdfImportPanel } from '@/pages/club/ClubPdfImportPanel'
 import { ClubSettingsPanel } from '@/pages/club/ClubSettingsPanel'
+import { ClubPermissionsPanel } from '@/pages/club/ClubPermissionsPanel'
 import {
   ClubWeekDateNav,
   todayDateStrLocal,
@@ -59,6 +60,7 @@ export default function Club() {
   const [scheduleDate, setScheduleDate] = useState(todayDateStrLocal)
   const [activeSport, setActiveSport] = useState<LessonSport>('tennis')
   const [settingsOpen, setSettingsOpen] = useState(false)
+  const [permissionsOpen, setPermissionsOpen] = useState(false)
   const [importOpen, setImportOpen] = useState(false)
   const [clubMainTab, setClubMainTab] = useState<'schedule' | 'attendance'>('schedule')
   const [draftsByWeekday, setDraftsByWeekday] = useState<Record<number, LocalLessonDraft[]>>({})
@@ -287,6 +289,7 @@ export default function Club() {
       resourceId: 0,
       coachIds: [],
       playerNames: [''],
+      className: '',
     }
     setDraftsByWeekday((prev) => ({
       ...prev,
@@ -310,6 +313,7 @@ export default function Club() {
           resourceId: draft.resourceId,
           coachIds: draft.coachIds,
           playerNames: draft.playerNames.filter((name) => name.trim()),
+          className: draft.className.trim() || undefined,
         },
         { background: true }
       )
@@ -318,7 +322,7 @@ export default function Club() {
         ...prev,
         [activeWeekday]: (prev[activeWeekday] || []).filter((item) => item.localId !== localId),
       }))
-      toast({ title: 'Lektion sparad' })
+      toast({ title: 'Klass sparad' })
     } finally {
       setIsSavingLesson(false)
     }
@@ -327,7 +331,7 @@ export default function Club() {
   function patchLessonInState(
     lessonId: number,
     weekday: number,
-    patch: Partial<ClubLesson> & { playerNames?: string[] }
+    patch: Partial<ClubLesson> & { playerNames?: string[]; className?: string }
   ) {
     setData((prev) => {
       if (!prev) return prev
@@ -342,6 +346,8 @@ export default function Club() {
             return {
               ...lesson,
               ...patch,
+              className:
+                patch.className !== undefined ? patch.className : lesson.className,
               players: patch.playerNames
                 ? patch.playerNames.map((name, index) => ({
                     id: lesson.players[index]?.id ?? 0,
@@ -371,7 +377,10 @@ export default function Club() {
     }))
   }
 
-  function scheduleLessonSave(lesson: ClubLesson, patch: Partial<ClubLesson> & { playerNames?: string[] }) {
+  function scheduleLessonSave(
+    lesson: ClubLesson,
+    patch: Partial<ClubLesson> & { playerNames?: string[]; className?: string }
+  ) {
     if (saveLessonTimeoutRef.current) {
       clearTimeout(saveLessonTimeoutRef.current)
     }
@@ -382,6 +391,8 @@ export default function Club() {
     const nextCoachIds = patch.coachIds ?? lesson.coachIds
     const nextPlayers =
       patch.playerNames ?? lesson.players.map((player) => player.name)
+    const nextClassName =
+      patch.className !== undefined ? patch.className : lesson.className || ''
 
     // Always update local UI immediately (so empty "new player" fields stay visible).
     patchLessonInState(lesson.id, lesson.weekday, {
@@ -390,23 +401,27 @@ export default function Club() {
       resourceId: nextResource,
       coachIds: nextCoachIds,
       playerNames: nextPlayers,
+      className: nextClassName,
     })
 
     // Don't hit the server just for adding/removing blank player slots — empty names
     // would be stripped on save and the reload would wipe the input.
-    if (patch.playerNames) {
+    {
       const nextTrimmed = nextPlayers.map((name) => name.trim()).filter(Boolean)
       const prevTrimmed = lesson.players.map((player) => player.name.trim()).filter(Boolean)
       const sameNamedPlayers =
         nextTrimmed.length === prevTrimmed.length &&
         nextTrimmed.every((name, index) => name === prevTrimmed[index])
-      const onlyUiFieldsChanged =
+      const sameClassName = (nextClassName || '') === (lesson.className || '')
+      const onlyEmptyPlayerSlotsChanged =
         sameNamedPlayers &&
+        sameClassName &&
         nextStart === lesson.startTime &&
         nextDuration === lesson.durationMinutes &&
         nextResource === lesson.resourceId &&
         JSON.stringify(nextCoachIds) === JSON.stringify(lesson.coachIds)
-      if (onlyUiFieldsChanged) {
+
+      if (onlyEmptyPlayerSlotsChanged) {
         return
       }
     }
@@ -426,6 +441,7 @@ export default function Club() {
               resourceId: nextResource,
               coachIds: nextCoachIds,
               playerNames: nextPlayers.filter((name) => name.trim()),
+              className: nextClassName.trim() || undefined,
             },
             { background: true }
           )
@@ -442,6 +458,7 @@ export default function Club() {
                   ...saved.players.map((player) => player.name),
                   ...Array.from({ length: emptySlots }, () => ''),
                 ],
+                className: saved.className || nextClassName,
               })
             }
           }
@@ -456,7 +473,7 @@ export default function Club() {
 
   async function deleteLesson(lessonId: number) {
     await postClubAdmin({ operation: 'delete_lesson', lessonId }, { background: true })
-    toast({ title: 'Lektion borttagen' })
+    toast({ title: 'Klass borttagen' })
   }
 
   if (!isSignedIn || (user && !user.hasClubAccess)) {
@@ -468,6 +485,10 @@ export default function Club() {
       <div className="min-h-screen flex-1 bg-background p-4 md:p-6">
         <div className="container mx-auto max-w-3xl space-y-4">
           <h1 className="text-2xl font-semibold tracking-tight">Närvaro</h1>
+          <p className="text-sm text-muted-foreground">
+            Markera närvaro för dagens lektioner. Veckoschema och inställningar sköts av
+            klubbens boss.
+          </p>
           <ClubAttendanceSection isBoss={false} clubName={data?.club.name} />
         </div>
       </div>
@@ -522,10 +543,28 @@ export default function Club() {
             )}
             <Button
               type="button"
+              variant={permissionsOpen ? 'secondary' : 'outline'}
+              size="sm"
+              className="gap-2"
+              onClick={() => {
+                setPermissionsOpen((open) => !open)
+                if (!permissionsOpen) setSettingsOpen(false)
+              }}
+              data-testid="club-permissions-button"
+            >
+              <UserCog className="h-4 w-4" />
+              Behörigheter
+              {permissionsOpen ? <ChevronUp className="h-4 w-4" /> : <ChevronDown className="h-4 w-4" />}
+            </Button>
+            <Button
+              type="button"
               variant={settingsOpen ? 'secondary' : 'outline'}
               size="sm"
               className="gap-2"
-              onClick={() => setSettingsOpen((open) => !open)}
+              onClick={() => {
+                setSettingsOpen((open) => !open)
+                if (!settingsOpen) setPermissionsOpen(false)
+              }}
             >
               <Settings2 className="h-4 w-4" />
               Inställningar
@@ -566,6 +605,20 @@ export default function Club() {
             }}
             onImportComplete={loadClubData}
           />
+        )}
+
+        {permissionsOpen && (
+          <Card>
+            <CardHeader className="pb-3">
+              <CardTitle className="text-base">Behörigheter</CardTitle>
+              <CardDescription>
+                Ge appkonton tillgång till närvaro (tränare) eller hela klubben (boss).
+              </CardDescription>
+            </CardHeader>
+            <CardContent>
+              <ClubPermissionsPanel />
+            </CardContent>
+          </Card>
         )}
 
         {settingsOpen && data && (

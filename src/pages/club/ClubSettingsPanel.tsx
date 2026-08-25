@@ -6,7 +6,6 @@ import { Label } from '@/components/ui/label'
 import type { ClubCoach, ClubPayload, ClubResource } from './clubTypes'
 import { ClubClearScheduleSection } from './ClubClearScheduleSection'
 import { ClubClosuresPanel } from './ClubClosuresPanel'
-import { ClubPermissionsPanel } from './ClubPermissionsPanel'
 
 type Props = {
   data: ClubPayload
@@ -231,13 +230,6 @@ export function ClubSettingsPanel({
           description="Dagar utan skola — tränare ser inga lektioner i närvaro."
         >
           <ClubClosuresPanel />
-        </SettingsSection>
-
-        <SettingsSection
-          title="Behörigheter"
-          description="Ge tränare och boss tillgång till närvaro och klubbschema."
-        >
-          <ClubPermissionsPanel isSaving={isSaving} />
         </SettingsSection>
 
         <section className="pt-6">
