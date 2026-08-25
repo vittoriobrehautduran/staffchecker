@@ -1,6 +1,28 @@
 import { APIGatewayProxyEvent, APIGatewayProxyResult } from 'aws-lambda'
 import { sql } from './utils/database'
 import { getUserIdFromCognitoSession } from './utils/cognito-auth'
+import {
+  resolveClubAccess,
+  getClubMembers,
+  updateClubMemberPermissions,
+} from './utils/club-membership'
+import {
+  defaultHistoryRange,
+  getAttendanceHistory,
+  getAuditLog,
+  getDayPayloadForRequest,
+  getNotifications,
+  markNotificationsRead,
+  updateSessionDay,
+} from './utils/club-attendance'
+import {
+  addLovRange,
+  addRodDay,
+  listClubClosures,
+  removeLovRange,
+  removeRodDay,
+} from './utils/club-closures'
+import { reviewScheduleImportWithAi } from './utils/schedule-import-review'
 
 type ResourceType = 'court' | 'table'
 type SportType = 'tennis' | 'bordtennis' | 'both'
@@ -16,11 +38,13 @@ function getCorsOrigin(event: APIGatewayProxyEvent): string {
   return allowedOrigins.includes(requestOrigin) ? requestOrigin : allowedOrigins[0]
 }
 
-function corsHeaders(origin: string) {
+function corsHeaders(origin: string, extra?: { etag?: string }) {
   return {
     'Content-Type': 'application/json',
     'Access-Control-Allow-Origin': origin,
     'Access-Control-Allow-Credentials': 'true',
+    'Access-Control-Expose-Headers': 'ETag',
+    ...(extra?.etag ? { ETag: `"${extra.etag}"` } : {}),
   }
 }
 
@@ -44,24 +68,13 @@ function addMinutesToTime(startTime: string, minutes: number): string {
 }
 
 async function getBossClubId(userId: number): Promise<number | null> {
-  try {
-    const rows = (await sql`
-      SELECT club_id
-      FROM user_club_memberships
-      WHERE user_id = ${userId}
-        AND permissions @> ARRAY['club_boss']::text[]
-      ORDER BY club_id ASC
-      LIMIT 1
-    `) as { club_id: number }[]
+  const access = await resolveClubAccess(userId)
+  if (!access?.isBoss) return null
+  return access.clubId
+}
 
-    return rows.length ? rows[0].club_id : null
-  } catch (error: unknown) {
-    const pgError = error as { code?: string }
-    if (pgError?.code === '42P01') {
-      return null
-    }
-    throw error
-  }
+function isValidDateStr(value: string): boolean {
+  return /^\d{4}-\d{2}-\d{2}$/.test(value)
 }
 
 async function getMaxUsedResourceNumber(
@@ -168,11 +181,13 @@ async function getLessonsByWeekday(clubId: number) {
       t.resource_id,
       t.class_id,
       t.sport,
+      c.name AS class_name,
       r.resource_type,
       r.resource_number,
       r.label AS resource_label
     FROM club_schedule_template t
     INNER JOIN club_resources r ON r.id = t.resource_id
+    LEFT JOIN club_classes c ON c.id = t.class_id
     WHERE t.club_id = ${clubId}
       AND t.is_active = true
     ORDER BY t.weekday ASC, t.start_time ASC, t.id ASC
@@ -184,6 +199,7 @@ async function getLessonsByWeekday(clubId: number) {
     resource_id: number
     class_id: number
     sport: LessonSport | null
+    class_name: string | null
     resource_type: ResourceType
     resource_number: number
     resource_label: string | null
@@ -194,26 +210,50 @@ async function getLessonsByWeekday(clubId: number) {
     lessonsByWeekday[String(day)] = []
   }
 
+  if (templates.length === 0) {
+    return lessonsByWeekday
+  }
+
+  const templateIds = templates.map((template) => template.id)
+  const classIds = [...new Set(templates.map((template) => template.class_id))]
+
+  const coachRows = (await sql`
+    SELECT tc.template_id, c.id, c.name
+    FROM club_schedule_template_coaches tc
+    INNER JOIN club_coaches c ON c.id = tc.coach_id
+    WHERE tc.template_id = ANY(${templateIds}::int[])
+    ORDER BY tc.template_id ASC, c.id ASC
+  `) as { template_id: number; id: number; name: string }[]
+
+  const playerRows = (await sql`
+    SELECT class_id, id, player_name
+    FROM club_class_players
+    WHERE class_id = ANY(${classIds}::int[])
+      AND is_active = true
+    ORDER BY class_id ASC, sort_order ASC, id ASC
+  `) as { class_id: number; id: number; player_name: string }[]
+
+  const coachesByTemplate = new Map<number, { id: number; name: string }[]>()
+  for (const row of coachRows) {
+    const list = coachesByTemplate.get(row.template_id) || []
+    list.push({ id: row.id, name: row.name })
+    coachesByTemplate.set(row.template_id, list)
+  }
+
+  const playersByClass = new Map<number, { id: number; name: string }[]>()
+  for (const row of playerRows) {
+    const list = playersByClass.get(row.class_id) || []
+    list.push({ id: row.id, name: row.player_name })
+    playersByClass.set(row.class_id, list)
+  }
+
   for (const template of templates) {
     const sport =
       template.sport ||
       (template.resource_type === 'court' ? 'tennis' : 'bordtennis')
 
-    const coachRows = (await sql`
-      SELECT c.id, c.name
-      FROM club_schedule_template_coaches tc
-      INNER JOIN club_coaches c ON c.id = tc.coach_id
-      WHERE tc.template_id = ${template.id}
-      ORDER BY c.id ASC
-    `) as { id: number; name: string }[]
-
-    const playerRows = (await sql`
-      SELECT id, player_name
-      FROM club_class_players
-      WHERE class_id = ${template.class_id}
-        AND is_active = true
-      ORDER BY sort_order ASC, id ASC
-    `) as { id: number; player_name: string }[]
+    const coachRowsForLesson = coachesByTemplate.get(template.id) || []
+    const playerRowsForLesson = playersByClass.get(template.class_id) || []
 
     const startTime = formatTimeValue(template.start_time)
     const endTime = formatTimeValue(template.end_time)
@@ -230,12 +270,10 @@ async function getLessonsByWeekday(clubId: number) {
       resourceLabel: template.resource_label,
       resourceType: template.resource_type,
       classId: template.class_id,
-      coachIds: coachRows.map((coach) => coach.id),
-      coaches: coachRows,
-      players: playerRows.map((player) => ({
-        id: player.id,
-        name: player.player_name,
-      })),
+      className: template.class_name || null,
+      coachIds: coachRowsForLesson.map((coach) => coach.id),
+      coaches: coachRowsForLesson,
+      players: playerRowsForLesson,
     }
 
     const key = String(template.weekday)
@@ -326,13 +364,15 @@ async function insertLessonRecord(
     resourceId: number
     coachIds: number[]
     playerNames: string[]
+    className?: string | null
   }
 ) {
   const startTime = formatTimeValue(params.startTime)
   const durationMinutes = Math.max(20, params.durationMinutes)
   const endTime = addMinutesToTime(startTime, durationMinutes)
   const weekdayNames = ['', 'Mån', 'Tis', 'Ons', 'Tor', 'Fre', 'Lör', 'Sön']
-  const classLabel = `${weekdayNames[params.weekday]} ${startTime} ${params.sport}`
+  const fallbackLabel = `${weekdayNames[params.weekday]} ${startTime} ${params.sport}`
+  const classLabel = (params.className || '').trim() || fallbackLabel
 
   const newClasses = (await sql`
     INSERT INTO club_classes (club_id, name, sport)
@@ -376,27 +416,159 @@ async function insertLessonRecord(
     `
   }
 
-  let sortOrder = 0
-  for (const playerName of params.playerNames) {
-    sortOrder += 1
+  if (params.playerNames.length > 0) {
     await sql`
       INSERT INTO club_class_players (class_id, player_name, sort_order)
-      VALUES (${classId}, ${playerName}, ${sortOrder})
+      SELECT ${classId}, name, ordinality::int
+      FROM unnest(${params.playerNames}::text[]) WITH ORDINALITY AS t(name, ordinality)
     `
   }
 }
 
-async function deleteAllLessonsForSport(clubId: number, sport: LessonSport) {
-  const templates = (await sql`
-    SELECT id
+type ImportCaches = {
+  coachByName: Map<string, number>
+  resourceByKey: Map<string, number>
+  unknownCoachBySport: Map<LessonSport, number>
+}
+
+async function createImportCaches(clubId: number): Promise<ImportCaches> {
+  const coaches = (await sql`
+    SELECT id, name
+    FROM club_coaches
+    WHERE club_id = ${clubId}
+      AND is_active = true
+  `) as { id: number; name: string }[]
+
+  const coachByName = new Map<string, number>()
+  for (const coach of coaches) {
+    coachByName.set(coach.name.trim().toLowerCase(), coach.id)
+  }
+
+  const resources = (await sql`
+    SELECT id, resource_type, resource_number
+    FROM club_resources
+    WHERE club_id = ${clubId}
+      AND is_active = true
+  `) as { id: number; resource_type: ResourceType; resource_number: number }[]
+
+  const resourceByKey = new Map<string, number>()
+  for (const resource of resources) {
+    const sport: LessonSport = resource.resource_type === 'court' ? 'tennis' : 'bordtennis'
+    resourceByKey.set(`${sport}:${resource.resource_number}`, resource.id)
+  }
+
+  return {
+    coachByName,
+    resourceByKey,
+    unknownCoachBySport: new Map<LessonSport, number>(),
+  }
+}
+
+async function resolveUnknownCoachId(
+  clubId: number,
+  sport: LessonSport,
+  caches: ImportCaches
+): Promise<number> {
+  const cached = caches.unknownCoachBySport.get(sport)
+  if (cached) return cached
+
+  const coachId = await ensureUnknownCoachId(clubId, sport)
+  caches.unknownCoachBySport.set(sport, coachId)
+  caches.coachByName.set('unknown', coachId)
+  return coachId
+}
+
+async function resolveResourceIdForImport(
+  clubId: number,
+  sport: LessonSport,
+  resourceId: number,
+  resourceNumber: number,
+  venueRaw: string,
+  createMissingResources: boolean,
+  caches: ImportCaches
+): Promise<number> {
+  if (resourceId > 0) return resourceId
+
+  const cacheKey = `${sport}:${resourceNumber}`
+  const cached = caches.resourceByKey.get(cacheKey)
+  if (cached) return cached
+
+  if (!createMissingResources || resourceNumber <= 0) return 0
+
+  const resourceType: ResourceType = sport === 'tennis' ? 'court' : 'table'
+  const label =
+    venueRaw.trim() || `${resourceType === 'court' ? 'Bana' : 'Bord'} ${resourceNumber}`
+
+  const created = (await sql`
+    INSERT INTO club_resources (club_id, resource_type, resource_number, label, is_active)
+    VALUES (${clubId}, ${resourceType}, ${resourceNumber}, ${label}, true)
+    RETURNING id
+  `) as { id: number }[]
+
+  const newId = created[0].id
+  caches.resourceByKey.set(cacheKey, newId)
+  return newId
+}
+
+async function resolveCoachIdsForImport(
+  clubId: number,
+  sport: LessonSport,
+  coachId: number,
+  coachName: string | undefined,
+  createMissingCoaches: boolean,
+  caches: ImportCaches
+): Promise<number[]> {
+  if (coachId > 0) return [coachId]
+
+  if (coachName && createMissingCoaches) {
+    const trimmed = coachName.trim()
+    if (looksLikePhoneNumber(trimmed)) {
+      return [await resolveUnknownCoachId(clubId, sport, caches)]
+    }
+
+    const normalized = trimmed.toLowerCase()
+    const existing = caches.coachByName.get(normalized)
+    if (existing) return [existing]
+
+    const inserted = (await sql`
+      INSERT INTO club_coaches (club_id, name, sport)
+      VALUES (${clubId}, ${trimmed}, ${sport})
+      RETURNING id
+    `) as { id: number }[]
+
+    const newId = inserted[0].id
+    caches.coachByName.set(normalized, newId)
+    return [newId]
+  }
+
+  return [await resolveUnknownCoachId(clubId, sport, caches)]
+}
+
+async function bulkDeleteLessonsForSport(clubId: number, sport: LessonSport) {
+  const rows = (await sql`
+    SELECT id AS template_id, class_id
     FROM club_schedule_template
     WHERE club_id = ${clubId}
       AND sport = ${sport}
-  `) as { id: number }[]
+  `) as { template_id: number; class_id: number }[]
 
-  for (const template of templates) {
-    await deleteLessonById(clubId, template.id)
-  }
+  if (rows.length === 0) return
+
+  const templateIds = rows.map((row) => row.template_id)
+  const classIds = [...new Set(rows.map((row) => row.class_id))]
+
+  await sql`
+    DELETE FROM club_sessions
+    WHERE club_id = ${clubId}
+      AND template_id = ANY(${templateIds}::int[])
+  `
+  await sql`DELETE FROM club_schedule_template WHERE id = ANY(${templateIds}::int[])`
+  await sql`DELETE FROM club_class_players WHERE class_id = ANY(${classIds}::int[])`
+  await sql`DELETE FROM club_classes WHERE id = ANY(${classIds}::int[])`
+}
+
+async function deleteAllLessonsForSport(clubId: number, sport: LessonSport) {
+  await bulkDeleteLessonsForSport(clubId, sport)
 }
 
 const CLEAR_SCHEDULE_CONFIRM_PHRASE = 'RADERA SCHEMA'
@@ -407,6 +579,8 @@ async function deleteAllClubSchedule(clubId: number): Promise<number> {
     FROM club_schedule_template
     WHERE club_id = ${clubId}
   `) as { id: number }[]
+
+  await sql`DELETE FROM club_sessions WHERE club_id = ${clubId}`
 
   for (const template of templates) {
     await deleteLessonById(clubId, template.id)
@@ -440,6 +614,28 @@ async function findCoachByName(clubId: number, coachName: string) {
   return coaches.find((coach) => coach.name.trim().toLowerCase() === normalized)?.id ?? null
 }
 
+async function ensureUnknownCoachId(clubId: number, sport: LessonSport): Promise<number> {
+  const existing = await findCoachByName(clubId, 'unknown')
+  if (existing) return existing
+
+  const inserted = (await sql`
+    INSERT INTO club_coaches (club_id, name, sport)
+    VALUES (${clubId}, ${'unknown'}, ${sport})
+    RETURNING id
+  `) as { id: number }[]
+
+  return inserted[0].id
+}
+
+async function deleteSessionsForLesson(clubId: number, classId: number, templateId: number) {
+  // Närvaro-sessions materialiseras från veckoschemat och blockerar annars borttagning av klassen.
+  await sql`
+    DELETE FROM club_sessions
+    WHERE club_id = ${clubId}
+      AND (class_id = ${classId} OR template_id = ${templateId})
+  `
+}
+
 async function deleteLessonById(clubId: number, lessonId: number) {
   const rows = (await sql`
     SELECT id, class_id
@@ -455,6 +651,7 @@ async function deleteLessonById(clubId: number, lessonId: number) {
 
   const classId = rows[0].class_id
 
+  await deleteSessionsForLesson(clubId, classId, lessonId)
   await sql`DELETE FROM club_schedule_template WHERE id = ${lessonId}`
   await sql`DELETE FROM club_class_players WHERE class_id = ${classId}`
   await sql`DELETE FROM club_classes WHERE id = ${classId}`
@@ -471,7 +668,7 @@ export const handler = async (
       headers: {
         ...corsHeaders(origin),
         'Access-Control-Allow-Methods': 'GET, POST, OPTIONS',
-        'Access-Control-Allow-Headers': 'Content-Type, Authorization',
+        'Access-Control-Allow-Headers': 'Content-Type, Authorization, If-None-Match',
       },
       body: '',
     }
@@ -495,16 +692,63 @@ export const handler = async (
       }
     }
 
-    const clubId = await getBossClubId(userId)
-    if (!clubId) {
+    const access = await resolveClubAccess(userId)
+    if (!access) {
       return {
         statusCode: 403,
         headers: corsHeaders(origin),
-        body: JSON.stringify({ message: 'Club boss permission required' }),
+        body: JSON.stringify({ message: 'Club permission required' }),
       }
     }
 
+    const clubId = access.clubId
+    const queryDate = event.queryStringParameters?.date?.trim() || ''
+
     if (event.httpMethod === 'GET') {
+      if (queryDate) {
+        if (!isValidDateStr(queryDate)) {
+          return {
+            statusCode: 400,
+            headers: corsHeaders(origin),
+            body: JSON.stringify({ message: 'date must be YYYY-MM-DD' }),
+          }
+        }
+        const ifNoneMatch =
+          event.headers?.['If-None-Match'] ||
+          event.headers?.['if-none-match'] ||
+          event.queryStringParameters?.ifNoneMatch ||
+          ''
+
+        const dayResult = await getDayPayloadForRequest(clubId, queryDate, ifNoneMatch)
+
+        if (dayResult.unchanged) {
+          return {
+            statusCode: 200,
+            headers: corsHeaders(origin, { etag: dayResult.version }),
+            body: JSON.stringify({
+              unchanged: true,
+              date: dayResult.date,
+              version: dayResult.version,
+            }),
+          }
+        }
+
+        const { unchanged: _unchanged, ...dayPayload } = dayResult
+        return {
+          statusCode: 200,
+          headers: corsHeaders(origin, { etag: dayResult.version }),
+          body: JSON.stringify(dayPayload),
+        }
+      }
+
+      if (!access.isBoss) {
+        return {
+          statusCode: 403,
+          headers: corsHeaders(origin),
+          body: JSON.stringify({ message: 'Club boss permission required' }),
+        }
+      }
+
       const payload = await getClubPayload(clubId)
       return {
         statusCode: 200,
@@ -528,6 +772,286 @@ export const handler = async (
         statusCode: 400,
         headers: corsHeaders(origin),
         body: JSON.stringify({ message: 'operation is required' }),
+      }
+    }
+
+    const bossOnlyOperations = new Set([
+      'update_club_settings',
+      'add_resource',
+      'add_coach',
+      'delete_coach',
+      'add_lesson',
+      'update_lesson',
+      'delete_lesson',
+      'import_schedule',
+      'review_schedule_import',
+      'clear_schedule',
+      'get_audit_log',
+      'get_notifications',
+      'mark_notifications_read',
+      'get_attendance_history',
+      'get_club_members',
+      'update_club_member_permissions',
+      'add_rod_dag',
+      'add_lov_range',
+      'remove_rod_dag',
+      'remove_lov_range',
+    ])
+
+    if (bossOnlyOperations.has(operation) && !access.isBoss) {
+      return {
+        statusCode: 403,
+        headers: corsHeaders(origin),
+        body: JSON.stringify({ message: 'Club boss permission required' }),
+      }
+    }
+
+    if (operation === 'get_day') {
+      const dateStr = String(body.date || '').trim()
+      if (!isValidDateStr(dateStr)) {
+        return {
+          statusCode: 400,
+          headers: corsHeaders(origin),
+          body: JSON.stringify({ message: 'date must be YYYY-MM-DD' }),
+        }
+      }
+      const dayResult = await getDayPayloadForRequest(clubId, dateStr)
+      if (dayResult.unchanged) {
+        return {
+          statusCode: 200,
+          headers: corsHeaders(origin, { etag: dayResult.version }),
+          body: JSON.stringify({
+            unchanged: true,
+            date: dayResult.date,
+            version: dayResult.version,
+          }),
+        }
+      }
+      const { unchanged: _unchanged, ...dayPayload } = dayResult
+      return {
+        statusCode: 200,
+        headers: corsHeaders(origin, { etag: dayResult.version }),
+        body: JSON.stringify(dayPayload),
+      }
+    }
+
+    if (operation === 'update_session') {
+      const sessionId = Number(body.sessionId)
+      if (!sessionId) {
+        return {
+          statusCode: 400,
+          headers: corsHeaders(origin),
+          body: JSON.stringify({ message: 'sessionId is required' }),
+        }
+      }
+
+      const dayResult = await updateSessionDay(clubId, userId, sessionId, {
+        coachIds: Array.isArray(body.coachIds)
+          ? (body.coachIds as unknown[]).map((id) => Number(id)).filter((id) => id > 0)
+          : undefined,
+        players: Array.isArray(body.players)
+          ? (body.players as { sessionPlayerId?: number; name?: string; removed?: boolean }[])
+          : undefined,
+        attendance: Array.isArray(body.attendance)
+          ? (body.attendance as { sessionPlayerId: number; status: 'present' | 'absent' | 'unknown' }[])
+          : undefined,
+      })
+
+      if (dayResult.unchanged) {
+        return {
+          statusCode: 200,
+          headers: corsHeaders(origin, { etag: dayResult.version }),
+          body: JSON.stringify({
+            unchanged: true,
+            date: dayResult.date,
+            version: dayResult.version,
+          }),
+        }
+      }
+
+      const { unchanged: _unchanged, ...dayPayload } = dayResult
+      return {
+        statusCode: 200,
+        headers: corsHeaders(origin, { etag: dayResult.version }),
+        body: JSON.stringify(dayPayload),
+      }
+    }
+
+    if (operation === 'get_audit_log') {
+      const defaults = defaultHistoryRange()
+      const fromDate = String(body.fromDate || defaults.fromDate).trim()
+      const toDate = String(body.toDate || defaults.toDate).trim()
+      const entries = await getAuditLog(clubId, fromDate, toDate)
+      return {
+        statusCode: 200,
+        headers: corsHeaders(origin),
+        body: JSON.stringify({ entries }),
+      }
+    }
+
+    if (operation === 'get_notifications') {
+      const notifications = await getNotifications(clubId, userId)
+      return {
+        statusCode: 200,
+        headers: corsHeaders(origin),
+        body: JSON.stringify({ notifications }),
+      }
+    }
+
+    if (operation === 'mark_notifications_read') {
+      const notificationIds = Array.isArray(body.notificationIds)
+        ? (body.notificationIds as unknown[]).map((id) => Number(id)).filter((id) => id > 0)
+        : undefined
+      await markNotificationsRead(clubId, userId, notificationIds)
+      const notifications = await getNotifications(clubId, userId)
+      return {
+        statusCode: 200,
+        headers: corsHeaders(origin),
+        body: JSON.stringify({ notifications }),
+      }
+    }
+
+    if (operation === 'get_attendance_history') {
+      const defaults = defaultHistoryRange()
+      const fromDate = String(body.fromDate || defaults.fromDate).trim()
+      const toDate = String(body.toDate || defaults.toDate).trim()
+      const sessions = await getAttendanceHistory(clubId, fromDate, toDate)
+      return {
+        statusCode: 200,
+        headers: corsHeaders(origin),
+        body: JSON.stringify({ fromDate, toDate, sessions }),
+      }
+    }
+
+    if (operation === 'get_club_members') {
+      const members = await getClubMembers(clubId)
+      return {
+        statusCode: 200,
+        headers: corsHeaders(origin),
+        body: JSON.stringify({ members }),
+      }
+    }
+
+    if (operation === 'update_club_member_permissions') {
+      const targetUserId = Number(body.userId)
+      if (!targetUserId) {
+        return {
+          statusCode: 400,
+          headers: corsHeaders(origin),
+          body: JSON.stringify({ message: 'userId is required' }),
+        }
+      }
+
+      const permissions = Array.isArray(body.permissions)
+        ? (body.permissions as unknown[]).map((p) => String(p).trim()).filter(Boolean)
+        : []
+
+      const members = await updateClubMemberPermissions(clubId, targetUserId, permissions)
+      return {
+        statusCode: 200,
+        headers: corsHeaders(origin),
+        body: JSON.stringify({ members }),
+      }
+    }
+
+    if (operation === 'get_closures') {
+      const closures = await listClubClosures(clubId)
+      return {
+        statusCode: 200,
+        headers: corsHeaders(origin),
+        body: JSON.stringify(closures),
+      }
+    }
+
+    if (operation === 'add_rod_dag') {
+      const dateStr = String(body.date || '').trim()
+      if (!isValidDateStr(dateStr)) {
+        return {
+          statusCode: 400,
+          headers: corsHeaders(origin),
+          body: JSON.stringify({ message: 'date must be YYYY-MM-DD' }),
+        }
+      }
+      const label = body.label != null ? String(body.label).trim() : null
+      await addRodDay(clubId, dateStr, userId, label || null)
+      const closures = await listClubClosures(clubId)
+      return {
+        statusCode: 200,
+        headers: corsHeaders(origin),
+        body: JSON.stringify(closures),
+      }
+    }
+
+    if (operation === 'remove_rod_dag') {
+      const dateStr = String(body.date || '').trim()
+      if (!isValidDateStr(dateStr)) {
+        return {
+          statusCode: 400,
+          headers: corsHeaders(origin),
+          body: JSON.stringify({ message: 'date must be YYYY-MM-DD' }),
+        }
+      }
+      await removeRodDay(clubId, dateStr)
+      const closures = await listClubClosures(clubId)
+      return {
+        statusCode: 200,
+        headers: corsHeaders(origin),
+        body: JSON.stringify(closures),
+      }
+    }
+
+    if (operation === 'add_lov_range') {
+      const fromDate = String(body.fromDate || '').trim()
+      const toDate = String(body.toDate || '').trim()
+      if (!isValidDateStr(fromDate) || !isValidDateStr(toDate)) {
+        return {
+          statusCode: 400,
+          headers: corsHeaders(origin),
+          body: JSON.stringify({ message: 'fromDate and toDate must be YYYY-MM-DD' }),
+        }
+      }
+      const label = body.label != null ? String(body.label).trim() : null
+      try {
+        await addLovRange(clubId, fromDate, toDate, userId, label || null)
+      } catch (error: unknown) {
+        const message = error instanceof Error ? error.message : 'Kunde inte spara lov'
+        return {
+          statusCode: 400,
+          headers: corsHeaders(origin),
+          body: JSON.stringify({ message }),
+        }
+      }
+      const closures = await listClubClosures(clubId)
+      return {
+        statusCode: 200,
+        headers: corsHeaders(origin),
+        body: JSON.stringify(closures),
+      }
+    }
+
+    if (operation === 'remove_lov_range') {
+      const rangeId = Number(body.rangeId)
+      if (!rangeId) {
+        return {
+          statusCode: 400,
+          headers: corsHeaders(origin),
+          body: JSON.stringify({ message: 'rangeId is required' }),
+        }
+      }
+      await removeLovRange(clubId, rangeId)
+      const closures = await listClubClosures(clubId)
+      return {
+        statusCode: 200,
+        headers: corsHeaders(origin),
+        body: JSON.stringify(closures),
+      }
+    }
+
+    if (!access.isBoss) {
+      return {
+        statusCode: 403,
+        headers: corsHeaders(origin),
+        body: JSON.stringify({ message: 'Club boss permission required' }),
       }
     }
 
@@ -634,6 +1158,56 @@ export const handler = async (
       `
     }
 
+    if (operation === 'delete_coach') {
+      const coachId = Number(body.coachId)
+      if (!coachId) {
+        return {
+          statusCode: 400,
+          headers: corsHeaders(origin),
+          body: JSON.stringify({ message: 'coachId krävs' }),
+        }
+      }
+
+      const coachRows = (await sql`
+        SELECT id, name
+        FROM club_coaches
+        WHERE id = ${coachId}
+          AND club_id = ${clubId}
+          AND is_active = true
+        LIMIT 1
+      `) as { id: number; name: string }[]
+
+      if (!coachRows.length) {
+        return {
+          statusCode: 404,
+          headers: corsHeaders(origin),
+          body: JSON.stringify({ message: 'Tränaren hittades inte' }),
+        }
+      }
+
+      await sql`
+        DELETE FROM club_schedule_template_coaches
+        WHERE coach_id = ${coachId}
+          AND template_id IN (
+            SELECT id FROM club_schedule_template WHERE club_id = ${clubId}
+          )
+      `
+
+      await sql`
+        UPDATE club_schedule_template
+        SET default_coach_id = NULL, updated_at = CURRENT_TIMESTAMP
+        WHERE club_id = ${clubId}
+          AND default_coach_id = ${coachId}
+      `
+
+      await sql`
+        UPDATE club_coaches
+        SET is_active = false, updated_at = CURRENT_TIMESTAMP
+        WHERE id = ${coachId}
+          AND club_id = ${clubId}
+      `
+    }
+
     if (operation === 'add_lesson' || operation === 'update_lesson') {
       const weekday = Number(body.weekday)
       const sport = body.sport as LessonSport
@@ -648,6 +1222,8 @@ export const handler = async (
             .map((name) => String(name).trim())
             .filter((name) => name.length > 0)
         : []
+      const requestedClassName =
+        body.className != null ? String(body.className).trim() : ''
 
       if (weekday < 1 || weekday > 7) {
         return {
@@ -707,10 +1283,11 @@ export const handler = async (
 
       const endTime = addMinutesToTime(startTime, durationMinutes)
       const weekdayNames = ['', 'Mån', 'Tis', 'Ons', 'Tor', 'Fre', 'Lör', 'Sön']
-      const classLabel = `${weekdayNames[weekday]} ${startTime} ${sport}`
+      const fallbackLabel = `${weekdayNames[weekday]} ${startTime} ${sport}`
 
       let lessonId = Number(body.lessonId ?? 0)
       let classId = 0
+      let classLabel = requestedClassName || fallbackLabel
 
       if (operation === 'update_lesson') {
         if (!lessonId) {
@@ -722,12 +1299,13 @@ export const handler = async (
         }
 
         const existing = (await sql`
-          SELECT id, class_id
-          FROM club_schedule_template
-          WHERE id = ${lessonId}
-            AND club_id = ${clubId}
+          SELECT t.id, t.class_id, c.name AS class_name
+          FROM club_schedule_template t
+          LEFT JOIN club_classes c ON c.id = t.class_id
+          WHERE t.id = ${lessonId}
+            AND t.club_id = ${clubId}
           LIMIT 1
-        `) as { id: number; class_id: number }[]
+        `) as { id: number; class_id: number; class_name: string | null }[]
 
         if (!existing.length) {
           return {
@@ -738,6 +1316,8 @@ export const handler = async (
         }
 
         classId = existing[0].class_id
+        // Keep existing class name unless boss typed a new one.
+        classLabel = requestedClassName || existing[0].class_name?.trim() || fallbackLabel
 
         await sql`
           UPDATE club_classes
@@ -826,6 +1406,82 @@ export const handler = async (
       await deleteLessonById(clubId, lessonId)
     }
 
+    if (operation === 'review_schedule_import') {
+      const reviewInput = body.review as
+        | {
+            pagesProcessed?: number
+            linesParsed?: number
+            lessonCount?: number
+            coachCount?: number
+            includedCount?: number
+            previewWarnings?: string[]
+            lessons?: unknown[]
+          }
+        | undefined
+
+      if (!reviewInput || !Array.isArray(reviewInput.lessons)) {
+        return {
+          statusCode: 400,
+          headers: corsHeaders(origin),
+          body: JSON.stringify({ message: 'review.lessons krävs' }),
+        }
+      }
+
+      const lessons = reviewInput.lessons.slice(0, 120).map((raw) => {
+        const lesson = raw as Record<string, unknown>
+        const samplePlayers = Array.isArray(lesson.samplePlayers)
+          ? (lesson.samplePlayers as unknown[]).map((name) => String(name).trim()).filter(Boolean).slice(0, 3)
+          : []
+        const warnings = Array.isArray(lesson.warnings)
+          ? (lesson.warnings as unknown[]).map((w) => String(w)).filter(Boolean).slice(0, 5)
+          : []
+
+        return {
+          sport: String(lesson.sport || ''),
+          weekday: Number(lesson.weekday) || 0,
+          startTime: String(lesson.startTime || ''),
+          endTime: String(lesson.endTime || ''),
+          venue: String(lesson.venue || ''),
+          coachName: lesson.coachName != null ? String(lesson.coachName) : null,
+          playerCount: Number(lesson.playerCount) || 0,
+          samplePlayers,
+          status: String(lesson.status || ''),
+          warnings,
+          included: lesson.included !== false,
+        }
+      })
+
+      try {
+        const result = await reviewScheduleImportWithAi({
+          pagesProcessed: Number(reviewInput.pagesProcessed) || 0,
+          linesParsed: Number(reviewInput.linesParsed) || 0,
+          lessonCount: Number(reviewInput.lessonCount) || lessons.length,
+          coachCount: Number(reviewInput.coachCount) || 0,
+          includedCount:
+            Number(reviewInput.includedCount) ||
+            lessons.filter((lesson) => lesson.included).length,
+          previewWarnings: Array.isArray(reviewInput.previewWarnings)
+            ? reviewInput.previewWarnings.map((w) => String(w)).slice(0, 20)
+            : [],
+          lessons,
+        })
+        return {
+          statusCode: 200,
+          headers: corsHeaders(origin),
+          body: JSON.stringify(result),
+        }
+      } catch (error: unknown) {
+        const err = error as { message?: string }
+        return {
+          statusCode: 502,
+          headers: corsHeaders(origin),
+          body: JSON.stringify({
+            message: err?.message || 'AI-granskning misslyckades',
+          }),
+        }
+      }
+    }
+
     if (operation === 'import_schedule') {
       const lessonsInput = Array.isArray(body.lessons) ? body.lessons : []
       const replaceSports = Array.isArray(body.replaceSports)
@@ -855,7 +1511,10 @@ export const handler = async (
         await deleteAllLessonsForSport(clubId, sport)
       }
 
+      const importCaches = await createImportCaches(clubId)
+
       let importedCount = 0
+      let skippedCount = 0
 
       for (const rawLesson of lessonsInput) {
         const lesson = rawLesson as {
@@ -881,39 +1540,28 @@ export const handler = async (
               .filter((name) => name.length > 0)
           : []
 
-        if (sport !== 'tennis' && sport !== 'bordtennis') continue
-        if (weekday < 1 || weekday > 7) continue
-        if (!startTime || playerNames.length === 0) continue
-
-        let resourceId = Number(lesson.resourceId ?? 0)
-        if (!resourceId && createMissingResources) {
-          const resourceNumber = Number(lesson.resourceNumber ?? 0)
-          const resourceType: ResourceType = sport === 'tennis' ? 'court' : 'table'
-          const label = String(lesson.venueRaw || '').trim() || `${resourceType === 'court' ? 'Bana' : 'Bord'} ${resourceNumber}`
-
-          if (resourceNumber > 0) {
-            const existing = (await sql`
-              SELECT id
-              FROM club_resources
-              WHERE club_id = ${clubId}
-                AND resource_type = ${resourceType}
-                AND resource_number = ${resourceNumber}
-                AND is_active = true
-              LIMIT 1
-            `) as { id: number }[]
-
-            if (existing.length) {
-              resourceId = existing[0].id
-            } else {
-              const created = (await sql`
-                INSERT INTO club_resources (club_id, resource_type, resource_number, label, is_active)
-                VALUES (${clubId}, ${resourceType}, ${resourceNumber}, ${label}, true)
-                RETURNING id
-              `) as { id: number }[]
-              resourceId = created[0].id
-            }
-          }
+        if (sport !== 'tennis' && sport !== 'bordtennis') {
+          skippedCount += 1
+          continue
         }
+        if (weekday < 1 || weekday > 7) {
+          skippedCount += 1
+          continue
+        }
+        if (!startTime || playerNames.length === 0) {
+          skippedCount += 1
+          continue
+        }
+
+        const resourceId = await resolveResourceIdForImport(
+          clubId,
+          sport,
+          Number(lesson.resourceId ?? 0),
+          Number(lesson.resourceNumber ?? 0),
+          String(lesson.venueRaw || ''),
+          createMissingResources,
+          importCaches
+        )
 
         if (!resourceId) {
           throw new Error(
@@ -921,28 +1569,14 @@ export const handler = async (
           )
         }
 
-        const coachIds: number[] = []
-        const coachId = Number(lesson.coachId ?? 0)
-        if (coachId > 0) {
-          coachIds.push(coachId)
-        } else if (lesson.coachName && createMissingCoaches) {
-          const coachName = String(lesson.coachName).trim()
-          if (looksLikePhoneNumber(coachName)) {
-            continue
-          }
-          let resolvedCoachId = await findCoachByName(clubId, coachName)
-          if (!resolvedCoachId) {
-            const inserted = (await sql`
-              INSERT INTO club_coaches (club_id, name, sport)
-              VALUES (${clubId}, ${coachName}, ${sport})
-              RETURNING id
-            `) as { id: number }[]
-            resolvedCoachId = inserted[0].id
-          }
-          if (resolvedCoachId) {
-            coachIds.push(resolvedCoachId)
-          }
-        }
+        const coachIds = await resolveCoachIdsForImport(
+          clubId,
+          sport,
+          Number(lesson.coachId ?? 0),
+          lesson.coachName ? String(lesson.coachName) : undefined,
+          createMissingCoaches,
+          importCaches
+        )
 
         await insertLessonRecord(clubId, {
           weekday,
@@ -958,11 +1592,10 @@ export const handler = async (
 
       await syncClubResourceCounts(clubId)
 
-      const payload = await getClubPayload(clubId)
       return {
         statusCode: 200,
         headers: corsHeaders(origin),
-        body: JSON.stringify({ ...payload, importedCount }),
+        body: JSON.stringify({ importedCount, skippedCount }),
       }
     }
 
@@ -987,11 +1620,10 @@ export const handler = async (
       }
     }
 
-    const payload = await getClubPayload(clubId)
     return {
-      statusCode: 200,
+      statusCode: 400,
       headers: corsHeaders(origin),
-      body: JSON.stringify(payload),
+      body: JSON.stringify({ message: `Okänd operation: ${operation}` }),
     }
   } catch (error: unknown) {
     const err = error as { message?: string; code?: string }

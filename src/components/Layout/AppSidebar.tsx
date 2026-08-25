@@ -120,9 +120,13 @@ export function AppSidebar({ mobileOpen, onMobileOpenChange }: AppSidebarProps) 
           <span>Förhandsvisa</span>
         </NavLink>
         {user?.hasClubAccess && (
-          <NavLink to="/club" className={({ isActive }) => sidebarItemClass(isActive)}>
+          <NavLink
+            to="/club"
+            className={({ isActive }) => sidebarItemClass(isActive)}
+            data-testid="nav-club"
+          >
             <Users className="h-5 w-5 shrink-0 opacity-90" aria-hidden />
-            <span>Klubb</span>
+            <span>{user.hasClubBossAccess ? 'Klubbschema' : 'Närvaro'}</span>
           </NavLink>
         )}
         {user?.hasEmployeeReportsAccess && (

@@ -146,7 +146,7 @@ export const handler = async (
       clubPermissions = []
     }
 
-    const hasClubBossAccess = clubPermissions.includes('club_boss')
+    const hasClubBossAccess = clubPermissions.includes('club_boss') || !!user.is_admin
     const hasClubCoachAccess = clubPermissions.includes('club_coach')
     const hasClubAccess = hasClubBossAccess || hasClubCoachAccess
 
@@ -175,6 +175,7 @@ export const handler = async (
         clubPermissions,
         hasClubAccess,
         hasClubBossAccess,
+        hasClubCoachAccess,
         isSalaryManager,
         isReportBoss,
         hasEmployeeReportsAccess,

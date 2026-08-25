@@ -1,4 +1,4 @@
-import { useState, useEffect } from 'react'
+import { useState, useEffect, useCallback } from 'react'
 import { useAuth } from '@/contexts/AuthContext'
 import { useLocation, useNavigate } from 'react-router-dom'
 import { addMonths, format } from 'date-fns'
@@ -16,6 +16,12 @@ import {
 import { useToast } from '@/components/ui/use-toast'
 import { apiRequest } from '@/services/api'
 import { getReportSubmitPath } from '@/lib/report-api'
+import {
+  invalidateReportMonthCache,
+  readReportMonthCache,
+  toReportMonthKey,
+  writeReportMonthCache,
+} from '@/lib/reportMonthCache'
 import { calculateHours } from '@/utils/validation'
 import { ArrowLeft } from 'lucide-react'
 
@@ -56,9 +62,6 @@ type PreviewLocationState = {
   reportMonthKey?: string
 }
 
-const toMonthKey = (year: number, month: number): string =>
-  `${year}-${month.toString().padStart(2, '0')}`
-
 // Parse "yyyy-MM" safely and return null when format is invalid.
 const parseMonthKey = (monthKey?: string): Date | null => {
   if (!monthKey || !/^\d{4}-\d{2}$/.test(monthKey)) {
@@ -84,37 +87,71 @@ export default function Preview() {
   const { toast } = useToast()
   const [reportData, setReportData] = useState<ReportData | null>(null)
   const [isLoading, setIsLoading] = useState(true)
+  const [isRefreshing, setIsRefreshing] = useState(false)
   const [isSubmitting, setIsSubmitting] = useState(false)
   const [confirmSubmitOpen, setConfirmSubmitOpen] = useState(false)
   const [selectedPeriod, setSelectedPeriod] = useState<ReportPeriod>('current')
   const locationState = location.state as PreviewLocationState | null
   const requestedMonth = parseMonthKey(locationState?.reportMonthKey)
 
-  useEffect(() => {
-    if (!isSignedIn) {
-      navigate('/login')
-      return
-    }
-    initializeReportPeriod()
-  }, [isSignedIn])
+  const fetchReportMonth = useCallback(
+    async (month: number, year: number, options?: { background?: boolean }) => {
+      const monthKey = toReportMonthKey(year, month)
+      const cached = readReportMonthCache(monthKey)
+      const showBlockingLoader = !options?.background && !cached
 
-  // Decide which month to show first:
-  // - If last month's report is not submitted -> show last month
-  // - If last month's report is submitted     -> show current month
-  const initializeReportPeriod = async () => {
-    if (!isSignedIn) return
+      if (showBlockingLoader) {
+        setIsLoading(true)
+      } else if (options?.background) {
+        setIsRefreshing(true)
+      } else if (cached) {
+        setReportData(cached as ReportData)
+        setIsLoading(false)
+      }
 
-    try {
-      setIsLoading(true)
-
-      // If user came from a specific calendar month, show that exact month first.
-      if (requestedMonth) {
-        const month = requestedMonth.getMonth() + 1
-        const year = requestedMonth.getFullYear()
+      try {
         const data = await apiRequest<ReportData>(`/get-report?month=${month}&year=${year}`, {
           method: 'GET',
         })
         setReportData(data)
+        writeReportMonthCache(data)
+        return data
+      } catch (error) {
+        if (options?.background && cached) {
+          return cached as ReportData
+        }
+        throw error
+      }
+    },
+    []
+  )
+
+  // Decide which month to show first:
+  // - If last month's report is not submitted -> show last month
+  // - If last month's report is submitted     -> show current month
+  const initializeReportPeriod = useCallback(async () => {
+    if (!isSignedIn) return
+
+    try {
+      const hasAnyCache =
+        !!readReportMonthCache(
+          toReportMonthKey(new Date().getFullYear(), new Date().getMonth() + 1)
+        ) ||
+        !!readReportMonthCache(
+          toReportMonthKey(
+            addMonths(new Date(), -1).getFullYear(),
+            addMonths(new Date(), -1).getMonth() + 1
+          )
+        )
+
+      if (!hasAnyCache) {
+        setIsLoading(true)
+      }
+
+      if (requestedMonth) {
+        const month = requestedMonth.getMonth() + 1
+        const year = requestedMonth.getFullYear()
+        await fetchReportMonth(month, year, { background: !!readReportMonthCache(toReportMonthKey(year, month)) })
         setSelectedPeriod('current')
         return
       }
@@ -123,60 +160,91 @@ export default function Preview() {
       const lastMonthDate = addMonths(today, -1)
       const lastMonth = lastMonthDate.getMonth() + 1
       const lastYear = lastMonthDate.getFullYear()
+      const lastKey = toReportMonthKey(lastYear, lastMonth)
+      const cachedLast = readReportMonthCache(lastKey)
 
-      // Try last month first
-      const lastMonthData = await apiRequest<ReportData>(
-        `/get-report?month=${lastMonth}&year=${lastYear}`,
-        { method: 'GET' }
+      if (cachedLast && cachedLast.status !== 'submitted') {
+        setReportData(cachedLast as ReportData)
+        setSelectedPeriod('previous')
+        void fetchReportMonth(lastMonth, lastYear, { background: true })
+        return
+      }
+
+      const lastMonthData = await fetchReportMonth(
+        lastMonth,
+        lastYear,
+        { background: !!cachedLast }
       )
 
       if (lastMonthData.status !== 'submitted') {
-        setReportData(lastMonthData)
         setSelectedPeriod('previous')
         return
       }
 
-      // If last month is already submitted, fall back to current month
-      await loadReportData('current')
-    } catch (error: any) {
+      const curMonth = today.getMonth() + 1
+      const curYear = today.getFullYear()
+      await fetchReportMonth(curMonth, curYear, {
+        background: !!readReportMonthCache(toReportMonthKey(curYear, curMonth)),
+      })
+      setSelectedPeriod('current')
+    } catch (error: unknown) {
       console.error('Error initializing report period:', error)
+      const message = error instanceof Error ? error.message : 'Ett fel uppstod'
       toast({
         title: 'Kunde inte ladda rapport',
-        description: error.message || 'Ett fel uppstod',
+        description: message,
         variant: 'destructive',
       })
     } finally {
       setIsLoading(false)
+      setIsRefreshing(false)
     }
-  }
+  }, [isSignedIn, requestedMonth, fetchReportMonth, toast])
 
-  const loadReportData = async (period: ReportPeriod) => {
-    if (!isSignedIn) return
-
-    try {
-      setIsLoading(true)
-
-      const today = new Date()
-      const baseDate = period === 'current' ? today : addMonths(today, -1)
-      const month = baseDate.getMonth() + 1
-      const year = baseDate.getFullYear()
-
-      const data = await apiRequest<ReportData>(`/get-report?month=${month}&year=${year}`, {
-        method: 'GET',
-      })
-      setReportData(data)
-      setSelectedPeriod(period)
-    } catch (error: any) {
-      console.error('Error loading report:', error)
-      toast({
-        title: 'Kunde inte ladda rapport',
-        description: error.message || 'Ett fel uppstod',
-        variant: 'destructive',
-      })
-    } finally {
-      setIsLoading(false)
+  useEffect(() => {
+    if (!isSignedIn) {
+      navigate('/login')
+      return
     }
-  }
+    void initializeReportPeriod()
+  }, [isSignedIn, navigate, initializeReportPeriod])
+
+  const loadReportData = useCallback(
+    async (period: ReportPeriod) => {
+      if (!isSignedIn) return
+
+      try {
+        const today = new Date()
+        const baseDate = period === 'current' ? today : addMonths(today, -1)
+        const month = baseDate.getMonth() + 1
+        const year = baseDate.getFullYear()
+        const monthKey = toReportMonthKey(year, month)
+        const cached = readReportMonthCache(monthKey)
+
+        if (cached) {
+          setReportData(cached as ReportData)
+          setSelectedPeriod(period)
+          setIsLoading(false)
+          await fetchReportMonth(month, year, { background: true })
+        } else {
+          await fetchReportMonth(month, year)
+          setSelectedPeriod(period)
+        }
+      } catch (error: unknown) {
+        console.error('Error loading report:', error)
+        const message = error instanceof Error ? error.message : 'Ett fel uppstod'
+        toast({
+          title: 'Kunde inte ladda rapport',
+          description: message,
+          variant: 'destructive',
+        })
+      } finally {
+        setIsLoading(false)
+        setIsRefreshing(false)
+      }
+    },
+    [isSignedIn, fetchReportMonth, toast]
+  )
 
   const handleChangePeriod = async (period: ReportPeriod) => {
     if (!isSignedIn || period === selectedPeriod) return
@@ -214,6 +282,8 @@ export default function Preview() {
         }),
       })
 
+      invalidateReportMonthCache(toReportMonthKey(reportData.year, reportData.month))
+
       toast({
         title: 'Rapport skickad!',
         description: 'Din timrapport har skickats till chefen',
@@ -221,7 +291,7 @@ export default function Preview() {
 
       navigate('/report', {
         state: {
-          activeMonthKey: toMonthKey(reportData.year, reportData.month),
+          activeMonthKey: toReportMonthKey(reportData.year, reportData.month),
         },
       })
     } catch (error: any) {
@@ -240,7 +310,7 @@ export default function Preview() {
     return null
   }
 
-  if (isLoading) {
+  if (isLoading && !reportData) {
     return (
       <div className="min-h-screen flex-1 bg-background p-4 md:p-6">
         <div className="container mx-auto max-w-4xl">
@@ -270,7 +340,7 @@ export default function Preview() {
   }
 
   const monthName = format(new Date(reportData.year, reportData.month - 1), 'MMMM yyyy', { locale: sv })
-  const activeMonthKey = toMonthKey(reportData.year, reportData.month)
+  const activeMonthKey = toReportMonthKey(reportData.year, reportData.month)
   
   // Group entries by date
   const entriesByDate = reportData.entries.reduce((acc, entry) => {
@@ -375,6 +445,9 @@ export default function Preview() {
             <CardTitle>Förhandsvisning - {monthName}</CardTitle>
             <CardDescription>
               Granska din rapport innan du skickar den
+              {isRefreshing && (
+                <span className="block text-xs">Uppdaterar i bakgrunden…</span>
+              )}
             </CardDescription>
             <div className="mt-4 flex flex-wrap gap-2">
               <Button

@@ -22,7 +22,10 @@ type Props = {
   drafts: LocalLessonDraft[]
   isLoading: boolean
   onAddLesson: () => void
-  onUpdateLesson: (lesson: ClubLesson, patch: Partial<ClubLesson> & { playerNames?: string[] }) => void
+  onUpdateLesson: (
+    lesson: ClubLesson,
+    patch: Partial<ClubLesson> & { playerNames?: string[]; className?: string }
+  ) => void
   onDeleteLesson: (lessonId: number) => void
   onUpdateDraft: (localId: string, patch: Partial<LocalLessonDraft>) => void
   onSaveDraft: (localId: string) => void
@@ -51,7 +54,8 @@ export function ClubDayPanel({
     <div className="space-y-4">
       {sortedLessons.length === 0 && drafts.length === 0 && (
         <p className="text-sm text-muted-foreground">
-          Inga {sportLabel.toLowerCase()}-lektioner på {weekdayLabel.toLowerCase()} ännu.
+          Inga {sportLabel.toLowerCase()}-klasser på {weekdayLabel.toLowerCase()} ännu. Lägg till
+          en klass manuellt nedan.
         </p>
       )}
 
@@ -60,6 +64,7 @@ export function ClubDayPanel({
           key={lesson.id}
           sport={lesson.sport}
           data={data}
+          groupName={lesson.className || ''}
           startTime={lesson.startTime}
           durationMinutes={lesson.durationMinutes}
           resourceId={lesson.resourceId}
@@ -76,6 +81,7 @@ export function ClubDayPanel({
           key={draft.localId}
           sport={draft.sport}
           data={data}
+          groupName={draft.className}
           startTime={draft.startTime}
           durationMinutes={draft.durationMinutes}
           resourceId={draft.resourceId}
@@ -97,7 +103,7 @@ export function ClubDayPanel({
         disabled={isLoading}
         onClick={onAddLesson}
       >
-        + Lägg till lektion
+        + Lägg till klass
       </Button>
     </div>
   )
@@ -106,6 +112,7 @@ export function ClubDayPanel({
 type LessonEditorProps = {
   sport: LessonSport
   data: ClubPayload
+  groupName: string
   startTime: string
   durationMinutes: number
   resourceId: number
@@ -114,6 +121,7 @@ type LessonEditorProps = {
   isLoading: boolean
   isDraft?: boolean
   onChange: (patch: {
+    className?: string
     startTime?: string
     durationMinutes?: number
     resourceId?: number
@@ -128,6 +136,7 @@ type LessonEditorProps = {
 function LessonEditor({
   sport,
   data,
+  groupName,
   startTime,
   durationMinutes,
   resourceId,
@@ -151,7 +160,11 @@ function LessonEditor({
   const resourceLabel = sport === 'tennis' ? 'Bana' : 'Bord'
   const safeStartTime = startTime || '10:00'
   const safeDuration = durationMinutes > 0 ? durationMinutes : 60
-  const courtSelectValue = resourceId > 0 ? String(resourceId) : undefined
+  // Keep Select always controlled (never undefined) to avoid React warnings.
+  const NONE = '__none__'
+  const courtSelectValue = resourceId > 0 ? String(resourceId) : NONE
+  const coachSelectValue = coachIds[0] ? String(coachIds[0]) : NONE
+  const title = groupName.trim() || 'Ny klass'
 
   function resourceDisplayName(resource: (typeof resources)[0]) {
     if (resource.label?.trim()) {
@@ -163,12 +176,24 @@ function LessonEditor({
   return (
     <Card className={isDraft ? 'border-dashed' : undefined}>
       <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-        <CardTitle className="text-base">Lektion</CardTitle>
+        <CardTitle className="text-base">{title}</CardTitle>
         <Button type="button" variant="ghost" size="sm" onClick={onDelete} disabled={isLoading}>
           Ta bort
         </Button>
       </CardHeader>
       <CardContent className="space-y-4">
+        <div className="space-y-2">
+          <Label htmlFor={`class-name-${isDraft ? 'draft' : 'saved'}-${safeStartTime}`}>
+            Klassnamn
+          </Label>
+          <Input
+            id={`class-name-${isDraft ? 'draft' : 'saved'}-${safeStartTime}`}
+            placeholder="t.ex. Juniorer 10–12, Nybörjare A"
+            value={groupName}
+            onChange={(event) => onChange({ className: event.target.value })}
+          />
+        </div>
+
         <div className="grid gap-4 sm:grid-cols-2">
           <div className="space-y-2">
             <Label>Starttid</Label>
@@ -214,12 +239,17 @@ function LessonEditor({
           ) : (
             <Select
               value={courtSelectValue}
-              onValueChange={(value) => onChange({ resourceId: Number(value) })}
+              onValueChange={(value) =>
+                onChange({ resourceId: value === NONE ? 0 : Number(value) })
+              }
             >
               <SelectTrigger>
                 <SelectValue placeholder={`Välj ${resourceLabel.toLowerCase()}`} />
               </SelectTrigger>
               <SelectContent>
+                <SelectItem value={NONE} disabled>
+                  Välj {resourceLabel.toLowerCase()}
+                </SelectItem>
                 {resources.map((resource) => (
                   <SelectItem key={resource.id} value={String(resource.id)}>
                     {resourceDisplayName(resource)}
@@ -236,15 +266,16 @@ function LessonEditor({
             <p className="text-sm text-muted-foreground">Lägg till tränare under Inställningar.</p>
           ) : (
             <Select
-              value={coachIds[0] ? String(coachIds[0]) : undefined}
+              value={coachSelectValue}
               onValueChange={(value) => {
-                onChange({ coachIds: value ? [Number(value)] : [] })
+                onChange({ coachIds: value === NONE ? [] : [Number(value)] })
               }}
             >
               <SelectTrigger>
                 <SelectValue placeholder="Välj tränare" />
               </SelectTrigger>
               <SelectContent>
+                <SelectItem value={NONE}>Ingen tränare</SelectItem>
                 {coaches.map((coach) => (
                   <SelectItem key={coach.id} value={String(coach.id)}>
                     {coach.name}
@@ -256,39 +287,41 @@ function LessonEditor({
         </div>
 
         <div className="space-y-2">
-          <Label>Spelare</Label>
-            {playerNames.map((name, index) => (
-              <div key={index} className="flex gap-2">
-                <Input
-                  placeholder="Spelarens namn"
-                  value={name}
-                  onChange={(event) => {
-                    const next = [...playerNames]
-                    next[index] = event.target.value
-                    onChange({ playerNames: next })
-                  }}
-                />
-                <Button
-                  type="button"
-                  variant="outline"
-                  size="icon"
-                  onClick={() => onChange({ playerNames: [...playerNames, ''] })}
-                  title="Lägg till spelare"
-                >
-                  +
-                </Button>
-              </div>
-            ))}
-          {playerNames.length === 0 && (
-            <Button
-              type="button"
-              variant="outline"
-              size="sm"
-              onClick={() => onChange({ playerNames: [''] })}
-            >
-              + Spelare
-            </Button>
-          )}
+          <Label>Spelare i klassen</Label>
+          {playerNames.map((name, index) => (
+            <div key={`player-${index}`} className="flex gap-2">
+              <Input
+                placeholder="Spelarens namn"
+                value={name}
+                onChange={(event) => {
+                  const next = [...playerNames]
+                  next[index] = event.target.value
+                  onChange({ playerNames: next })
+                }}
+              />
+              <Button
+                type="button"
+                variant="outline"
+                size="icon"
+                title="Ta bort spelare"
+                aria-label="Ta bort spelare"
+                onClick={() => {
+                  const next = playerNames.filter((_, i) => i !== index)
+                  onChange({ playerNames: next })
+                }}
+              >
+                −
+              </Button>
+            </div>
+          ))}
+          <Button
+            type="button"
+            variant="outline"
+            size="sm"
+            onClick={() => onChange({ playerNames: [...playerNames, ''] })}
+          >
+            + Lägg till spelare
+          </Button>
         </div>
 
         {isDraft && onSaveDraft && (
@@ -297,7 +330,7 @@ function LessonEditor({
             onClick={onSaveDraft}
             disabled={isLoading || isSavingLesson || resourceId <= 0}
           >
-            Spara lektion
+            Spara klass
           </Button>
         )}
       </CardContent>

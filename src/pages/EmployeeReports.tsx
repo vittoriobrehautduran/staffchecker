@@ -12,6 +12,13 @@ import {
   type ReportEntry,
 } from '@/components/reports/ReportEntriesReadOnly'
 import { cn } from '@/lib/utils'
+import {
+  readEmployeeDetailCache,
+  readEmployeeListCache,
+  writeEmployeeDetailCache,
+  writeEmployeeListCache,
+  type CachedEmployeeDetail,
+} from '@/lib/employeeReportsCache'
 import { ArrowLeft, ChevronLeft, ChevronRight } from 'lucide-react'
 
 type EmployeeSummary = {
@@ -58,9 +65,11 @@ export default function EmployeeReports() {
   const [monthDate, setMonthDate] = useState(() => subMonths(new Date(), 1))
   const [list, setList] = useState<EmployeeSummary[]>([])
   const [isLoadingList, setIsLoadingList] = useState(true)
+  const [isRefreshingList, setIsRefreshingList] = useState(false)
   const [selectedUserId, setSelectedUserId] = useState<number | null>(null)
   const [detail, setDetail] = useState<DetailResponse | null>(null)
   const [isLoadingDetail, setIsLoadingDetail] = useState(false)
+  const [isRefreshingDetail, setIsRefreshingDetail] = useState(false)
 
   const month = monthDate.getMonth() + 1
   const year = monthDate.getFullYear()
@@ -68,48 +77,77 @@ export default function EmployeeReports() {
 
   const canAccess = !!user?.hasEmployeeReportsAccess
 
-  const loadList = useCallback(async () => {
-    setIsLoadingList(true)
-    try {
-      const data = await apiRequest<ListResponse>(
-        `/list-employee-reports?month=${month}&year=${year}`,
-        { method: 'GET' }
-      )
-      setList(data.employees)
-    } catch (error: unknown) {
-      const err = error as { message?: string }
-      toast({
-        title: 'Kunde inte ladda personal',
-        description: err?.message || 'Ett fel uppstod',
-        variant: 'destructive',
-      })
-      setList([])
-    } finally {
-      setIsLoadingList(false)
-    }
-  }, [month, year, toast])
+  const loadList = useCallback(
+    async (options?: { background?: boolean }) => {
+      const cached = readEmployeeListCache(year, month)
+      const showBlockingLoader = !options?.background && !cached
+
+      if (showBlockingLoader) {
+        setIsLoadingList(true)
+      } else if (options?.background) {
+        setIsRefreshingList(true)
+      }
+
+      try {
+        const data = await apiRequest<ListResponse>(
+          `/list-employee-reports?month=${month}&year=${year}`,
+          { method: 'GET' }
+        )
+        setList(data.employees)
+        writeEmployeeListCache(year, month, data.employees)
+      } catch (error: unknown) {
+        const err = error as { message?: string }
+        if (!options?.background || !cached) {
+          toast({
+            title: 'Kunde inte ladda personal',
+            description: err?.message || 'Ett fel uppstod',
+            variant: 'destructive',
+          })
+          setList([])
+        }
+      } finally {
+        setIsLoadingList(false)
+        setIsRefreshingList(false)
+      }
+    },
+    [month, year, toast]
+  )
 
   const loadDetail = useCallback(
-    async (userId: number) => {
-      setIsLoadingDetail(true)
-      setDetail(null)
+    async (userId: number, options?: { background?: boolean }) => {
+      const cached = readEmployeeDetailCache(year, month, userId)
+      const showBlockingLoader = !options?.background && !cached
+
+      if (showBlockingLoader) {
+        setIsLoadingDetail(true)
+        setDetail(null)
+      } else if (options?.background) {
+        setIsRefreshingDetail(true)
+      } else if (cached) {
+        setDetail(cached as DetailResponse)
+      }
+
       try {
         const data = await apiRequest<DetailResponse>(
           `/get-employee-report?userId=${userId}&month=${month}&year=${year}`,
           { method: 'GET' }
         )
         setDetail(data)
+        writeEmployeeDetailCache(year, month, userId, data as CachedEmployeeDetail)
       } catch (error: unknown) {
         const err = error as { message?: string }
-        toast({
-          title: 'Kunde inte ladda rapport',
-          description: err?.message || 'Ett fel uppstod',
-          variant: 'destructive',
-        })
-        setDetail(null)
-        setSelectedUserId(null)
+        if (!options?.background || !cached) {
+          toast({
+            title: 'Kunde inte ladda rapport',
+            description: err?.message || 'Ett fel uppstod',
+            variant: 'destructive',
+          })
+          setDetail(null)
+          setSelectedUserId(null)
+        }
       } finally {
         setIsLoadingDetail(false)
+        setIsRefreshingDetail(false)
       }
     },
     [month, year, toast]
@@ -138,13 +176,27 @@ export default function EmployeeReports() {
     if (!canAccess) return
     setSelectedUserId(null)
     setDetail(null)
-    void loadList()
-  }, [canAccess, loadList])
+    const cached = readEmployeeListCache(year, month)
+    if (cached) {
+      setList(cached)
+      setIsLoadingList(false)
+      void loadList({ background: true })
+    } else {
+      void loadList()
+    }
+  }, [canAccess, loadList, year, month])
 
   useEffect(() => {
     if (!canAccess || selectedUserId === null) return
-    void loadDetail(selectedUserId)
-  }, [canAccess, selectedUserId, loadDetail])
+    const cached = readEmployeeDetailCache(year, month, selectedUserId)
+    if (cached) {
+      setDetail(cached as DetailResponse)
+      setIsLoadingDetail(false)
+      void loadDetail(selectedUserId, { background: true })
+    } else {
+      void loadDetail(selectedUserId)
+    }
+  }, [canAccess, selectedUserId, loadDetail, year, month])
 
   const sortedEmployees = useMemo(() => {
     return [...list].sort((a, b) => {
@@ -182,6 +234,9 @@ export default function EmployeeReports() {
                   {selectedUserId === null
                     ? 'Klicka på en rad för att öppna rapporten'
                     : 'Byt medarbetare genom att klicka på en annan rad'}
+                  {isRefreshingList && (
+                    <span className="block text-xs">Uppdaterar i bakgrunden…</span>
+                  )}
                 </CardDescription>
               </div>
               <div className="flex items-center gap-1">
@@ -303,6 +358,11 @@ export default function EmployeeReports() {
                       </CardDescription>
                       <p className="mt-2 text-sm text-muted-foreground capitalize">
                         Rapport för {monthLabel}
+                        {isRefreshingDetail && (
+                          <span className="block text-xs normal-case">
+                            Uppdaterar i bakgrunden…
+                          </span>
+                        )}
                       </p>
                     </>
                   )}

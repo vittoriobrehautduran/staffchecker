@@ -1,6 +1,7 @@
 import { APIGatewayProxyEvent, APIGatewayProxyResult } from 'aws-lambda'
 import { sql } from './utils/database'
 import crypto from 'crypto'
+import { getClubIdBySlug, getDefaultClubId } from './utils/club-membership'
 
 function getCorsHeaders(origin: string | null): Record<string, string> {
   const allowedOrigins = [
@@ -71,6 +72,14 @@ export const handler = async (
   }
 
   try {
+    const clubSlug = (event.queryStringParameters?.club || process.env.DEFAULT_CLUB_SLUG || 'spanga')
+      .trim()
+      .toLowerCase()
+    let clubId = await getClubIdBySlug(clubSlug)
+    if (!clubId) {
+      clubId = await getDefaultClubId()
+    }
+
     // Check if a valid token exists (not expired)
     const now = new Date()
     const validTokens = await sql`
@@ -91,10 +100,21 @@ export const handler = async (
       token = generateToken()
       const expiresAt = new Date(now.getTime() + 24 * 60 * 60 * 1000) // 24 hours from now
 
-      await sql`
-        INSERT INTO registration_tokens (token, expires_at, club_location)
-        VALUES (${token}, ${expiresAt}, 'staffroom')
-      `
+      try {
+        await sql`
+          INSERT INTO registration_tokens (token, expires_at, club_location, club_id)
+          VALUES (${token}, ${expiresAt}, ${clubSlug || 'staffroom'}, ${clubId})
+        `
+      } catch (insertError: any) {
+        if (insertError?.code === '42703') {
+          await sql`
+            INSERT INTO registration_tokens (token, expires_at, club_location)
+            VALUES (${token}, ${expiresAt}, ${clubSlug || 'staffroom'})
+          `
+        } else {
+          throw insertError
+        }
+      }
     }
 
     // Redirect to registration page with token

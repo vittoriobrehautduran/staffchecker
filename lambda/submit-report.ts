@@ -1,6 +1,7 @@
 import { APIGatewayProxyEvent, APIGatewayProxyResult } from 'aws-lambda'
 import { sql } from './utils/database'
 import { getUserIdFromCognitoSession } from './utils/cognito-auth'
+import { getReportRecipientEmailsForUser } from './utils/club-membership'
 import { SESClient, SendEmailCommand } from '@aws-sdk/client-ses'
 
 const sesClient = new SESClient({
@@ -422,14 +423,14 @@ export const handler = async (
     textBody += `- Ledighetstimmar: ${totalLeaveHours.toFixed(1)} timmar\n`
     textBody += `- Ersättning: ${totalCompensationEntries} poster${totalCompensationAmount > 0 ? ` (${totalCompensationAmount.toFixed(2)} SEK)` : ''}\n`
 
-    // Send email via AWS SES: From = REPORT_EMAIL_FROM, else EMAIL_BACKUP, else user; Reply-To = employee when From ≠ user
-    const bossEmail = process.env.BOSS_EMAIL_ADDRESS
+    // Send to the club boss(es) for this employee's club; fall back to BOSS_EMAIL_ADDRESS.
+    const bossEmails = await getReportRecipientEmailsForUser(userId)
     const reportFromEnv = process.env.REPORT_EMAIL_FROM?.trim()
     const emailBackupEnv = process.env.EMAIL_BACKUP?.trim()
     const userEmail = (user.email && String(user.email).trim()) || ''
     const sourceAddress = reportFromEnv || emailBackupEnv || userEmail
 
-    if (bossEmail) {
+    if (bossEmails.length > 0) {
       if (!sourceAddress) {
         console.error(
           'Skipping report email: set REPORT_EMAIL_FROM or EMAIL_BACKUP, or ensure user has an email address'
@@ -444,7 +445,7 @@ export const handler = async (
             Source: sourceAddress,
             ...(useReplyTo ? { ReplyToAddresses: [userEmail] } : {}),
             Destination: {
-              ToAddresses: [bossEmail],
+              ToAddresses: bossEmails,
             },
             Message: {
               Subject: {

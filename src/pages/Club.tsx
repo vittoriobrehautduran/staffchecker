@@ -6,12 +6,26 @@ import { Button } from '@/components/ui/button'
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card'
 import { useToast } from '@/components/ui/use-toast'
 import { LoadingSpinner } from '@/components/ui/loading-spinner'
-import { ChevronDown, ChevronUp, FileUp, Settings2 } from 'lucide-react'
+import { ChevronDown, ChevronUp, FileUp, Settings2, UserCog } from 'lucide-react'
+import { ClubAttendanceSection } from '@/pages/club/ClubAttendanceSection'
 import { ClubDayPanel } from '@/pages/club/ClubDayPanel'
 import { ClubPdfImportPanel } from '@/pages/club/ClubPdfImportPanel'
 import { ClubSettingsPanel } from '@/pages/club/ClubSettingsPanel'
+import { ClubPermissionsPanel } from '@/pages/club/ClubPermissionsPanel'
+import {
+  ClubWeekDateNav,
+  todayDateStrLocal,
+  weekdayFromDateStr,
+  addDaysToDateStr,
+  mondayOfWeek,
+} from '@/pages/club/ClubWeekDateNav'
 import type { ClubLesson, ClubPayload, LessonSport, LocalLessonDraft } from '@/pages/club/clubTypes'
 import { normalizeClubPayload, WEEKDAYS } from '@/pages/club/clubTypes'
+import {
+  invalidateClubScheduleCache,
+  readClubScheduleCache,
+  writeClubScheduleCache,
+} from '@/lib/clubScheduleCache'
 
 function newLocalId() {
   return `draft-${Date.now()}-${Math.random().toString(36).slice(2, 9)}`
@@ -37,15 +51,18 @@ export default function Club() {
   const navigate = useNavigate()
   const { toast } = useToast()
 
-  const [data, setData] = useState<ClubPayload | null>(null)
-  const [hasLoadedClub, setHasLoadedClub] = useState(false)
+  const [data, setData] = useState<ClubPayload | null>(() => readClubScheduleCache())
+  const [hasLoadedClub, setHasLoadedClub] = useState(() => !!readClubScheduleCache())
   const [showSlowLoadHint, setShowSlowLoadHint] = useState(false)
   const [isLoading, setIsLoading] = useState(false)
   const [isSavingLesson, setIsSavingLesson] = useState(false)
-  const [activeWeekday, setActiveWeekday] = useState(1)
+  const [activeWeekday, setActiveWeekday] = useState(() => weekdayFromDateStr(todayDateStrLocal()))
+  const [scheduleDate, setScheduleDate] = useState(todayDateStrLocal)
   const [activeSport, setActiveSport] = useState<LessonSport>('tennis')
   const [settingsOpen, setSettingsOpen] = useState(false)
+  const [permissionsOpen, setPermissionsOpen] = useState(false)
   const [importOpen, setImportOpen] = useState(false)
+  const [clubMainTab, setClubMainTab] = useState<'schedule' | 'attendance'>('schedule')
   const [draftsByWeekday, setDraftsByWeekday] = useState<Record<number, LocalLessonDraft[]>>({})
 
   const [tennisEnabled, setTennisEnabled] = useState(false)
@@ -62,6 +79,7 @@ export default function Club() {
   const applyPayload = useCallback((raw: ClubPayload) => {
     const payload = normalizeClubPayload(raw)
     setData(payload)
+    writeClubScheduleCache(payload)
     setTennisEnabled(!!payload.club.tennis_enabled)
     setBordtennisEnabled(!!payload.club.bordtennis_enabled)
     setActiveSport((current) => {
@@ -81,25 +99,33 @@ export default function Club() {
     }
   }, [tennisEnabled, bordtennisEnabled, activeSport])
 
-  const loadClubData = useCallback(async () => {
-    setIsLoading(true)
-    try {
-      const payload = await apiRequest<ClubPayload>('/club-admin', { method: 'GET' })
-      applyPayload(payload)
-    } catch (error: unknown) {
-      const err = error as { message?: string }
-      toast({
-        title: 'Kunde inte ladda klubb',
-        description: err?.message || 'Ett fel uppstod',
-        variant: 'destructive',
-      })
-    } finally {
-      setIsLoading(false)
-      setHasLoadedClub(true)
-    }
-  }, [applyPayload, toast])
+  const loadClubData = useCallback(
+    async (options?: { background?: boolean }) => {
+      const hasCache = !!readClubScheduleCache()
+      if (!options?.background && !hasCache) {
+        setIsLoading(true)
+      }
+      try {
+        const payload = await apiRequest<ClubPayload>('/club-admin', { method: 'GET' })
+        applyPayload(payload)
+      } catch (error: unknown) {
+        const err = error as { message?: string }
+        if (!options?.background || !hasCache) {
+          toast({
+            title: 'Kunde inte ladda klubb',
+            description: err?.message || 'Ett fel uppstod',
+            variant: 'destructive',
+          })
+        }
+      } finally {
+        setIsLoading(false)
+        setHasLoadedClub(true)
+      }
+    },
+    [applyPayload, toast]
+  )
 
-  const isInitialClubLoad = canManageClub && !hasLoadedClub
+  const isInitialClubLoad = canManageClub && !hasLoadedClub && !readClubScheduleCache()
 
   useEffect(() => {
     if (!isInitialClubLoad) {
@@ -120,7 +146,14 @@ export default function Club() {
       return
     }
     if (user?.hasClubBossAccess) {
-      void loadClubData()
+      const cached = readClubScheduleCache()
+      if (cached) {
+        applyPayload(cached)
+        setHasLoadedClub(true)
+        void loadClubData({ background: true })
+      } else {
+        void loadClubData()
+      }
     }
   }, [isSignedIn, user, navigate, loadClubData])
 
@@ -195,8 +228,17 @@ export default function Club() {
     toast({ title: 'Tränare tillagd' })
   }
 
+  async function removeCoach(coachId: number) {
+    await postClubAdmin({
+      operation: 'delete_coach',
+      coachId,
+    })
+    toast({ title: 'Tränare borttagen' })
+  }
+
   async function clearClubSchedule(confirmPhrase: string) {
     try {
+      invalidateClubScheduleCache()
       const result = await apiRequest<ClubPayload & { deletedCount?: number }>('/club-admin', {
         method: 'POST',
         body: JSON.stringify({
@@ -247,6 +289,7 @@ export default function Club() {
       resourceId: 0,
       coachIds: [],
       playerNames: [''],
+      className: '',
     }
     setDraftsByWeekday((prev) => ({
       ...prev,
@@ -270,6 +313,7 @@ export default function Club() {
           resourceId: draft.resourceId,
           coachIds: draft.coachIds,
           playerNames: draft.playerNames.filter((name) => name.trim()),
+          className: draft.className.trim() || undefined,
         },
         { background: true }
       )
@@ -278,7 +322,7 @@ export default function Club() {
         ...prev,
         [activeWeekday]: (prev[activeWeekday] || []).filter((item) => item.localId !== localId),
       }))
-      toast({ title: 'Lektion sparad' })
+      toast({ title: 'Klass sparad' })
     } finally {
       setIsSavingLesson(false)
     }
@@ -287,7 +331,7 @@ export default function Club() {
   function patchLessonInState(
     lessonId: number,
     weekday: number,
-    patch: Partial<ClubLesson> & { playerNames?: string[] }
+    patch: Partial<ClubLesson> & { playerNames?: string[]; className?: string }
   ) {
     setData((prev) => {
       if (!prev) return prev
@@ -302,6 +346,8 @@ export default function Club() {
             return {
               ...lesson,
               ...patch,
+              className:
+                patch.className !== undefined ? patch.className : lesson.className,
               players: patch.playerNames
                 ? patch.playerNames.map((name, index) => ({
                     id: lesson.players[index]?.id ?? 0,
@@ -331,7 +377,10 @@ export default function Club() {
     }))
   }
 
-  function scheduleLessonSave(lesson: ClubLesson, patch: Partial<ClubLesson> & { playerNames?: string[] }) {
+  function scheduleLessonSave(
+    lesson: ClubLesson,
+    patch: Partial<ClubLesson> & { playerNames?: string[]; className?: string }
+  ) {
     if (saveLessonTimeoutRef.current) {
       clearTimeout(saveLessonTimeoutRef.current)
     }
@@ -342,20 +391,46 @@ export default function Club() {
     const nextCoachIds = patch.coachIds ?? lesson.coachIds
     const nextPlayers =
       patch.playerNames ?? lesson.players.map((player) => player.name)
+    const nextClassName =
+      patch.className !== undefined ? patch.className : lesson.className || ''
 
+    // Always update local UI immediately (so empty "new player" fields stay visible).
     patchLessonInState(lesson.id, lesson.weekday, {
       startTime: nextStart,
       durationMinutes: nextDuration,
       resourceId: nextResource,
       coachIds: nextCoachIds,
       playerNames: nextPlayers,
+      className: nextClassName,
     })
+
+    // Don't hit the server just for adding/removing blank player slots — empty names
+    // would be stripped on save and the reload would wipe the input.
+    {
+      const nextTrimmed = nextPlayers.map((name) => name.trim()).filter(Boolean)
+      const prevTrimmed = lesson.players.map((player) => player.name.trim()).filter(Boolean)
+      const sameNamedPlayers =
+        nextTrimmed.length === prevTrimmed.length &&
+        nextTrimmed.every((name, index) => name === prevTrimmed[index])
+      const sameClassName = (nextClassName || '') === (lesson.className || '')
+      const onlyEmptyPlayerSlotsChanged =
+        sameNamedPlayers &&
+        sameClassName &&
+        nextStart === lesson.startTime &&
+        nextDuration === lesson.durationMinutes &&
+        nextResource === lesson.resourceId &&
+        JSON.stringify(nextCoachIds) === JSON.stringify(lesson.coachIds)
+
+      if (onlyEmptyPlayerSlotsChanged) {
+        return
+      }
+    }
 
     saveLessonTimeoutRef.current = setTimeout(() => {
       void (async () => {
         setIsSavingLesson(true)
         try {
-          await postClubAdmin(
+          const payload = await postClubAdmin(
             {
               operation: 'update_lesson',
               lessonId: lesson.id,
@@ -366,9 +441,27 @@ export default function Club() {
               resourceId: nextResource,
               coachIds: nextCoachIds,
               playerNames: nextPlayers.filter((name) => name.trim()),
+              className: nextClassName.trim() || undefined,
             },
             { background: true }
           )
+
+          // Keep any trailing empty input slots the user still has open after server reload.
+          const emptySlots = nextPlayers.filter((name) => !name.trim()).length
+          if (emptySlots > 0 && payload) {
+            const saved = payload.lessonsByWeekday?.[String(lesson.weekday)]?.find(
+              (row) => row.id === lesson.id
+            )
+            if (saved) {
+              patchLessonInState(lesson.id, lesson.weekday, {
+                playerNames: [
+                  ...saved.players.map((player) => player.name),
+                  ...Array.from({ length: emptySlots }, () => ''),
+                ],
+                className: saved.className || nextClassName,
+              })
+            }
+          }
         } catch {
           void loadClubData()
         } finally {
@@ -380,7 +473,7 @@ export default function Club() {
 
   async function deleteLesson(lessonId: number) {
     await postClubAdmin({ operation: 'delete_lesson', lessonId }, { background: true })
-    toast({ title: 'Lektion borttagen' })
+    toast({ title: 'Klass borttagen' })
   }
 
   if (!isSignedIn || (user && !user.hasClubAccess)) {
@@ -391,20 +484,12 @@ export default function Club() {
     return (
       <div className="min-h-screen flex-1 bg-background p-4 md:p-6">
         <div className="container mx-auto max-w-3xl space-y-4">
-          <h1 className="text-2xl font-semibold tracking-tight">Klubb</h1>
-          <Card>
-            <CardHeader>
-              <CardTitle className="text-base">Tränarläge</CardTitle>
-              <CardDescription>
-                Du har tränarbehörighet. Veckoschema och inställningar hanteras av klubbansvarig.
-              </CardDescription>
-            </CardHeader>
-            <CardContent>
-              <Button type="button" variant="outline" onClick={() => navigate('/dashboard')}>
-                Till översikt
-              </Button>
-            </CardContent>
-          </Card>
+          <h1 className="text-2xl font-semibold tracking-tight">Närvaro</h1>
+          <p className="text-sm text-muted-foreground">
+            Markera närvaro för dagens lektioner. Veckoschema och inställningar sköts av
+            klubbens boss.
+          </p>
+          <ClubAttendanceSection isBoss={false} clubName={data?.club.name} />
         </div>
       </div>
     )
@@ -417,7 +502,7 @@ export default function Club() {
       <div className="min-h-screen flex-1 bg-background p-4 md:p-6">
         <div className="container mx-auto max-w-4xl space-y-6">
           <div>
-            <h1 className="text-2xl font-semibold tracking-tight">Klubb</h1>
+            <h1 className="text-2xl font-semibold tracking-tight">Klubbschema</h1>
             <p className="mt-1 text-sm text-muted-foreground">Veckoschema och inställningar.</p>
           </div>
           <Card>
@@ -435,29 +520,51 @@ export default function Club() {
       <div className="container mx-auto max-w-4xl space-y-6">
         <div className="flex flex-wrap items-start justify-between gap-3">
           <div>
-            <h1 className="text-2xl font-semibold tracking-tight">Klubb</h1>
+            <h1 className="text-2xl font-semibold tracking-tight">Klubbschema</h1>
             <p className="mt-1 text-sm text-muted-foreground">
-              Planera {activeSportLabel.toLowerCase()} per veckodag.
+              {clubMainTab === 'schedule'
+                ? `Planera ${activeSportLabel.toLowerCase()} per veckodag.`
+                : 'Närvaro, historik och ändringar per dag.'}
             </p>
           </div>
           <div className="flex flex-wrap gap-2">
+            {clubMainTab === 'schedule' && (
+              <Button
+                type="button"
+                variant="outline"
+                size="sm"
+                className="gap-2"
+                onClick={() => setImportOpen((open) => !open)}
+              >
+                <FileUp className="h-4 w-4" />
+                Importera PDF
+                {importOpen ? <ChevronUp className="h-4 w-4" /> : <ChevronDown className="h-4 w-4" />}
+              </Button>
+            )}
             <Button
               type="button"
-              variant="outline"
+              variant={permissionsOpen ? 'secondary' : 'outline'}
               size="sm"
               className="gap-2"
-              onClick={() => setImportOpen((open) => !open)}
+              onClick={() => {
+                setPermissionsOpen((open) => !open)
+                if (!permissionsOpen) setSettingsOpen(false)
+              }}
+              data-testid="club-permissions-button"
             >
-              <FileUp className="h-4 w-4" />
-              Importera PDF
-              {importOpen ? <ChevronUp className="h-4 w-4" /> : <ChevronDown className="h-4 w-4" />}
+              <UserCog className="h-4 w-4" />
+              Behörigheter
+              {permissionsOpen ? <ChevronUp className="h-4 w-4" /> : <ChevronDown className="h-4 w-4" />}
             </Button>
             <Button
               type="button"
-              variant="outline"
+              variant={settingsOpen ? 'secondary' : 'outline'}
               size="sm"
               className="gap-2"
-              onClick={() => setSettingsOpen((open) => !open)}
+              onClick={() => {
+                setSettingsOpen((open) => !open)
+                if (!settingsOpen) setPermissionsOpen(false)
+              }}
             >
               <Settings2 className="h-4 w-4" />
               Inställningar
@@ -466,19 +573,52 @@ export default function Club() {
           </div>
         </div>
 
-        {importOpen && data && (
+        <div className="flex flex-wrap gap-2 border-b border-border pb-3">
+          <Button
+            type="button"
+            size="sm"
+            variant={clubMainTab === 'schedule' ? 'default' : 'outline'}
+            onClick={() => setClubMainTab('schedule')}
+          >
+            Veckoschema
+          </Button>
+          <Button
+            type="button"
+            size="sm"
+            variant={clubMainTab === 'attendance' ? 'default' : 'outline'}
+            onClick={() => setClubMainTab('attendance')}
+            data-testid="club-tab-attendance"
+          >
+            Närvaro
+          </Button>
+        </div>
+
+        {clubMainTab === 'schedule' && importOpen && data && (
           <ClubPdfImportPanel
             data={data}
             isBusy={isLoading || isSavingLesson}
             onImport={async (body) => {
-              const result = await apiRequest<ClubPayload & { importedCount?: number }>('/club-admin', {
+              return apiRequest<{ importedCount?: number; skippedCount?: number }>('/club-admin', {
                 method: 'POST',
                 body: JSON.stringify(body),
               })
-              applyPayload(result)
-              return { importedCount: result.importedCount }
             }}
+            onImportComplete={loadClubData}
           />
+        )}
+
+        {permissionsOpen && (
+          <Card>
+            <CardHeader className="pb-3">
+              <CardTitle className="text-base">Behörigheter</CardTitle>
+              <CardDescription>
+                Ge appkonton tillgång till närvaro (tränare) eller hela klubben (boss).
+              </CardDescription>
+            </CardHeader>
+            <CardContent>
+              <ClubPermissionsPanel />
+            </CardContent>
+          </Card>
         )}
 
         {settingsOpen && data && (
@@ -501,10 +641,16 @@ export default function Club() {
             onAddCourt={addCourt}
             onAddTable={addTable}
             onAddCoach={addCoach}
+            onRemoveCoach={(coachId) => void removeCoach(coachId)}
             onClearSchedule={clearClubSchedule}
           />
         )}
 
+        {clubMainTab === 'attendance' && (
+          <ClubAttendanceSection isBoss clubName={data?.club.name} />
+        )}
+
+        {clubMainTab === 'schedule' && (
         <Card>
           <CardHeader>
             <CardTitle className="text-base">Veckoschema</CardTitle>
@@ -542,19 +688,24 @@ export default function Club() {
               </p>
             ) : (
               <>
-                <div className="flex flex-wrap gap-2">
-                  {WEEKDAYS.map((day) => (
-                    <Button
-                      key={day.value}
-                      type="button"
-                      size="sm"
-                      variant={activeWeekday === day.value ? 'default' : 'outline'}
-                      onClick={() => setActiveWeekday(day.value)}
-                    >
-                      {day.label}
-                    </Button>
-                  ))}
-                </div>
+                <ClubWeekDateNav
+                  selectedDate={scheduleDate}
+                  activeWeekday={activeWeekday}
+                  onSelectDate={(dateStr) => {
+                    setScheduleDate(dateStr)
+                    setActiveWeekday(weekdayFromDateStr(dateStr))
+                  }}
+                  onSelectWeekday={(weekday) => {
+                    setActiveWeekday(weekday)
+                    const weekMonday = mondayOfWeek(scheduleDate)
+                    setScheduleDate(addDaysToDateStr(weekMonday, weekday - 1))
+                  }}
+                />
+
+                <p className="text-xs text-muted-foreground">
+                  Du redigerar veckomallen för {activeDayLabel.toLowerCase()} — samma lektioner
+                  varje vecka. Använd kalendern för att hoppa mellan datum.
+                </p>
 
                 {data && canPlanSchedule ? (
                   <ClubDayPanel
@@ -581,6 +732,7 @@ export default function Club() {
             )}
           </CardContent>
         </Card>
+        )}
       </div>
     </div>
   )

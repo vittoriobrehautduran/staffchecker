@@ -58,15 +58,32 @@ export const handler = async (
 
     // Check if token exists and is not expired
     const now = new Date()
-    const tokens = await sql`
-      SELECT token, expires_at
-      FROM registration_tokens
-      WHERE token = ${token}
-      AND expires_at > ${now}
-      LIMIT 1
-    `
+    let tokenRow: { expires_at: string; club_id?: number | null } | undefined
 
-    if (tokens.length === 0) {
+    try {
+      const tokens = await sql`
+        SELECT token, expires_at, club_id
+        FROM registration_tokens
+        WHERE token = ${token}
+        AND expires_at > ${now}
+        LIMIT 1
+      `
+      tokenRow = tokens[0] as typeof tokenRow
+    } catch (columnError: any) {
+      if (columnError?.code !== '42703') {
+        throw columnError
+      }
+      const tokens = await sql`
+        SELECT token, expires_at
+        FROM registration_tokens
+        WHERE token = ${token}
+        AND expires_at > ${now}
+        LIMIT 1
+      `
+      tokenRow = tokens[0] as typeof tokenRow
+    }
+
+    if (!tokenRow) {
       return {
         statusCode: 200,
         headers: getCorsHeaders(origin),
@@ -82,7 +99,8 @@ export const handler = async (
       headers: getCorsHeaders(origin),
       body: JSON.stringify({ 
         valid: true,
-        expiresAt: tokens[0].expires_at 
+        expiresAt: tokenRow.expires_at,
+        clubId: tokenRow.club_id ?? null,
       }),
     }
   } catch (error: any) {

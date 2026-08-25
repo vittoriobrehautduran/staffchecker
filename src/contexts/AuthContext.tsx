@@ -14,6 +14,7 @@ interface User {
   clubPermissions?: string[]
   hasClubAccess?: boolean
   hasClubBossAccess?: boolean
+  hasClubCoachAccess?: boolean
   hasEmployeeReportsAccess?: boolean
 }
 
@@ -39,7 +40,7 @@ interface AuthContextType {
   verifyEmail: (code: string, email: string) => Promise<void>
   resendVerificationCode: (email: string) => Promise<string>
   changePassword: (currentPassword: string, newPassword: string) => Promise<void>
-  patchUser: (partial: Partial<Pick<User, 'theme' | 'isAdmin' | 'clubPermissions' | 'hasClubAccess' | 'hasClubBossAccess' | 'hasEmployeeReportsAccess'>>) => void
+  patchUser: (partial: Partial<Pick<User, 'theme' | 'isAdmin' | 'clubPermissions' | 'hasClubAccess' | 'hasClubBossAccess' | 'hasClubCoachAccess' | 'hasEmployeeReportsAccess'>>) => void
 }
 
 const AuthContext = createContext<AuthContextType | undefined>(undefined)
@@ -50,7 +51,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   const isMountedRef = useRef(true)
   const oauthReturnHandledRef = useRef(false)
 
-  const patchUser = useCallback((partial: Partial<Pick<User, 'theme' | 'isAdmin' | 'clubPermissions' | 'hasClubAccess' | 'hasClubBossAccess' | 'hasEmployeeReportsAccess'>>) => {
+  const patchUser = useCallback((partial: Partial<Pick<User, 'theme' | 'isAdmin' | 'clubPermissions' | 'hasClubAccess' | 'hasClubBossAccess' | 'hasClubCoachAccess' | 'hasEmployeeReportsAccess'>>) => {
     setUser((prev) => (prev ? { ...prev, ...partial } : null))
   }, [])
 
@@ -100,7 +101,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         // Must resolve app account (Google can sign in to Cognito without a row in `users`).
         try {
           const { apiRequest } = await import('@/services/api')
-          const userInfo = await apiRequest<{ isAdmin: boolean; theme?: string; clubPermissions?: string[]; hasClubAccess?: boolean; hasClubBossAccess?: boolean; hasEmployeeReportsAccess?: boolean }>('/get-user-info')
+          const userInfo = await apiRequest<{ isAdmin: boolean; theme?: string; clubPermissions?: string[]; hasClubAccess?: boolean; hasClubBossAccess?: boolean; hasClubCoachAccess?: boolean; hasEmployeeReportsAccess?: boolean }>('/get-user-info')
           const resolvedTheme: 'light' | 'dark' =
             userInfo?.theme === 'dark' ? 'dark' : 'light'
           if (userInfo && typeof userInfo.isAdmin === 'boolean') {
@@ -111,6 +112,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
               clubPermissions: userInfo.clubPermissions || [],
               hasClubAccess: !!userInfo.hasClubAccess,
               hasClubBossAccess: !!userInfo.hasClubBossAccess,
+              hasClubCoachAccess: !!userInfo.hasClubCoachAccess,
               hasEmployeeReportsAccess: !!userInfo.hasEmployeeReportsAccess,
             })
           } else {
@@ -120,6 +122,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
               clubPermissions: [],
               hasClubAccess: false,
               hasClubBossAccess: false,
+              hasClubCoachAccess: false,
               hasEmployeeReportsAccess: false,
             })
           }
