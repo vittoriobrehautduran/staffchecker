@@ -151,7 +151,10 @@ function LessonEditor({
   const resourceLabel = sport === 'tennis' ? 'Bana' : 'Bord'
   const safeStartTime = startTime || '10:00'
   const safeDuration = durationMinutes > 0 ? durationMinutes : 60
-  const courtSelectValue = resourceId > 0 ? String(resourceId) : undefined
+  // Keep Select always controlled (never undefined) to avoid React warnings.
+  const NONE = '__none__'
+  const courtSelectValue = resourceId > 0 ? String(resourceId) : NONE
+  const coachSelectValue = coachIds[0] ? String(coachIds[0]) : NONE
 
   function resourceDisplayName(resource: (typeof resources)[0]) {
     if (resource.label?.trim()) {
@@ -214,12 +217,17 @@ function LessonEditor({
           ) : (
             <Select
               value={courtSelectValue}
-              onValueChange={(value) => onChange({ resourceId: Number(value) })}
+              onValueChange={(value) =>
+                onChange({ resourceId: value === NONE ? 0 : Number(value) })
+              }
             >
               <SelectTrigger>
                 <SelectValue placeholder={`Välj ${resourceLabel.toLowerCase()}`} />
               </SelectTrigger>
               <SelectContent>
+                <SelectItem value={NONE} disabled>
+                  Välj {resourceLabel.toLowerCase()}
+                </SelectItem>
                 {resources.map((resource) => (
                   <SelectItem key={resource.id} value={String(resource.id)}>
                     {resourceDisplayName(resource)}
@@ -236,15 +244,16 @@ function LessonEditor({
             <p className="text-sm text-muted-foreground">Lägg till tränare under Inställningar.</p>
           ) : (
             <Select
-              value={coachIds[0] ? String(coachIds[0]) : undefined}
+              value={coachSelectValue}
               onValueChange={(value) => {
-                onChange({ coachIds: value ? [Number(value)] : [] })
+                onChange({ coachIds: value === NONE ? [] : [Number(value)] })
               }}
             >
               <SelectTrigger>
                 <SelectValue placeholder="Välj tränare" />
               </SelectTrigger>
               <SelectContent>
+                <SelectItem value={NONE}>Ingen tränare</SelectItem>
                 {coaches.map((coach) => (
                   <SelectItem key={coach.id} value={String(coach.id)}>
                     {coach.name}
@@ -257,38 +266,40 @@ function LessonEditor({
 
         <div className="space-y-2">
           <Label>Spelare</Label>
-            {playerNames.map((name, index) => (
-              <div key={index} className="flex gap-2">
-                <Input
-                  placeholder="Spelarens namn"
-                  value={name}
-                  onChange={(event) => {
-                    const next = [...playerNames]
-                    next[index] = event.target.value
-                    onChange({ playerNames: next })
-                  }}
-                />
-                <Button
-                  type="button"
-                  variant="outline"
-                  size="icon"
-                  onClick={() => onChange({ playerNames: [...playerNames, ''] })}
-                  title="Lägg till spelare"
-                >
-                  +
-                </Button>
-              </div>
-            ))}
-          {playerNames.length === 0 && (
-            <Button
-              type="button"
-              variant="outline"
-              size="sm"
-              onClick={() => onChange({ playerNames: [''] })}
-            >
-              + Spelare
-            </Button>
-          )}
+          {playerNames.map((name, index) => (
+            <div key={`player-${index}`} className="flex gap-2">
+              <Input
+                placeholder="Spelarens namn"
+                value={name}
+                onChange={(event) => {
+                  const next = [...playerNames]
+                  next[index] = event.target.value
+                  onChange({ playerNames: next })
+                }}
+              />
+              <Button
+                type="button"
+                variant="outline"
+                size="icon"
+                title="Ta bort spelare"
+                aria-label="Ta bort spelare"
+                onClick={() => {
+                  const next = playerNames.filter((_, i) => i !== index)
+                  onChange({ playerNames: next })
+                }}
+              >
+                −
+              </Button>
+            </div>
+          ))}
+          <Button
+            type="button"
+            variant="outline"
+            size="sm"
+            onClick={() => onChange({ playerNames: [...playerNames, ''] })}
+          >
+            + Lägg till spelare
+          </Button>
         </div>
 
         {isDraft && onSaveDraft && (

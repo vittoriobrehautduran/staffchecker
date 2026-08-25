@@ -149,11 +149,19 @@ function SessionCard({
 
           {availableCoaches.length > 0 && (
             <div className="flex flex-wrap items-end gap-2 pt-1">
-              <Select value={selectedCoachId} onValueChange={setSelectedCoachId}>
+              <Select
+                value={selectedCoachId || '__none__'}
+                onValueChange={(value) =>
+                  setSelectedCoachId(value === '__none__' ? '' : value)
+                }
+              >
                 <SelectTrigger className="w-[12rem]">
                   <SelectValue placeholder="Lägg till tränare" />
                 </SelectTrigger>
                 <SelectContent>
+                  <SelectItem value="__none__" disabled>
+                    Lägg till tränare
+                  </SelectItem>
                   {availableCoaches.map((coach) => (
                     <SelectItem key={coach.id} value={String(coach.id)}>
                       {coach.name}

@@ -11,6 +11,13 @@ import { ClubAttendanceSection } from '@/pages/club/ClubAttendanceSection'
 import { ClubDayPanel } from '@/pages/club/ClubDayPanel'
 import { ClubPdfImportPanel } from '@/pages/club/ClubPdfImportPanel'
 import { ClubSettingsPanel } from '@/pages/club/ClubSettingsPanel'
+import {
+  ClubWeekDateNav,
+  todayDateStrLocal,
+  weekdayFromDateStr,
+  addDaysToDateStr,
+  mondayOfWeek,
+} from '@/pages/club/ClubWeekDateNav'
 import type { ClubLesson, ClubPayload, LessonSport, LocalLessonDraft } from '@/pages/club/clubTypes'
 import { normalizeClubPayload, WEEKDAYS } from '@/pages/club/clubTypes'
 import {
@@ -48,7 +55,8 @@ export default function Club() {
   const [showSlowLoadHint, setShowSlowLoadHint] = useState(false)
   const [isLoading, setIsLoading] = useState(false)
   const [isSavingLesson, setIsSavingLesson] = useState(false)
-  const [activeWeekday, setActiveWeekday] = useState(1)
+  const [activeWeekday, setActiveWeekday] = useState(() => weekdayFromDateStr(todayDateStrLocal()))
+  const [scheduleDate, setScheduleDate] = useState(todayDateStrLocal)
   const [activeSport, setActiveSport] = useState<LessonSport>('tennis')
   const [settingsOpen, setSettingsOpen] = useState(false)
   const [importOpen, setImportOpen] = useState(false)
@@ -375,6 +383,7 @@ export default function Club() {
     const nextPlayers =
       patch.playerNames ?? lesson.players.map((player) => player.name)
 
+    // Always update local UI immediately (so empty "new player" fields stay visible).
     patchLessonInState(lesson.id, lesson.weekday, {
       startTime: nextStart,
       durationMinutes: nextDuration,
@@ -383,11 +392,30 @@ export default function Club() {
       playerNames: nextPlayers,
     })
 
+    // Don't hit the server just for adding/removing blank player slots — empty names
+    // would be stripped on save and the reload would wipe the input.
+    if (patch.playerNames) {
+      const nextTrimmed = nextPlayers.map((name) => name.trim()).filter(Boolean)
+      const prevTrimmed = lesson.players.map((player) => player.name.trim()).filter(Boolean)
+      const sameNamedPlayers =
+        nextTrimmed.length === prevTrimmed.length &&
+        nextTrimmed.every((name, index) => name === prevTrimmed[index])
+      const onlyUiFieldsChanged =
+        sameNamedPlayers &&
+        nextStart === lesson.startTime &&
+        nextDuration === lesson.durationMinutes &&
+        nextResource === lesson.resourceId &&
+        JSON.stringify(nextCoachIds) === JSON.stringify(lesson.coachIds)
+      if (onlyUiFieldsChanged) {
+        return
+      }
+    }
+
     saveLessonTimeoutRef.current = setTimeout(() => {
       void (async () => {
         setIsSavingLesson(true)
         try {
-          await postClubAdmin(
+          const payload = await postClubAdmin(
             {
               operation: 'update_lesson',
               lessonId: lesson.id,
@@ -401,6 +429,22 @@ export default function Club() {
             },
             { background: true }
           )
+
+          // Keep any trailing empty input slots the user still has open after server reload.
+          const emptySlots = nextPlayers.filter((name) => !name.trim()).length
+          if (emptySlots > 0 && payload) {
+            const saved = payload.lessonsByWeekday?.[String(lesson.weekday)]?.find(
+              (row) => row.id === lesson.id
+            )
+            if (saved) {
+              patchLessonInState(lesson.id, lesson.weekday, {
+                playerNames: [
+                  ...saved.players.map((player) => player.name),
+                  ...Array.from({ length: emptySlots }, () => ''),
+                ],
+              })
+            }
+          }
         } catch {
           void loadClubData()
         } finally {
@@ -591,19 +635,24 @@ export default function Club() {
               </p>
             ) : (
               <>
-                <div className="flex flex-wrap gap-2">
-                  {WEEKDAYS.map((day) => (
-                    <Button
-                      key={day.value}
-                      type="button"
-                      size="sm"
-                      variant={activeWeekday === day.value ? 'default' : 'outline'}
-                      onClick={() => setActiveWeekday(day.value)}
-                    >
-                      {day.label}
-                    </Button>
-                  ))}
-                </div>
+                <ClubWeekDateNav
+                  selectedDate={scheduleDate}
+                  activeWeekday={activeWeekday}
+                  onSelectDate={(dateStr) => {
+                    setScheduleDate(dateStr)
+                    setActiveWeekday(weekdayFromDateStr(dateStr))
+                  }}
+                  onSelectWeekday={(weekday) => {
+                    setActiveWeekday(weekday)
+                    const weekMonday = mondayOfWeek(scheduleDate)
+                    setScheduleDate(addDaysToDateStr(weekMonday, weekday - 1))
+                  }}
+                />
+
+                <p className="text-xs text-muted-foreground">
+                  Du redigerar veckomallen för {activeDayLabel.toLowerCase()} — samma lektioner
+                  varje vecka. Använd kalendern för att hoppa mellan datum.
+                </p>
 
                 {data && canPlanSchedule ? (
                   <ClubDayPanel
