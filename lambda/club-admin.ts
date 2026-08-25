@@ -775,6 +775,40 @@ export const handler = async (
       }
     }
 
+    const knownOperations = new Set([
+      'get_day',
+      'update_session',
+      'get_audit_log',
+      'get_notifications',
+      'mark_notifications_read',
+      'get_attendance_history',
+      'get_club_members',
+      'update_club_member_permissions',
+      'get_closures',
+      'add_rod_dag',
+      'remove_rod_dag',
+      'add_lov_range',
+      'remove_lov_range',
+      'update_club_settings',
+      'add_resource',
+      'add_coach',
+      'delete_coach',
+      'add_lesson',
+      'update_lesson',
+      'delete_lesson',
+      'import_schedule',
+      'review_schedule_import',
+      'clear_schedule',
+    ])
+
+    if (!knownOperations.has(operation)) {
+      return {
+        statusCode: 400,
+        headers: corsHeaders(origin),
+        body: JSON.stringify({ message: `Okänd operation: ${operation}` }),
+      }
+    }
+
     const bossOnlyOperations = new Set([
       'update_club_settings',
       'add_resource',
@@ -1620,10 +1654,12 @@ export const handler = async (
       }
     }
 
+    // Settings / coaches / lessons mutations fall through here and return refreshed club data.
+    const payload = await getClubPayload(clubId)
     return {
-      statusCode: 400,
+      statusCode: 200,
       headers: corsHeaders(origin),
-      body: JSON.stringify({ message: `Okänd operation: ${operation}` }),
+      body: JSON.stringify(payload),
     }
   } catch (error: unknown) {
     const err = error as { message?: string; code?: string }
