@@ -1,6 +1,6 @@
 import { createHash } from 'crypto'
 import { getDayClosure } from './club-closures'
-import { sql } from './database'
+import { isUniqueViolation, isUndefinedTable, sql } from './database'
 
 export type AttendanceStatus = 'present' | 'absent' | 'unknown'
 
@@ -148,115 +148,56 @@ export async function notifyClubBosses(
   `
 }
 
-async function ensureSessionRoster(sessionId: number, classId: number, templateId: number | null) {
-  const existing = (await sql`
-    SELECT COUNT(*)::int AS count
-    FROM club_session_players
-    WHERE session_id = ${sessionId}
-  `) as { count: number }[]
+async function ensureSessionRosters(sessionIds: number[]): Promise<void> {
+  if (sessionIds.length === 0) return
 
-  if (Number(existing[0]?.count ?? 0) > 0) return
-
-  const classPlayers = (await sql`
-    SELECT id, player_name, sort_order
-    FROM club_class_players
-    WHERE class_id = ${classId}
-      AND is_active = true
-    ORDER BY sort_order ASC, id ASC
-  `) as { id: number; player_name: string; sort_order: number }[]
-
-  for (const player of classPlayers) {
-    try {
-      await sql`
-        INSERT INTO club_session_players (
-          session_id, player_id, player_name, is_day_addition, is_removed, sort_order
+  // One insert per day instead of one round-trip per player. Skip sessions that
+  // already have a roster so we don't undo day-specific removals.
+  try {
+    await sql`
+      INSERT INTO club_session_players (
+        session_id, player_id, player_name, is_day_addition, is_removed, sort_order
+      )
+      SELECT DISTINCT ON (s.id, lower(p.player_name))
+        s.id,
+        p.id,
+        p.player_name,
+        false,
+        false,
+        p.sort_order
+      FROM club_sessions s
+      INNER JOIN club_class_players p
+        ON p.class_id = s.class_id
+       AND p.is_active = true
+      WHERE s.id = ANY(${sessionIds}::int[])
+        AND NOT EXISTS (
+          SELECT 1
+          FROM club_session_players existing
+          WHERE existing.session_id = s.id
         )
-        VALUES (
-          ${sessionId},
-          ${player.id},
-          ${player.player_name},
-          false,
-          false,
-          ${player.sort_order}
-        )
-      `
-    } catch (error: unknown) {
-      const err = error as { code?: string }
-      // Another parallel request may have inserted the same roster row first.
-      if (err?.code !== '23505') throw error
-    }
+      ORDER BY s.id, lower(p.player_name), p.sort_order ASC, p.id ASC
+    `
+  } catch (error: unknown) {
+    if (!isUniqueViolation(error)) throw error
   }
 
-  const coachIds: number[] = []
-  if (templateId) {
-    const templateCoaches = (await sql`
-      SELECT coach_id
-      FROM club_schedule_template_coaches
-      WHERE template_id = ${templateId}
-      ORDER BY coach_id ASC
-    `) as { coach_id: number }[]
-    coachIds.push(...templateCoaches.map((row) => row.coach_id))
-  }
-
-  for (const coachId of coachIds) {
+  try {
     await sql`
       INSERT INTO club_session_coaches (session_id, coach_id, is_day_addition, is_removed)
-      VALUES (${sessionId}, ${coachId}, false, false)
+      SELECT s.id, tc.coach_id, false, false
+      FROM club_sessions s
+      INNER JOIN club_schedule_template_coaches tc ON tc.template_id = s.template_id
+      WHERE s.id = ANY(${sessionIds}::int[])
+        AND NOT EXISTS (
+          SELECT 1
+          FROM club_session_coaches existing
+          WHERE existing.session_id = s.id
+        )
       ON CONFLICT (session_id, coach_id) DO NOTHING
     `
+  } catch (error: unknown) {
+    if (!isUndefinedTable(error) && !isUniqueViolation(error)) throw error
   }
-}
-
-async function upsertSessionFromTemplate(
-  clubId: number,
-  dateStr: string,
-  template: {
-    id: number
-    start_time: string
-    end_time: string
-    resource_id: number
-    class_id: number
-    default_coach_id: number | null
-  }
-): Promise<number> {
-  const startTime = formatTimeValue(template.start_time)
-  const endTime = formatTimeValue(template.end_time)
-
-  const inserted = (await sql`
-    INSERT INTO club_sessions (
-      club_id,
-      session_date,
-      start_time,
-      end_time,
-      resource_id,
-      class_id,
-      planned_coach_id,
-      actual_coach_id,
-      status,
-      source,
-      template_id
-    )
-    VALUES (
-      ${clubId},
-      ${dateStr}::date,
-      ${startTime},
-      ${endTime},
-      ${template.resource_id},
-      ${template.class_id},
-      ${template.default_coach_id},
-      ${template.default_coach_id},
-      'scheduled',
-      'template',
-      ${template.id}
-    )
-    ON CONFLICT (club_id, session_date, resource_id, start_time)
-    DO UPDATE SET updated_at = CURRENT_TIMESTAMP
-    RETURNING id, class_id, template_id
-  `) as { id: number; class_id: number; template_id: number | null }[]
-
-  const session = inserted[0]
-  await ensureSessionRoster(session.id, session.class_id, session.template_id ?? template.id)
-  return session.id
 }
 
 export async function ensureSessionsForDate(clubId: number, dateStr: string): Promise<void> {
@@ -286,21 +227,70 @@ export async function ensureSessionsForDate(clubId: number, dateStr: string): Pr
     default_coach_id: number | null
   }[]
 
-  for (const template of templates) {
-    const cancelledOverride = (await sql`
-      SELECT 1
-      FROM club_schedule_slot_overrides
-      WHERE club_id = ${clubId}
-        AND override_date = ${dateStr}::date
-        AND template_id = ${template.id}
-        AND action = 'cancel'
-      LIMIT 1
-    `) as { '?column?': number }[]
+  if (templates.length === 0) return
 
-    if (cancelledOverride.length) continue
+  const cancelledRows = (await sql`
+    SELECT template_id
+    FROM club_schedule_slot_overrides
+    WHERE club_id = ${clubId}
+      AND override_date = ${dateStr}::date
+      AND action = 'cancel'
+      AND template_id IS NOT NULL
+  `) as { template_id: number }[]
 
-    await upsertSessionFromTemplate(clubId, dateStr, template)
-  }
+  const cancelledIds = new Set(cancelledRows.map((row) => Number(row.template_id)))
+  const activeTemplates = templates.filter((template) => !cancelledIds.has(template.id))
+  if (activeTemplates.length === 0) return
+
+  const templateIds = activeTemplates.map((template) => template.id)
+  const startTimes = activeTemplates.map((template) => formatTimeValue(template.start_time))
+  const endTimes = activeTemplates.map((template) => formatTimeValue(template.end_time))
+  const resourceIds = activeTemplates.map((template) => template.resource_id)
+  const classIds = activeTemplates.map((template) => template.class_id)
+  const coachIds = activeTemplates.map((template) => template.default_coach_id ?? 0)
+
+  const sessions = (await sql`
+    INSERT INTO club_sessions (
+      club_id,
+      session_date,
+      start_time,
+      end_time,
+      resource_id,
+      class_id,
+      planned_coach_id,
+      actual_coach_id,
+      status,
+      source,
+      template_id
+    )
+    SELECT
+      ${clubId},
+      ${dateStr}::date,
+      x.start_time::time,
+      x.end_time::time,
+      x.resource_id,
+      x.class_id,
+      NULLIF(x.coach_id, 0),
+      NULLIF(x.coach_id, 0),
+      'scheduled',
+      'template',
+      x.template_id
+    FROM unnest(
+      ${templateIds}::int[],
+      ${startTimes}::text[],
+      ${endTimes}::text[],
+      ${resourceIds}::int[],
+      ${classIds}::int[],
+      ${coachIds}::int[]
+    ) AS x(template_id, start_time, end_time, resource_id, class_id, coach_id)
+    ON CONFLICT (club_id, session_date, resource_id, start_time)
+    DO UPDATE SET
+      updated_at = CURRENT_TIMESTAMP,
+      template_id = COALESCE(club_sessions.template_id, EXCLUDED.template_id)
+    RETURNING id
+  `) as { id: number }[]
+
+  await ensureSessionRosters(sessions.map((session) => session.id))
 }
 
 async function loadSessionCoaches(sessionId: number) {
@@ -431,9 +421,8 @@ export async function getDayPayloadForRequest(
   try {
     await ensureSessionsForDate(clubId, dateStr)
   } catch (error: unknown) {
-    const err = error as { code?: string }
     // Two coaches loading the same new day at once can race on session creation.
-    if (err?.code !== '23505') throw error
+    if (!isUniqueViolation(error)) throw error
   }
   const version = await getDayRevision(clubId, dateStr)
   const clientVersion = normalizeIfNoneMatch(ifNoneMatch)
