@@ -129,6 +129,8 @@ export function ClubAttendanceSection({ isBoss, clubName }: Props) {
         applyDayPayload(result.data, result.version)
       } catch (error: unknown) {
         if (requestId !== loadDayRequestRef.current) return
+        // Silent polls must never toast — otherwise a failed närvaro load spams every 2s.
+        if (options?.silent) return
         if (!options?.background || !cached) {
           const { title, description } = attendanceErrorMessage(error, 'load')
           toast({

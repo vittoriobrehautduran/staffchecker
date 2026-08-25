@@ -47,6 +47,18 @@ export function attendanceErrorMessage(
     }
   }
 
+  if (
+    lower.includes('club_schema_outdated') ||
+    lower.includes('saknar tabeller') ||
+    lower.includes('club-migrationerna')
+  ) {
+    return {
+      title: defaultTitle,
+      description:
+        'Produktionsdatabasen saknar klubb-migrationer. Kör SQL-filerna i database/ på Neon production.',
+    }
+  }
+
   if (message.includes('redan upptagen')) {
     if (isLoad) {
       return {

@@ -53,22 +53,28 @@ export async function getDayClosure(clubId: number, dateStr: string): Promise<Da
     }
   }
 
-  const lovRows = (await sql`
-    SELECT label
-    FROM club_closure_ranges
-    WHERE club_id = ${clubId}
-      AND ${dateStr}::date BETWEEN from_date AND to_date
-    ORDER BY from_date DESC, id DESC
-    LIMIT 1
-  `) as { label: string | null }[]
+  try {
+    const lovRows = (await sql`
+      SELECT label
+      FROM club_closure_ranges
+      WHERE club_id = ${clubId}
+        AND ${dateStr}::date BETWEEN from_date AND to_date
+      ORDER BY from_date DESC, id DESC
+      LIMIT 1
+    `) as { label: string | null }[]
 
-  if (lovRows.length > 0) {
-    const label = lovRows[0].label?.trim()
-    return {
-      closed: true,
-      type: 'lov',
-      label: label || 'lov/tävling',
+    if (lovRows.length > 0) {
+      const label = lovRows[0].label?.trim()
+      return {
+        closed: true,
+        type: 'lov',
+        label: label || 'lov/tävling',
+      }
     }
+  } catch (error: unknown) {
+    const pgError = error as { code?: string }
+    // Lov-ranges table may be missing until migration-club-closures.sql is applied.
+    if (pgError?.code !== '42P01') throw error
   }
 
   return { closed: false, type: null, label: null }
