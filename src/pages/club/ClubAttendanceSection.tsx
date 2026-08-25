@@ -129,6 +129,7 @@ export function ClubAttendanceSection({ isBoss, clubName }: Props) {
         applyDayPayload(result.data, result.version)
       } catch (error: unknown) {
         if (requestId !== loadDayRequestRef.current) return
+        if (options?.silent) return
         if (!options?.background || !cached) {
           const { title, description } = attendanceErrorMessage(error, 'load')
           toast({

@@ -1,5 +1,5 @@
 import { APIGatewayProxyEvent, APIGatewayProxyResult } from 'aws-lambda'
-import { sql } from './utils/database'
+import { isUniqueViolation, sql } from './utils/database'
 import { getUserIdFromCognitoSession } from './utils/cognito-auth'
 import {
   resolveClubAccess,
@@ -1620,6 +1620,27 @@ export const handler = async (
       }
     }
 
+    // Settings / schema mutations fall through here after writing. The UI expects the
+    // full club payload back so the veckoschema and coach list stay in sync.
+    const clubPayloadOperations = new Set([
+      'update_club_settings',
+      'add_resource',
+      'add_coach',
+      'delete_coach',
+      'add_lesson',
+      'update_lesson',
+      'delete_lesson',
+    ])
+
+    if (clubPayloadOperations.has(operation)) {
+      const payload = await getClubPayload(clubId)
+      return {
+        statusCode: 200,
+        headers: corsHeaders(origin),
+        body: JSON.stringify(payload),
+      }
+    }
+
     return {
       statusCode: 400,
       headers: corsHeaders(origin),
@@ -1629,7 +1650,7 @@ export const handler = async (
     const err = error as { message?: string; code?: string }
     console.error('Error in club-admin:', error)
 
-    if (err?.code === '23505') {
+    if (isUniqueViolation(error) || err?.code === '23505') {
       return {
         statusCode: 400,
         headers: corsHeaders(origin),
