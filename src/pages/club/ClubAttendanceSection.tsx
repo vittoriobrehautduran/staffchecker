@@ -129,7 +129,8 @@ export function ClubAttendanceSection({ isBoss, clubName }: Props) {
         applyDayPayload(result.data, result.version)
       } catch (error: unknown) {
         if (requestId !== loadDayRequestRef.current) return
-        if (!options?.background || !cached) {
+        // Polls are silent so a failing load does not spam a toast every couple of seconds.
+        if (!options?.silent && (!options?.background || !cached)) {
           const { title, description } = attendanceErrorMessage(error, 'load')
           toast({
             title,

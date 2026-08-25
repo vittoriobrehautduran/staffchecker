@@ -4,11 +4,21 @@ const ALLOWED_ORIGINS = [
   'http://localhost:5173',
   'https://staffcheck.spangatbk.se',
   'https://staging.d3jub8c52hgrc6.amplifyapp.com',
+  'https://main.d3jub8c52hgrc6.amplifyapp.com',
 ]
 
+// Amplify also serves PR/preview URLs on the same app id.
+const AMPLIFY_APP_ORIGIN = /^https:\/\/[a-z0-9-]+\.d3jub8c52hgrc6\.amplifyapp\.com$/i
+
 export function getCorsOrigin(event: APIGatewayProxyEvent): string {
-  const requestOrigin = event.headers?.Origin || event.headers?.origin || '*'
-  return ALLOWED_ORIGINS.includes(requestOrigin) ? requestOrigin : ALLOWED_ORIGINS[0]
+  const requestOrigin = event.headers?.Origin || event.headers?.origin || ''
+  if (
+    requestOrigin &&
+    (ALLOWED_ORIGINS.includes(requestOrigin) || AMPLIFY_APP_ORIGIN.test(requestOrigin))
+  ) {
+    return requestOrigin
+  }
+  return ALLOWED_ORIGINS[0]
 }
 
 export function corsJsonHeaders(origin: string, methods = 'GET, OPTIONS') {
