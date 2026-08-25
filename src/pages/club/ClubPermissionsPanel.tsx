@@ -32,13 +32,22 @@ export function ClubPermissionsPanel({ isSaving = false }: Props) {
   const loadMembers = useCallback(async () => {
     setIsLoading(true)
     try {
-      const result = await apiRequest<{ members: ClubMember[] }>('/club-admin', {
+      const result = await apiRequest<{ members?: ClubMember[] }>('/club-admin', {
         method: 'POST',
         body: JSON.stringify({ operation: 'get_club_members' }),
       })
-      setMembers(result.members || [])
+
+      // Old club-admin builds ignore this op and return the club payload instead.
+      if (!Array.isArray(result.members)) {
+        throw new Error(
+          'Servern stödjer inte behörighetslistan ännu. Deploya club-admin Lambda.'
+        )
+      }
+
+      setMembers(result.members)
     } catch (error: unknown) {
       const err = error as { message?: string }
+      setMembers([])
       toast({
         title: 'Kunde inte ladda konton',
         description: err?.message || 'Ett fel uppstod',
@@ -112,9 +121,21 @@ export function ClubPermissionsPanel({ isSaving = false }: Props) {
 
   if (members.length === 0) {
     return (
-      <p className="text-sm text-muted-foreground">
-        Inga registrerade konton i appen ännu.
-      </p>
+      <div className="space-y-3">
+        <p className="text-sm text-muted-foreground">
+          Inga konton kunde visas. Antingen saknas rader i{' '}
+          <code className="text-xs">users</code>, eller så behöver{' '}
+          <code className="text-xs">club-admin</code> deployas med behörighets-API:t.
+        </p>
+        <Button
+          type="button"
+          variant="outline"
+          size="sm"
+          onClick={() => void loadMembers()}
+        >
+          Försök igen
+        </Button>
+      </div>
     )
   }
 
