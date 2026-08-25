@@ -22,21 +22,12 @@ import {
   removeLovRange,
   removeRodDay,
 } from './utils/club-closures'
+import { getCorsOrigin } from './utils/cors'
 import { reviewScheduleImportWithAi } from './utils/schedule-import-review'
 
 type ResourceType = 'court' | 'table'
 type SportType = 'tennis' | 'bordtennis' | 'both'
 type LessonSport = 'tennis' | 'bordtennis'
-
-function getCorsOrigin(event: APIGatewayProxyEvent): string {
-  const requestOrigin = event.headers?.Origin || event.headers?.origin || '*'
-  const allowedOrigins = [
-    'http://localhost:5173',
-    'https://staffcheck.spangatbk.se',
-    'https://staging.d3jub8c52hgrc6.amplifyapp.com',
-  ]
-  return allowedOrigins.includes(requestOrigin) ? requestOrigin : allowedOrigins[0]
-}
 
 function corsHeaders(origin: string, extra?: { etag?: string }) {
   return {
@@ -1620,6 +1611,26 @@ export const handler = async (
       }
     }
 
+    // Settings / coaches / lessons mutate above and fall through here with a fresh payload.
+    const scheduleMutations = new Set([
+      'update_club_settings',
+      'add_resource',
+      'add_coach',
+      'delete_coach',
+      'add_lesson',
+      'update_lesson',
+      'delete_lesson',
+    ])
+
+    if (scheduleMutations.has(operation)) {
+      const payload = await getClubPayload(clubId)
+      return {
+        statusCode: 200,
+        headers: corsHeaders(origin),
+        body: JSON.stringify(payload),
+      }
+    }
+
     return {
       statusCode: 400,
       headers: corsHeaders(origin),
@@ -1635,6 +1646,19 @@ export const handler = async (
         headers: corsHeaders(origin),
         body: JSON.stringify({
           message: 'Den här tiden och banan/bordet är redan upptagen för den veckodagen.',
+        }),
+      }
+    }
+
+    // 42P01 = undefined_table, 42703 = undefined_column — usually prod missing a club migration.
+    if (err?.code === '42P01' || err?.code === '42703') {
+      return {
+        statusCode: 500,
+        headers: corsHeaders(origin),
+        body: JSON.stringify({
+          message:
+            'Klubbdatabasen saknar tabeller/kolumner. Kör club-migrationerna på Neon production (se database/).',
+          code: 'CLUB_SCHEMA_OUTDATED',
         }),
       }
     }
