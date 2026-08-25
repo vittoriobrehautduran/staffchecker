@@ -21,6 +21,7 @@ const buildRedirectUrls = (envUrl: string | undefined): string[] => {
     normalizeRootUrl(envUrl || ''),
     'https://staffcheck.spangatbk.se/',
     'https://staging.d3jub8c52hgrc6.amplifyapp.com/',
+    'https://main.d3jub8c52hgrc6.amplifyapp.com/',
     'http://localhost:5173/',
   ].filter(Boolean)
 

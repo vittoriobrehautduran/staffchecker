@@ -23,20 +23,11 @@ import {
   removeRodDay,
 } from './utils/club-closures'
 import { reviewScheduleImportWithAi } from './utils/schedule-import-review'
+import { getCorsOrigin } from './utils/cors'
 
 type ResourceType = 'court' | 'table'
 type SportType = 'tennis' | 'bordtennis' | 'both'
 type LessonSport = 'tennis' | 'bordtennis'
-
-function getCorsOrigin(event: APIGatewayProxyEvent): string {
-  const requestOrigin = event.headers?.Origin || event.headers?.origin || '*'
-  const allowedOrigins = [
-    'http://localhost:5173',
-    'https://staffcheck.spangatbk.se',
-    'https://staging.d3jub8c52hgrc6.amplifyapp.com',
-  ]
-  return allowedOrigins.includes(requestOrigin) ? requestOrigin : allowedOrigins[0]
-}
 
 function corsHeaders(origin: string, extra?: { etag?: string }) {
   return {
@@ -1617,6 +1608,26 @@ export const handler = async (
         statusCode: 200,
         headers: corsHeaders(origin),
         body: JSON.stringify({ ...payload, deletedCount }),
+      }
+    }
+
+    // These ops fall through on purpose: one shared payload keeps the veckoschema UI in sync.
+    const scheduleMutations = new Set([
+      'update_club_settings',
+      'add_resource',
+      'add_coach',
+      'delete_coach',
+      'add_lesson',
+      'update_lesson',
+      'delete_lesson',
+    ])
+
+    if (scheduleMutations.has(operation)) {
+      const payload = await getClubPayload(clubId)
+      return {
+        statusCode: 200,
+        headers: corsHeaders(origin),
+        body: JSON.stringify(payload),
       }
     }
 
