@@ -1,6 +1,5 @@
 import { useMemo, useState } from 'react'
 import { Button } from '@/components/ui/button'
-import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card'
 import { Label } from '@/components/ui/label'
 import {
   Select,
@@ -257,15 +256,7 @@ export function ClubPdfImportPanel({ data, isBusy, onImport, onImportComplete }:
   const coachOptions = data.coaches
 
   return (
-    <Card>
-      <CardHeader>
-        <CardTitle className="text-base">Importera schema från PDF</CardTitle>
-        <CardDescription>
-          Ladda upp klubbens PDF (t.ex. 35 sidor). Programmet grupperar spelare till lektioner per
-          tränare, dag, tid och bana. Granska innan du importerar.
-        </CardDescription>
-      </CardHeader>
-      <CardContent className="space-y-4">
+    <div className="space-y-4">
         <div className="flex flex-col gap-3 sm:flex-row sm:items-end">
           <div className="flex-1 space-y-2">
             <Label htmlFor="club-pdf-upload">PDF-fil</Label>
@@ -587,7 +578,6 @@ export function ClubPdfImportPanel({ data, isBusy, onImport, onImportComplete }:
             </Button>
           </>
         )}
-      </CardContent>
-    </Card>
+    </div>
   )
 }

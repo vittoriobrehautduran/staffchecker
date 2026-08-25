@@ -1,11 +1,11 @@
 import type { ReactNode } from 'react'
 import { Button } from '@/components/ui/button'
-import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card'
 import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
 import type { ClubCoach, ClubPayload, ClubResource } from './clubTypes'
 import { ClubClearScheduleSection } from './ClubClearScheduleSection'
 import { ClubClosuresPanel } from './ClubClosuresPanel'
+import { ClubSoftPanel } from './clubUi'
 
 type Props = {
   data: ClubPayload
@@ -116,12 +116,7 @@ export function ClubSettingsPanel({
   const tables = data.resources.filter((resource) => resource.resource_type === 'table')
 
   return (
-    <Card>
-      <CardHeader className="pb-4">
-        <CardTitle className="text-base">Inställningar</CardTitle>
-        <CardDescription>{data.club.name}</CardDescription>
-      </CardHeader>
-      <CardContent>
+    <ClubSoftPanel title="Inställningar" description={data.club.name}>
         <SettingsSection
           title="Sporter"
           description="Välj vilka sporter klubben har. Spara innan du lägger till banor eller bord."
@@ -235,8 +230,7 @@ export function ClubSettingsPanel({
         <section className="pt-6">
           <ClubClearScheduleSection isBusy={isSaving} onClearSchedule={onClearSchedule} />
         </section>
-      </CardContent>
-    </Card>
+    </ClubSoftPanel>
   )
 }
 

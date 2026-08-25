@@ -90,7 +90,7 @@ export function ClubWeekDateNav({
             type="button"
             variant="outline"
             size="icon"
-            className="h-8 w-8"
+            className="h-11 w-11"
             onClick={() => goWeek(-1)}
             aria-label="Föregående vecka"
           >
@@ -100,7 +100,7 @@ export function ClubWeekDateNav({
             type="button"
             variant="outline"
             size="icon"
-            className="h-8 w-8"
+            className="h-11 w-11"
             onClick={() => goWeek(1)}
             aria-label="Nästa vecka"
           >
@@ -110,7 +110,7 @@ export function ClubWeekDateNav({
             type="button"
             variant="ghost"
             size="sm"
-            className="ml-1"
+            className="ml-1 min-h-11 px-3"
             onClick={() => onSelectDate(todayDateStrLocal())}
           >
             Idag
@@ -120,7 +120,7 @@ export function ClubWeekDateNav({
           type="button"
           variant={calendarOpen ? 'secondary' : 'outline'}
           size="sm"
-          className="gap-2"
+          className="min-h-11 gap-2"
           onClick={() => setCalendarOpen((open) => !open)}
         >
           <CalendarDays className="h-4 w-4" />
@@ -128,9 +128,9 @@ export function ClubWeekDateNav({
         </Button>
       </div>
 
-      <p className="text-sm text-muted-foreground capitalize">{formatFullDate(selectedDate)}</p>
+      <p className="text-sm capitalize text-muted-foreground">{formatFullDate(selectedDate)}</p>
 
-      <div className="grid grid-cols-7 gap-1">
+      <div className="grid grid-cols-7 gap-1.5">
         {weekDays.map((day) => {
           const isActiveWeekday = activeWeekday === day.value
           const isSelectedDate = selectedDate === day.dateStr
@@ -143,23 +143,25 @@ export function ClubWeekDateNav({
                 onSelectDate(day.dateStr)
               }}
               className={cn(
-                'flex flex-col items-center rounded-md border px-1 py-2 text-center transition-colors',
+                'flex min-h-[4.25rem] touch-manipulation flex-col items-center justify-center rounded-xl border px-1 py-2 text-center transition-colors duration-150',
                 isSelectedDate || isActiveWeekday
-                  ? 'border-primary bg-primary text-primary-foreground'
-                  : 'border-border hover:bg-muted/60'
+                  ? 'border-primary bg-primary text-primary-foreground shadow-sm'
+                  : 'border-border/80 bg-background hover:bg-muted/60'
               )}
             >
               <span className="text-[10px] font-medium uppercase tracking-wide opacity-80">
                 {day.label.slice(0, 3)}
               </span>
-              <span className="text-sm font-semibold">{formatDayMonth(day.dateStr).split(' ')[0]}</span>
+              <span className="text-sm font-semibold">
+                {formatDayMonth(day.dateStr).split(' ')[0]}
+              </span>
             </button>
           )
         })}
       </div>
 
       {calendarOpen && (
-        <div className="rounded-lg border border-border p-3" data-testid="schedule-calendar">
+        <div className="rounded-xl border border-border bg-background/70 p-3" data-testid="schedule-calendar">
           <DayPicker
             mode="single"
             locale={sv}
@@ -179,7 +181,7 @@ export function ClubWeekDateNav({
               caption_label: 'text-sm font-medium',
               nav: 'flex items-center',
               nav_button:
-                'h-7 w-7 bg-transparent p-0 opacity-70 hover:opacity-100 inline-flex items-center justify-center rounded-md border border-input',
+                'h-9 w-9 bg-transparent p-0 opacity-70 hover:opacity-100 inline-flex items-center justify-center rounded-md border border-input',
               nav_button_previous: 'absolute left-1',
               nav_button_next: 'absolute right-1',
               table: 'w-full border-collapse',
@@ -195,7 +197,7 @@ export function ClubWeekDateNav({
               day_hidden: 'invisible',
             }}
           />
-          <p className="mt-2 text-xs text-muted-foreground">
+          <p className="mt-2 text-xs leading-relaxed text-muted-foreground">
             Välj ett datum för att hoppa till den veckan. Ändringar i schemat gäller fortfarande
             varje {WEEKDAYS.find((d) => d.value === activeWeekday)?.label.toLowerCase() || 'veckodag'}.
           </p>

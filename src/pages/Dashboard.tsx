@@ -4,7 +4,6 @@ import { useNavigate } from 'react-router-dom'
 import { addMonths, format } from 'date-fns'
 import { sv } from 'date-fns/locale'
 import { Button } from '@/components/ui/button'
-import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card'
 import { useToast } from '@/components/ui/use-toast'
 import { apiRequest } from '@/services/api'
 import {
@@ -13,8 +12,15 @@ import {
   writeReportMonthCache,
 } from '@/lib/reportMonthCache'
 import { calculateHours } from '@/utils/validation'
-import { Calendar, Eye, LayoutDashboard } from 'lucide-react'
+import { Calendar, Eye } from 'lucide-react'
 import { cn } from '@/lib/utils'
+import { Skeleton } from '@/components/ui/skeleton'
+import {
+  ClubPageHeader,
+  ClubPageShell,
+  ClubSoftPanel,
+} from '@/pages/club/clubUi'
+import { DashboardSkeleton } from '@/components/ui/page-skeletons'
 
 type EntryType = 'work' | 'leave' | 'compensation'
 
@@ -79,31 +85,36 @@ type MonthSummaryProps = {
   loadError: boolean
 }
 
-// One month block: neutral stats only (no alerts or "action required" wording).
 function MonthSummaryCard({ title, report, loadError }: MonthSummaryProps) {
   if (loadError) {
     return (
-      <Card>
-        <CardHeader className="pb-2">
-          <CardTitle className="text-base">{title}</CardTitle>
-        </CardHeader>
-        <CardContent>
-          <p className="text-sm text-muted-foreground">Kunde inte ladda data för denna period.</p>
-        </CardContent>
-      </Card>
+      <ClubSoftPanel title={title}>
+        <p className="text-sm leading-relaxed text-muted-foreground">
+          Kunde inte ladda data för denna period.
+        </p>
+      </ClubSoftPanel>
     )
   }
 
   if (!report) {
     return (
-      <Card>
-        <CardHeader className="pb-2">
-          <CardTitle className="text-base">{title}</CardTitle>
-        </CardHeader>
-        <CardContent>
-          <p className="text-sm text-muted-foreground">Laddar…</p>
-        </CardContent>
-      </Card>
+      <ClubSoftPanel>
+        <div className="mb-4 flex items-start justify-between gap-2">
+          <div className="space-y-2">
+            <Skeleton className="h-5 w-28" />
+            <Skeleton className="h-4 w-36" />
+          </div>
+          <Skeleton className="h-6 w-16 rounded-full" />
+        </div>
+        <div className="grid grid-cols-2 gap-4">
+          {Array.from({ length: 4 }).map((_, index) => (
+            <div key={index} className="space-y-2 rounded-xl bg-muted/30 px-3 py-3">
+              <Skeleton className="h-3 w-20" />
+              <Skeleton className="h-7 w-14" />
+            </div>
+          ))}
+        </div>
+      </ClubSoftPanel>
     )
   }
 
@@ -111,44 +122,47 @@ function MonthSummaryCard({ title, report, loadError }: MonthSummaryProps) {
   const { workedHours, leaveHours, daysWithEntries, entryCount } = summarizeEntries(report.entries)
 
   return (
-    <Card>
-      <CardHeader className="pb-2">
-        <div className="flex flex-wrap items-start justify-between gap-2">
-          <CardTitle className="text-base capitalize">{title}</CardTitle>
-          <span
-            className={cn(
-              'shrink-0 rounded-full px-2.5 py-0.5 text-xs font-medium',
-              report.status === 'submitted'
-                ? 'bg-primary/15 text-primary'
-                : 'bg-muted text-muted-foreground'
-            )}
-          >
-            {statusLabel(report.status)}
-          </span>
+    <ClubSoftPanel
+      title={title}
+      description={monthTitle}
+      actions={
+        <span
+          className={cn(
+            'shrink-0 rounded-full px-2.5 py-1 text-xs font-medium',
+            report.status === 'submitted'
+              ? 'bg-primary/15 text-primary'
+              : 'bg-muted text-muted-foreground'
+          )}
+        >
+          {statusLabel(report.status)}
+        </span>
+      }
+    >
+      <dl className="grid grid-cols-2 gap-4 text-sm">
+        <div className="rounded-xl bg-muted/40 px-3 py-3">
+          <dt className="text-muted-foreground">Arbetade timmar</dt>
+          <dd className="mt-1 text-xl font-semibold tabular-nums tracking-tight">
+            {workedHours.toFixed(1)}
+          </dd>
         </div>
-        <CardDescription className="capitalize">{monthTitle}</CardDescription>
-      </CardHeader>
-      <CardContent className="space-y-4">
-        <dl className="grid grid-cols-2 gap-3 text-sm">
-          <div>
-            <dt className="text-muted-foreground">Arbetade timmar</dt>
-            <dd className="text-lg font-semibold tabular-nums">{workedHours.toFixed(1)}</dd>
-          </div>
-          <div>
-            <dt className="text-muted-foreground">Ledighet (timmar)</dt>
-            <dd className="text-lg font-semibold tabular-nums">{leaveHours.toFixed(1)}</dd>
-          </div>
-          <div>
-            <dt className="text-muted-foreground">Dagar med poster</dt>
-            <dd className="text-lg font-semibold tabular-nums">{daysWithEntries}</dd>
-          </div>
-          <div>
-            <dt className="text-muted-foreground">Antal poster</dt>
-            <dd className="text-lg font-semibold tabular-nums">{entryCount}</dd>
-          </div>
-        </dl>
-      </CardContent>
-    </Card>
+        <div className="rounded-xl bg-muted/40 px-3 py-3">
+          <dt className="text-muted-foreground">Ledighet (timmar)</dt>
+          <dd className="mt-1 text-xl font-semibold tabular-nums tracking-tight">
+            {leaveHours.toFixed(1)}
+          </dd>
+        </div>
+        <div className="rounded-xl bg-muted/40 px-3 py-3">
+          <dt className="text-muted-foreground">Dagar med poster</dt>
+          <dd className="mt-1 text-xl font-semibold tabular-nums tracking-tight">
+            {daysWithEntries}
+          </dd>
+        </div>
+        <div className="rounded-xl bg-muted/40 px-3 py-3">
+          <dt className="text-muted-foreground">Antal poster</dt>
+          <dd className="mt-1 text-xl font-semibold tabular-nums tracking-tight">{entryCount}</dd>
+        </div>
+      </dl>
+    </ClubSoftPanel>
   )
 }
 
@@ -250,6 +264,10 @@ export default function Dashboard() {
     return null
   }
 
+  if (isLoading && !currentReport && !previousReport) {
+    return <DashboardSkeleton />
+  }
+
   const currentMonthKey =
     currentReport != null
       ? toReportMonthKey(currentReport.year, currentReport.month)
@@ -258,59 +276,54 @@ export default function Dashboard() {
   const displayName = user?.name?.trim() || 'du'
 
   return (
-    <div className="min-h-screen flex-1 bg-background p-4 md:p-6">
-      <div className="container mx-auto max-w-4xl space-y-6">
-        <div>
-          <div className="mb-1 flex items-center gap-2 text-muted-foreground">
-            <LayoutDashboard className="h-5 w-5 shrink-0 opacity-90" aria-hidden />
-            <span className="text-xs font-medium uppercase tracking-wide">Översikt</span>
-          </div>
-          <h1 className="text-2xl font-semibold tracking-tight text-foreground">
-            Hej{displayName !== 'du' ? `, ${displayName}` : ''}
-          </h1>
-          <p className="mt-1 text-sm text-muted-foreground">
-            Sammanfattning av denna och föregående månad. Öppna kalendern eller förhandsvisning när du vill redigera eller skicka rapporten.
-          </p>
-          {isRefreshing && (
-            <p className="mt-1 text-xs text-muted-foreground">Uppdaterar i bakgrunden…</p>
-          )}
-        </div>
+    <ClubPageShell>
+      <ClubPageHeader
+        eyebrow="Översikt"
+        title={displayName !== 'du' ? `Hej, ${displayName}` : 'Hej'}
+        description="Sammanfattning av denna och föregående månad. Öppna kalendern eller förhandsvisning när du vill redigera eller skicka rapporten."
+      />
 
-        <div className="grid gap-4 sm:grid-cols-2">
-          <MonthSummaryCard
-            title="Denna månad"
-            report={isLoading && !currentReport ? null : currentReport}
-            loadError={currentError}
-          />
-          <MonthSummaryCard
-            title="Föregående månad"
-            report={isLoading && !previousReport ? null : previousReport}
-            loadError={previousError}
-          />
-        </div>
+      {isRefreshing && (
+        <p className="-mt-2 text-xs text-muted-foreground">Uppdaterar i bakgrunden…</p>
+      )}
 
-        <Card>
-          <CardHeader className="pb-3">
-            <CardTitle className="text-base">Genvägar</CardTitle>
-            <CardDescription>Kalender och förhandsvisning använder samma data som här ovan.</CardDescription>
-          </CardHeader>
-          <CardContent className="flex flex-col gap-2 sm:flex-row sm:flex-wrap">
-            <Button type="button" className="w-full sm:w-auto" onClick={() => navigate('/report')}>
-              <Calendar className="mr-2 h-4 w-4" aria-hidden />
-              Kalender
-            </Button>
-            <Button
-              type="button"
-              variant="outline"
-              className="w-full sm:w-auto"
-              onClick={() => navigate('/preview', { state: { reportMonthKey: currentMonthKey } })}
-            >
-              <Eye className="mr-2 h-4 w-4" aria-hidden />
-              Förhandsvisa
-            </Button>
-          </CardContent>
-        </Card>
+      <div className="grid gap-4 sm:grid-cols-2">
+        <MonthSummaryCard
+          title="Denna månad"
+          report={isLoading && !currentReport ? null : currentReport}
+          loadError={currentError}
+        />
+        <MonthSummaryCard
+          title="Föregående månad"
+          report={isLoading && !previousReport ? null : previousReport}
+          loadError={previousError}
+        />
       </div>
-    </div>
+
+      <ClubSoftPanel
+        title="Genvägar"
+        description="Kalender och förhandsvisning använder samma data som här ovan."
+      >
+        <div className="flex flex-col gap-2 sm:flex-row sm:flex-wrap">
+          <Button
+            type="button"
+            className="min-h-11 w-full sm:w-auto"
+            onClick={() => navigate('/report')}
+          >
+            <Calendar className="mr-2 h-4 w-4" aria-hidden />
+            Öppna kalender
+          </Button>
+          <Button
+            type="button"
+            variant="outline"
+            className="min-h-11 w-full sm:w-auto"
+            onClick={() => navigate('/preview', { state: { reportMonthKey: currentMonthKey } })}
+          >
+            <Eye className="mr-2 h-4 w-4" aria-hidden />
+            Förhandsvisa
+          </Button>
+        </div>
+      </ClubSoftPanel>
+    </ClubPageShell>
   )
 }

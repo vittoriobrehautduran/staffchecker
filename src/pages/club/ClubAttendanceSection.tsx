@@ -1,7 +1,6 @@
 import { useCallback, useEffect, useRef, useState } from 'react'
 import { apiConditionalGet, apiRequest } from '@/services/api'
 import { Button } from '@/components/ui/button'
-import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card'
 import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
 import { useToast } from '@/components/ui/use-toast'
@@ -34,6 +33,7 @@ import {
 } from '@/lib/clubBossPanelsCache'
 import { attendanceErrorMessage } from '@/lib/apiErrors'
 import { exportDayToCsv } from '@/pages/club/attendanceExport'
+import { ClubSegmentedControl, ClubSoftPanel } from '@/pages/club/clubUi'
 
 type BossPanel = 'day' | 'changes' | 'history'
 
@@ -67,6 +67,8 @@ export function ClubAttendanceSection({ isBoss, clubName }: Props) {
   const [isExportingDay, setIsExportingDay] = useState(false)
 
   const pendingAttendanceRef = useRef<Map<number, Map<number, AttendanceStatus>>>(new Map())
+  // Keeps optimistic marks visible while the save request is in flight (pending is cleared at send).
+  const attendanceInFlightRef = useRef<Map<number, Map<number, AttendanceStatus>>>(new Map())
   const attendanceFlushTimerRef = useRef<Map<number, number>>(new Map())
   const attendanceFlushInFlightRef = useRef<Set<number>>(new Set())
   const selectedDateRef = useRef(selectedDate)
@@ -76,21 +78,52 @@ export function ClubAttendanceSection({ isBoss, clubName }: Props) {
     selectedDateRef.current = selectedDate
   }, [selectedDate])
 
-  const applyDayPayload = useCallback((payload: DayPayload, version?: string | null) => {
-    const resolvedVersion = version ?? payload.version ?? null
-    writeAttendanceDayCache(payload, resolvedVersion)
-
-    if (payload.date !== selectedDateRef.current) {
-      return
-    }
-
-    setDayPayload((current) => {
-      if (!current || current.date !== payload.date) {
-        return payload
+  // Re-apply local clicks on top of any server/cached payload so polls can't flash the old status.
+  const overlayLocalAttendance = useCallback((payload: DayPayload): DayPayload => {
+    let next = payload
+    const applyMap = (outer: Map<number, Map<number, AttendanceStatus>>) => {
+      for (const [sessionId, players] of outer) {
+        for (const [sessionPlayerId, status] of players) {
+          next = patchSessionPlayerAttendance(next, sessionId, sessionPlayerId, status)
+        }
       }
-      return mergeAttendanceDayPayload(current, payload)
-    })
+    }
+    applyMap(pendingAttendanceRef.current)
+    applyMap(attendanceInFlightRef.current)
+    return next
   }, [])
+
+  const hasLocalAttendanceEdits = useCallback(() => {
+    if (attendanceFlushInFlightRef.current.size > 0) return true
+    if (attendanceFlushTimerRef.current.size > 0) return true
+    for (const players of pendingAttendanceRef.current.values()) {
+      if (players.size > 0) return true
+    }
+    for (const players of attendanceInFlightRef.current.values()) {
+      if (players.size > 0) return true
+    }
+    return false
+  }, [])
+
+  const applyDayPayload = useCallback(
+    (payload: DayPayload, version?: string | null) => {
+      const withLocal = overlayLocalAttendance(payload)
+      const resolvedVersion = version ?? withLocal.version ?? null
+      writeAttendanceDayCache(withLocal, resolvedVersion)
+
+      if (withLocal.date !== selectedDateRef.current) {
+        return
+      }
+
+      setDayPayload((current) => {
+        if (!current || current.date !== withLocal.date) {
+          return withLocal
+        }
+        return mergeAttendanceDayPayload(current, withLocal)
+      })
+    },
+    [overlayLocalAttendance]
+  )
 
   const loadDay = useCallback(
     async (date: string, options?: { background?: boolean; silent?: boolean }) => {
@@ -115,11 +148,9 @@ export function ClubAttendanceSection({ isBoss, clubName }: Props) {
 
         if (result.unchanged) {
           if (result.version && cached) {
-            writeAttendanceDayCache(cached, result.version)
+            writeAttendanceDayCache(overlayLocalAttendance(cached), result.version)
           }
-          if (date === selectedDateRef.current && cached) {
-            setDayPayload(cached)
-          }
+          // Keep current React state — rewriting from cache can fight an in-progress click.
           return
         }
 
@@ -144,7 +175,7 @@ export function ClubAttendanceSection({ isBoss, clubName }: Props) {
         }
       }
     },
-    [applyDayPayload, toast]
+    [applyDayPayload, overlayLocalAttendance, toast]
   )
 
   const loadChanges = useCallback(
@@ -211,6 +242,8 @@ export function ClubAttendanceSection({ isBoss, clubName }: Props) {
 
     const poll = () => {
       if (document.visibilityState !== 'visible' || pollInFlightRef.current) return
+      // Don't pull server state over marks that haven't finished saving yet.
+      if (hasLocalAttendanceEdits()) return
       pollInFlightRef.current = true
       void loadDay(selectedDate, { background: true, silent: true }).finally(() => {
         pollInFlightRef.current = false
@@ -229,7 +262,7 @@ export function ClubAttendanceSection({ isBoss, clubName }: Props) {
       window.removeEventListener('focus', onVisibleAgain)
       document.removeEventListener('visibilitychange', onVisibleAgain)
     }
-  }, [isBoss, bossPanel, selectedDate, loadDay])
+  }, [isBoss, bossPanel, selectedDate, loadDay, hasLocalAttendanceEdits])
 
   useEffect(() => {
     if (!dayPayload) return
@@ -266,7 +299,18 @@ export function ClubAttendanceSection({ isBoss, clubName }: Props) {
         sessionPlayerId,
         status,
       }))
+
+      // Move to in-flight so polls keep showing the clicked status until the server catches up.
+      let inFlight = attendanceInFlightRef.current.get(sessionId)
+      if (!inFlight) {
+        inFlight = new Map()
+        attendanceInFlightRef.current.set(sessionId, inFlight)
+      }
+      for (const row of attendance) {
+        inFlight.set(row.sessionPlayerId, row.status)
+      }
       pendingForSession.clear()
+
       const saveForDate = selectedDateRef.current
 
       attendanceFlushInFlightRef.current.add(sessionId)
@@ -279,12 +323,31 @@ export function ClubAttendanceSection({ isBoss, clubName }: Props) {
             attendance,
           }),
         })
+
+        for (const row of attendance) {
+          if (inFlight.get(row.sessionPlayerId) === row.status) {
+            inFlight.delete(row.sessionPlayerId)
+          }
+        }
+        if (inFlight.size === 0) {
+          attendanceInFlightRef.current.delete(sessionId)
+        }
+
         applyDayPayload(payload, payload.version)
         if (isBoss && bossPanel === 'changes') {
           invalidateClubChangesCache()
           void loadChanges({ background: true })
         }
       } catch (error: unknown) {
+        for (const row of attendance) {
+          if (inFlight.get(row.sessionPlayerId) === row.status) {
+            inFlight.delete(row.sessionPlayerId)
+          }
+        }
+        if (inFlight.size === 0) {
+          attendanceInFlightRef.current.delete(sessionId)
+        }
+
         if (saveForDate !== selectedDateRef.current) return
         const { title, description } = attendanceErrorMessage(error, 'save')
         toast({
@@ -302,7 +365,7 @@ export function ClubAttendanceSection({ isBoss, clubName }: Props) {
         }
       }
     },
-    [applyDayPayload, bossPanel, isBoss, loadChanges, loadDay, selectedDate, toast]
+    [applyDayPayload, bossPanel, isBoss, loadChanges, loadDay, toast]
   )
 
   const queueAttendanceSave = useCallback(
@@ -474,69 +537,60 @@ export function ClubAttendanceSection({ isBoss, clubName }: Props) {
   }
 
   return (
-    <div className="space-y-4">
+    <div className="space-y-5">
       {isBoss && (
-        <div className="flex flex-wrap gap-2">
-          <Button
-            type="button"
-            size="sm"
-            variant={bossPanel === 'day' ? 'default' : 'outline'}
-            onClick={() => setBossPanel('day')}
-          >
-            Närvaro idag
-          </Button>
-          <Button
-            type="button"
-            size="sm"
-            variant={bossPanel === 'changes' ? 'default' : 'outline'}
-            onClick={() => setBossPanel('changes')}
-          >
-            Ändringar
-          </Button>
-          <Button
-            type="button"
-            size="sm"
-            variant={bossPanel === 'history' ? 'default' : 'outline'}
-            onClick={() => setBossPanel('history')}
-            data-testid="attendance-history-tab"
-          >
-            Historik
-          </Button>
-        </div>
+        <ClubSegmentedControl
+          aria-label="Närvarovyer"
+          fullWidth
+          value={bossPanel}
+          onChange={setBossPanel}
+          options={[
+            { value: 'day', label: 'Idag' },
+            { value: 'changes', label: 'Ändringar' },
+            { value: 'history', label: 'Historik', testId: 'attendance-history-tab' },
+          ]}
+        />
       )}
 
       {(bossPanel === 'day' || !isBoss) && (
-        <Card>
-          <CardHeader>
-            <CardTitle className="text-base">Närvaro</CardTitle>
-            <CardDescription>
-              Markera närvaro och gör tillfälliga ändringar för en specifik dag — veckoschemat
-              påverkas inte.
-            </CardDescription>
-          </CardHeader>
-          <CardContent className="space-y-4">
-            <div className="flex flex-wrap gap-2 border-b border-border pb-3">
-              {(isLoadingDay || dayPayload?.tennisEnabled) && (
-                <Button
-                  type="button"
-                  size="sm"
-                  variant={activeSport === 'tennis' ? 'default' : 'outline'}
-                  onClick={() => setActiveSport('tennis')}
-                >
-                  Tennis
-                </Button>
-              )}
-              {(isLoadingDay || dayPayload?.bordtennisEnabled) && (
-                <Button
-                  type="button"
-                  size="sm"
-                  variant={activeSport === 'bordtennis' ? 'default' : 'outline'}
-                  onClick={() => setActiveSport('bordtennis')}
-                >
-                  Bordtennis
-                </Button>
-              )}
-            </div>
+        <ClubSoftPanel
+          title="Närvaro"
+          description="Markera närvaro och gör tillfälliga ändringar för en specifik dag — veckoschemat påverkas inte."
+          actions={
+            isBoss ? (
+              <Button
+                type="button"
+                variant="outline"
+                size="sm"
+                className="min-h-11"
+                onClick={() => void exportCurrentDayCsv()}
+                disabled={isExportingDay || isLoadingDay}
+                data-testid="attendance-export-day-csv"
+              >
+                {isExportingDay ? 'Exporterar…' : 'Exportera CSV'}
+              </Button>
+            ) : undefined
+          }
+        >
+          <div className="space-y-5">
+            {(isLoadingDay ||
+              dayPayload?.tennisEnabled ||
+              dayPayload?.bordtennisEnabled) && (
+              <ClubSegmentedControl
+                aria-label="Sport"
+                fullWidth
+                value={activeSport}
+                onChange={setActiveSport}
+                options={[
+                  ...((isLoadingDay || dayPayload?.tennisEnabled)
+                    ? [{ value: 'tennis' as const, label: 'Tennis' }]
+                    : []),
+                  ...((isLoadingDay || dayPayload?.bordtennisEnabled)
+                    ? [{ value: 'bordtennis' as const, label: 'Bordtennis' }]
+                    : []),
+                ]}
+              />
+            )}
 
             <div className="max-w-xs space-y-2">
               <Label htmlFor="attendance-date">Datum</Label>
@@ -546,23 +600,13 @@ export function ClubAttendanceSection({ isBoss, clubName }: Props) {
                 value={selectedDate}
                 onChange={(event) => selectAttendanceDate(event.target.value)}
                 data-testid="attendance-date-input"
+                className="min-h-11"
               />
               {isRefreshingDay && (
                 <p className="text-xs text-muted-foreground">Uppdaterar i bakgrunden…</p>
               )}
             </div>
-            {isBoss && (
-              <Button
-                type="button"
-                variant="outline"
-                size="sm"
-                onClick={() => void exportCurrentDayCsv()}
-                disabled={isExportingDay || isLoadingDay}
-                data-testid="attendance-export-day-csv"
-              >
-                {isExportingDay ? 'Exporterar…' : 'Exportera dag (CSV)'}
-              </Button>
-            )}
+
             <ClubAttendanceDayView
               payload={dayPayload}
               activeSport={activeSport}
@@ -570,8 +614,8 @@ export function ClubAttendanceSection({ isBoss, clubName }: Props) {
               isSaving={isSavingSession}
               onSaveSession={saveSession}
             />
-          </CardContent>
-        </Card>
+          </div>
+        </ClubSoftPanel>
       )}
 
       {isBoss && bossPanel === 'changes' && (
@@ -591,7 +635,6 @@ export function ClubAttendanceSection({ isBoss, clubName }: Props) {
       {isBoss && bossPanel === 'history' && (
         <ClubAttendanceHistoryPanel clubName={clubName} />
       )}
-
     </div>
   )
 }

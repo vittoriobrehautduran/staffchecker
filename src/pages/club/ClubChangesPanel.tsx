@@ -1,6 +1,6 @@
 import { Button } from '@/components/ui/button'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
-import { LoadingSpinner } from '@/components/ui/loading-spinner'
+import { ListPanelSkeleton } from '@/components/ui/page-skeletons'
 import type { AuditEntry, ClubNotification } from '@/pages/club/clubAttendanceTypes'
 
 type Props = {
@@ -33,12 +33,7 @@ export function ClubChangesPanel({
   const unreadCount = notifications.filter((n) => n.isUnread).length
 
   if (isLoading) {
-    return (
-      <div className="flex items-center gap-3 py-8">
-        <LoadingSpinner />
-        <span className="text-sm text-muted-foreground">Laddar ändringar…</span>
-      </div>
-    )
+    return <ListPanelSkeleton rows={4} />
   }
 
   return (
