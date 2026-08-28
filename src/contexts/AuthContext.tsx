@@ -1,6 +1,7 @@
 import { createContext, useContext, useState, useEffect, useRef, useCallback, type ReactNode } from 'react'
 import { signIn as cognitoSignIn, signUp as cognitoSignUp, signOut as cognitoSignOut, getCurrentUser, fetchAuthSession, confirmSignUp, resendSignUpCode, updatePassword, signInWithRedirect } from 'aws-amplify/auth'
 import { Hub } from 'aws-amplify/utils'
+import { setSentryUser } from '@/lib/sentry'
 import '@/lib/cognito-config'
 
 interface User {
@@ -54,6 +55,14 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   const patchUser = useCallback((partial: Partial<Pick<User, 'theme' | 'isAdmin' | 'clubPermissions' | 'hasClubAccess' | 'hasClubBossAccess' | 'hasClubCoachAccess' | 'hasEmployeeReportsAccess'>>) => {
     setUser((prev) => (prev ? { ...prev, ...partial } : null))
   }, [])
+
+  useEffect(() => {
+    if (user) {
+      setSentryUser({ id: user.id, email: user.email })
+    } else {
+      setSentryUser(null)
+    }
+  }, [user])
 
   const storeAuthNotice = (notice: AuthNotice) => {
     const serializedNotice = JSON.stringify(notice)

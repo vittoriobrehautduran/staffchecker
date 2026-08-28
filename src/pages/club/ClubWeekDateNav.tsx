@@ -60,6 +60,11 @@ type Props = {
   activeWeekday: number
   onSelectDate: (dateStr: string) => void
   onSelectWeekday: (weekday: number) => void
+  /** Override calendar help text (default is veckoschema copy). */
+  calendarHint?: string
+  /** Root test id for e2e (e.g. attendance-date-input). */
+  dataTestId?: string
+  calendarTestId?: string
 }
 
 export function ClubWeekDateNav({
@@ -67,6 +72,9 @@ export function ClubWeekDateNav({
   activeWeekday,
   onSelectDate,
   onSelectWeekday,
+  calendarHint,
+  dataTestId,
+  calendarTestId = 'schedule-calendar',
 }: Props) {
   const [calendarOpen, setCalendarOpen] = useState(false)
   const weekStart = useMemo(() => mondayOfWeek(selectedDate), [selectedDate])
@@ -83,7 +91,7 @@ export function ClubWeekDateNav({
   }
 
   return (
-    <div className="space-y-3">
+    <div className="space-y-3" data-testid={dataTestId}>
       <div className="flex flex-wrap items-center justify-between gap-2">
         <div className="flex items-center gap-1">
           <Button
@@ -161,7 +169,10 @@ export function ClubWeekDateNav({
       </div>
 
       {calendarOpen && (
-        <div className="rounded-xl border border-border bg-background/70 p-3" data-testid="schedule-calendar">
+        <div
+          className="rounded-xl border border-border bg-background/70 p-3"
+          data-testid={calendarTestId}
+        >
           <DayPicker
             mode="single"
             locale={sv}
@@ -198,8 +209,8 @@ export function ClubWeekDateNav({
             }}
           />
           <p className="mt-2 text-xs leading-relaxed text-muted-foreground">
-            Välj ett datum för att hoppa till den veckan. Ändringar i schemat gäller fortfarande
-            varje {WEEKDAYS.find((d) => d.value === activeWeekday)?.label.toLowerCase() || 'veckodag'}.
+            {calendarHint ??
+              `Välj ett datum för att hoppa till den veckan. Ändringar i schemat gäller fortfarande varje ${WEEKDAYS.find((d) => d.value === activeWeekday)?.label.toLowerCase() || 'veckodag'}.`}
           </p>
         </div>
       )}

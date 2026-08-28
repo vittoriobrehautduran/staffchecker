@@ -1,12 +1,16 @@
 import { useCallback, useEffect, useRef, useState } from 'react'
 import { apiConditionalGet, apiRequest } from '@/services/api'
 import { Button } from '@/components/ui/button'
-import { Input } from '@/components/ui/input'
-import { Label } from '@/components/ui/label'
 import { useToast } from '@/components/ui/use-toast'
 import { ClubAttendanceDayView } from '@/pages/club/ClubAttendanceDayView'
 import { ClubChangesPanel } from '@/pages/club/ClubChangesPanel'
 import { ClubAttendanceHistoryPanel } from '@/pages/club/ClubAttendanceHistoryPanel'
+import {
+  ClubWeekDateNav,
+  addDaysToDateStr,
+  mondayOfWeek,
+  weekdayFromDateStr,
+} from '@/pages/club/ClubWeekDateNav'
 import type {
   AttendanceStatus,
   AttendanceHistorySession,
@@ -32,7 +36,7 @@ import {
   writeClubChangesCache,
 } from '@/lib/clubBossPanelsCache'
 import { attendanceErrorMessage } from '@/lib/apiErrors'
-import { exportDayToCsv } from '@/pages/club/attendanceExport'
+import { exportDayToCsv, exportDayToPdf } from '@/pages/club/attendanceExport'
 import { ClubSegmentedControl, ClubSoftPanel } from '@/pages/club/clubUi'
 
 type BossPanel = 'day' | 'changes' | 'history'
@@ -508,7 +512,7 @@ export function ClubAttendanceSection({ isBoss, clubName }: Props) {
     }
   }
 
-  async function exportCurrentDayCsv() {
+  async function exportCurrentDay(format: 'csv' | 'pdf') {
     setIsExportingDay(true)
     try {
       const result = await apiRequest<{
@@ -523,7 +527,12 @@ export function ClubAttendanceSection({ isBoss, clubName }: Props) {
           toDate: selectedDate,
         }),
       })
-      exportDayToCsv(result.sessions || [], selectedDate)
+      const sessions = result.sessions || []
+      if (format === 'csv') {
+        exportDayToCsv(sessions, selectedDate)
+      } else {
+        exportDayToPdf(sessions, selectedDate, clubName)
+      }
     } catch (error: unknown) {
       const err = error as { message?: string }
       toast({
@@ -558,17 +567,30 @@ export function ClubAttendanceSection({ isBoss, clubName }: Props) {
           description="Markera närvaro och gör tillfälliga ändringar för en specifik dag — veckoschemat påverkas inte."
           actions={
             isBoss ? (
-              <Button
-                type="button"
-                variant="outline"
-                size="sm"
-                className="min-h-11"
-                onClick={() => void exportCurrentDayCsv()}
-                disabled={isExportingDay || isLoadingDay}
-                data-testid="attendance-export-day-csv"
-              >
-                {isExportingDay ? 'Exporterar…' : 'Exportera CSV'}
-              </Button>
+              <>
+                <Button
+                  type="button"
+                  variant="outline"
+                  size="sm"
+                  className="min-h-11"
+                  onClick={() => void exportCurrentDay('csv')}
+                  disabled={isExportingDay || isLoadingDay}
+                  data-testid="attendance-export-day-csv"
+                >
+                  {isExportingDay ? 'Exporterar…' : 'Exportera CSV'}
+                </Button>
+                <Button
+                  type="button"
+                  variant="outline"
+                  size="sm"
+                  className="min-h-11"
+                  onClick={() => void exportCurrentDay('pdf')}
+                  disabled={isExportingDay || isLoadingDay}
+                  data-testid="attendance-export-day-pdf"
+                >
+                  Exportera PDF
+                </Button>
+              </>
             ) : undefined
           }
         >
@@ -592,20 +614,21 @@ export function ClubAttendanceSection({ isBoss, clubName }: Props) {
               />
             )}
 
-            <div className="max-w-xs space-y-2">
-              <Label htmlFor="attendance-date">Datum</Label>
-              <Input
-                id="attendance-date"
-                type="date"
-                value={selectedDate}
-                onChange={(event) => selectAttendanceDate(event.target.value)}
-                data-testid="attendance-date-input"
-                className="min-h-11"
-              />
-              {isRefreshingDay && (
-                <p className="text-xs text-muted-foreground">Uppdaterar i bakgrunden…</p>
-              )}
-            </div>
+            <ClubWeekDateNav
+              selectedDate={selectedDate}
+              activeWeekday={weekdayFromDateStr(selectedDate)}
+              onSelectDate={selectAttendanceDate}
+              onSelectWeekday={(weekday) => {
+                const weekMonday = mondayOfWeek(selectedDate)
+                selectAttendanceDate(addDaysToDateStr(weekMonday, weekday - 1))
+              }}
+              calendarHint="Välj datum för att se lektioner och markera närvaro för den dagen."
+              dataTestId="attendance-date-input"
+              calendarTestId="attendance-calendar"
+            />
+            {isRefreshingDay && (
+              <p className="text-xs text-muted-foreground">Uppdaterar i bakgrunden…</p>
+            )}
 
             <ClubAttendanceDayView
               payload={dayPayload}
