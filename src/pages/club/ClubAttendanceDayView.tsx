@@ -24,6 +24,11 @@ import type {
 } from '@/pages/club/clubAttendanceTypes'
 import { formatSessionVenue } from '@/pages/club/clubAttendanceTypes'
 import { ClubEmptyState } from '@/pages/club/clubUi'
+import {
+  LessonTimeRange,
+  ResourceVenueBadge,
+  resourceVenueCardClassName,
+} from '@/pages/club/resourceVenueStyles'
 import { AttendanceDaySkeleton } from '@/components/ui/page-skeletons'
 
 type Props = {
@@ -107,12 +112,11 @@ function SessionCard({
   )
 
   return (
-    <div className="rounded-2xl border border-border/80 bg-background/60 p-4 md:p-5">
-      <div className="mb-5">
-        <h3 className="text-base font-semibold tracking-tight text-foreground">
-          {session.startTime}–{session.endTime} · {venue}
-        </h3>
-        <p className="mt-1 text-sm text-muted-foreground">
+    <div className={resourceVenueCardClassName(session.resourceNumber, 'p-4 md:p-5')}>
+      <div className="mb-5 space-y-2.5">
+        <ResourceVenueBadge name={venue} resourceNumber={session.resourceNumber} />
+        <LessonTimeRange startTime={session.startTime} endTime={session.endTime} />
+        <p className="text-sm text-muted-foreground">
           {session.className || 'Lektion'} · {session.sport === 'tennis' ? 'Tennis' : 'Bordtennis'}
         </p>
       </div>

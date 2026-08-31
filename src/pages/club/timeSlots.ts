@@ -10,3 +10,11 @@ export function buildTimeOptions(stepMinutes = 20): string[] {
 }
 
 export const DURATION_OPTIONS = [20, 40, 60, 80, 100, 120]
+
+export function addMinutesToTime(startTime: string, minutes: number): string {
+  const [hours, mins] = startTime.split(':').map(Number)
+  const totalMinutes = hours * 60 + mins + minutes
+  const nextHours = Math.floor(totalMinutes / 60) % 24
+  const nextMins = totalMinutes % 60
+  return `${String(nextHours).padStart(2, '0')}:${String(nextMins).padStart(2, '0')}`
+}

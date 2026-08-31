@@ -8,9 +8,15 @@ import {
   SelectTrigger,
   SelectValue,
 } from '@/components/ui/select'
-import { buildTimeOptions, DURATION_OPTIONS } from './timeSlots'
+import { addMinutesToTime, buildTimeOptions, DURATION_OPTIONS } from './timeSlots'
 import type { ClubLesson, ClubPayload, LessonSport, LocalLessonDraft } from './clubTypes'
 import { ClubEmptyState } from './clubUi'
+import {
+  LessonTimeRange,
+  ResourceVenueBadge,
+  resourceVenueCardClassName,
+} from './resourceVenueStyles'
+import { cn } from '@/lib/utils'
 
 const TIME_OPTIONS = buildTimeOptions(20)
 
@@ -180,18 +186,37 @@ function LessonEditor({
     return `${resourceLabel} ${resource.resource_number}`
   }
 
+  const selectedResource =
+    resourceId > 0 ? resources.find((resource) => resource.id === resourceId) : undefined
+  const venueResourceNumber = selectedResource?.resource_number ?? 0
+  const endTime = addMinutesToTime(safeStartTime, safeDuration)
+
   return (
     <div
-      className={`rounded-2xl border bg-background/60 p-4 md:p-5 ${
-        isDraft ? 'border-dashed border-primary/40' : 'border-border/80'
-      }`}
+      className={cn(
+        resourceVenueCardClassName(venueResourceNumber, 'p-4 md:p-5'),
+        isDraft && 'border-dashed border-primary/40'
+      )}
     >
       <div className="mb-4 flex flex-row items-start justify-between gap-3">
-        <div>
-          <p className="text-xs font-medium uppercase tracking-wide text-muted-foreground">
-            {isDraft ? 'Utkast' : 'Klass'}
-          </p>
-          <h3 className="text-base font-semibold tracking-tight text-foreground">{title}</h3>
+        <div className="min-w-0 space-y-2">
+          {selectedResource ? (
+            <ResourceVenueBadge
+              name={resourceDisplayName(selectedResource)}
+              resourceNumber={selectedResource.resource_number}
+            />
+          ) : (
+            <p className="text-xs font-medium uppercase tracking-wide text-muted-foreground">
+              {isDraft ? 'Utkast' : 'Klass'} — välj {resourceLabel.toLowerCase()}
+            </p>
+          )}
+          <LessonTimeRange startTime={safeStartTime} endTime={endTime} />
+          <div>
+            <p className="text-xs font-medium uppercase tracking-wide text-muted-foreground">
+              {isDraft ? 'Utkast' : 'Klass'}
+            </p>
+            <h3 className="text-base font-semibold tracking-tight text-foreground">{title}</h3>
+          </div>
         </div>
         <Button
           type="button"
