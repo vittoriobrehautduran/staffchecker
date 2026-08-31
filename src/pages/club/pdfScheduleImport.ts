@@ -23,14 +23,13 @@ export type PdfImportLesson = {
   endTime: string
   venueRaw: string
   resourceNumber: number
-  coachName: string | null
-  coachTempId: string | null
+  coachNames: string[]
   players: PdfImportPlayer[]
   included: boolean
   status: 'ready' | 'needs_review'
   warnings: string[]
   /** Set during enrich from club data */
-  coachId?: number
+  coachIds?: number[]
   resourceId?: number
 }
 
@@ -383,19 +382,29 @@ type ParsedRow = {
   coachName: string | null
 }
 
+function importPlayerKey(player: PdfImportPlayer): string {
+  const customerNo = player.customerNo?.trim()
+  if (customerNo) return `c:${customerNo}`
+  return `n:${player.name.trim().toLowerCase()}`
+}
+
+function addUniqueCoachName(lesson: PdfImportLesson, coachName: string | null) {
+  if (!coachName?.trim()) return
+  const normalized = coachName.trim().toLowerCase().replace(/\s+/g, ' ')
+  const alreadyListed = lesson.coachNames.some(
+    (name) => name.trim().toLowerCase().replace(/\s+/g, ' ') === normalized
+  )
+  if (alreadyListed) return
+  lesson.coachNames.push(coachName.trim())
+}
+
 function groupRowsIntoLessons(rows: ParsedRow[], durationMinutes: number): PdfImportLesson[] {
   const groups = new Map<string, PdfImportLesson>()
 
   for (const row of rows) {
-    const coachKey = row.coachName ?? '__orphan__'
-    const key = `${coachKey}|${row.sport}|${row.weekday}|${row.startTime}|${row.resourceNumber}`
+    const key = `${row.sport}|${row.weekday}|${row.startTime}|${row.resourceNumber}`
 
     if (!groups.has(key)) {
-      const warnings: string[] = []
-      if (!row.coachName) {
-        warnings.push('Tränare saknas — välj i listan innan import')
-      }
-
       groups.set(key, {
         tempId: key,
         sport: row.sport,
@@ -405,22 +414,38 @@ function groupRowsIntoLessons(rows: ParsedRow[], durationMinutes: number): PdfIm
         endTime: addMinutesToTime(row.startTime, durationMinutes),
         venueRaw: row.venueRaw,
         resourceNumber: row.resourceNumber,
-        coachName: row.coachName,
-        coachTempId: row.coachName ? `coach-${row.coachName.toLowerCase()}` : null,
+        coachNames: [],
         players: [],
         included: true,
-        status: row.coachName ? 'ready' : 'needs_review',
-        warnings,
+        status: 'needs_review',
+        warnings: [],
       })
     }
 
     const lesson = groups.get(key)!
-    lesson.players.push({
+    addUniqueCoachName(lesson, row.coachName)
+
+    const player = {
       name: row.playerName,
       customerNo: row.customerNo,
       phone: row.phone,
       birthYear: row.birthYear,
-    })
+    }
+    const playerKey = importPlayerKey(player)
+    const alreadyOnLesson = lesson.players.some(
+      (existing) => importPlayerKey(existing) === playerKey
+    )
+    if (!alreadyOnLesson) {
+      lesson.players.push(player)
+    }
+  }
+
+  for (const lesson of groups.values()) {
+    if (lesson.coachNames.length === 0) {
+      lesson.warnings.push('Tränare saknas — välj i listan innan import')
+    } else {
+      lesson.status = 'ready'
+    }
   }
 
   return Array.from(groups.values()).sort(
@@ -431,17 +456,23 @@ function groupRowsIntoLessons(rows: ParsedRow[], durationMinutes: number): PdfIm
   )
 }
 
+function coachTempIdFromName(name: string): string {
+  return `coach-${name.trim().toLowerCase().replace(/\s+/g, ' ')}`
+}
+
 function collectCoaches(lessons: PdfImportLesson[]): PdfImportCoach[] {
   const map = new Map<string, PdfImportCoach>()
 
   for (const lesson of lessons) {
-    if (!lesson.coachName || !lesson.coachTempId) continue
-    if (!map.has(lesson.coachTempId)) {
-      map.set(lesson.coachTempId, {
-        tempId: lesson.coachTempId,
-        name: lesson.coachName,
-        sport: lesson.sport,
-      })
+    for (const coachName of lesson.coachNames) {
+      const tempId = coachTempIdFromName(coachName)
+      if (!map.has(tempId)) {
+        map.set(tempId, {
+          tempId,
+          name: coachName,
+          sport: lesson.sport,
+        })
+      }
     }
   }
 
@@ -455,19 +486,23 @@ function sanitizeInvalidCoachNames(
   let invalidCoachCount = 0
 
   const sanitized = lessons.map((lesson) => {
-    if (!lesson.coachName || looksLikePersonName(lesson.coachName)) {
+    const validNames = lesson.coachNames.filter(
+      (name) => looksLikePersonName(name) || normalizeCoachName(name) === UNKNOWN_COACH_NAME
+    )
+    const strippedCount = lesson.coachNames.length - validNames.length
+
+    if (strippedCount === 0) {
       return lesson
     }
 
     invalidCoachCount += 1
     return {
       ...lesson,
-      coachName: null,
-      coachTempId: null,
+      coachNames: validNames,
       status: 'needs_review' as const,
       warnings: [
         ...lesson.warnings,
-        'Tränare såg ut som telefonnummer — kopplas till "unknown" vid import',
+        'Minst en tränare såg ut som telefonnummer — kopplas till "unknown" vid import',
       ],
     }
   })
@@ -524,7 +559,7 @@ export async function parseSchedulePdf(
 
   let lessons = groupRowsIntoLessons(rows, defaultDurationMinutes)
   lessons = sanitizeInvalidCoachNames(lessons, warnings)
-  const orphanCount = lessons.filter((lesson) => !lesson.coachName).length
+  const orphanCount = lessons.filter((lesson) => lesson.coachNames.length === 0).length
   if (orphanCount > 0) {
     warnings.push(
       `${orphanCount} lektion(er) saknade tränare i PDF — kopplas automatiskt till "${UNKNOWN_COACH_NAME}".`
@@ -549,22 +584,23 @@ export function findUnknownCoachId(coaches: { id: number; name: string }[]): num
 }
 
 export function lessonNeedsCoach(lesson: PdfImportLesson): boolean {
-  if (lesson.coachId) return false
-  if (lesson.coachName?.trim().toLowerCase() === UNKNOWN_COACH_NAME) return false
-  return !lesson.coachName || !looksLikePersonName(lesson.coachName)
+  if (lesson.coachIds && lesson.coachIds.length > 0) return false
+  if (lesson.coachNames.some((name) => normalizeCoachName(name) === UNKNOWN_COACH_NAME)) {
+    return false
+  }
+  return lesson.coachNames.length === 0 || lesson.coachNames.every((name) => !looksLikePersonName(name))
 }
 
 export function buildUnknownCoachPatch(
   lesson: PdfImportLesson,
   coaches: { id: number; name: string }[]
 ): Partial<PdfImportLesson> {
-  const coachId = findUnknownCoachId(coaches)
+  const unknownCoachId = findUnknownCoachId(coaches)
   const hasResource = !!lesson.resourceId
 
   return {
-    coachName: UNKNOWN_COACH_NAME,
-    coachId,
-    coachTempId: 'coach-unknown',
+    coachNames: [UNKNOWN_COACH_NAME],
+    coachIds: unknownCoachId ? [unknownCoachId] : undefined,
     status: hasResource ? 'ready' : 'needs_review',
   }
 }
@@ -591,29 +627,32 @@ export function enrichPdfPreview(preview: PdfImportPreview, club: ClubPayload): 
 
   const lessons = preview.lessons.map((lesson) => {
     const warnings = [...lesson.warnings]
-    let coachId: number | undefined
-    let resourceId: number | undefined
     let status = lesson.status
-    let coachName = lesson.coachName
+    const coachIds: number[] = []
+    const coachNames: string[] = []
 
-    if (coachName) {
+    for (const rawName of lesson.coachNames) {
+      const coachName = rawName.trim()
+      if (!coachName) continue
+
       if (!looksLikePersonName(coachName)) {
         warnings.push(`Tränare "${coachName}" ser ut som telefonnummer — använder "unknown"`)
-        coachName = null
-        coachId = undefined
-      } else {
-        coachId = coachByName.get(normalizeCoachName(coachName))
-        if (!coachId) {
-          const isUnknown = normalizeCoachName(coachName) === UNKNOWN_COACH_NAME
-          if (!isUnknown) {
-            warnings.push(`Tränare "${coachName}" finns inte i klubben ännu`)
-          }
-          status = 'needs_review'
+        continue
+      }
+
+      coachNames.push(coachName)
+      const resolvedId = coachByName.get(normalizeCoachName(coachName))
+      if (resolvedId) {
+        if (!coachIds.includes(resolvedId)) {
+          coachIds.push(resolvedId)
         }
+      } else if (normalizeCoachName(coachName) !== UNKNOWN_COACH_NAME) {
+        warnings.push(`Tränare "${coachName}" finns inte i klubben ännu`)
+        status = 'needs_review'
       }
     }
 
-    resourceId = resourceByKey.get(resourceKey(lesson.sport, lesson.resourceNumber))
+    const resourceId = resourceByKey.get(resourceKey(lesson.sport, lesson.resourceNumber))
     if (!resourceId) {
       warnings.push(`${lesson.venueRaw} saknas under Inställningar`)
       status = 'needs_review'
@@ -626,8 +665,8 @@ export function enrichPdfPreview(preview: PdfImportPreview, club: ClubPayload): 
 
     let result: PdfImportLesson = {
       ...lesson,
-      coachName,
-      coachId,
+      coachNames,
+      coachIds: coachIds.length > 0 ? coachIds : undefined,
       resourceId,
       status,
       warnings,
@@ -641,14 +680,18 @@ export function enrichPdfPreview(preview: PdfImportPreview, club: ClubPayload): 
     }
 
     const hasBlockingIssue = !result.resourceId || result.players.length === 0
+    const usesUnknownCoach = result.coachNames.some(
+      (name) => normalizeCoachName(name) === UNKNOWN_COACH_NAME
+    )
 
-    if (
-      !hasBlockingIssue &&
-      result.coachName?.trim().toLowerCase() === UNKNOWN_COACH_NAME
-    ) {
+    if (!hasBlockingIssue && usesUnknownCoach) {
       result.status = 'ready'
       if (result.included !== false) {
         result.included = true
+      }
+    } else if (!hasBlockingIssue && (result.coachIds?.length || result.coachNames.length > 0)) {
+      if (result.coachIds?.length && result.resourceId) {
+        result.status = 'ready'
       }
     }
 
@@ -681,8 +724,8 @@ export function buildImportPayload(lessons: PdfImportLesson[]) {
     resourceId: lesson.resourceId,
     resourceNumber: lesson.resourceNumber,
     venueRaw: lesson.venueRaw,
-    coachId: lesson.coachId,
-    coachName: lesson.coachName,
+    coachIds: lesson.coachIds ?? [],
+    coachNames: lesson.coachNames,
     playerNames: lesson.players.map((player) => player.name),
   }))
 }

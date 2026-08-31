@@ -13,6 +13,7 @@ import { FileUp, Loader2, Sparkles } from 'lucide-react'
 import { apiRequest } from '@/services/api'
 import type { ClubPayload, LessonSport } from './clubTypes'
 import { WEEKDAYS } from './clubTypes'
+import { DefaultCoachesEditor } from './DefaultCoachesEditor'
 import {
   buildImportPayload,
   buildUnknownCoachPatch,
@@ -178,7 +179,8 @@ export function ClubPdfImportPanel({ data, isBusy, onImport, onImportComplete }:
       (lesson) =>
         lesson.included &&
         lesson.resourceId &&
-        (lesson.coachId || (createMissingCoaches && lesson.coachName))
+        ((lesson.coachIds?.length ?? 0) > 0 ||
+          (createMissingCoaches && lesson.coachNames.length > 0))
     )
 
     const notReady = preview.lessons.filter((lesson) => lesson.included).length - readyLessons.length
@@ -252,8 +254,6 @@ export function ClubPdfImportPanel({ data, isBusy, onImport, onImportComplete }:
       setIsImporting(false)
     }
   }
-
-  const coachOptions = data.coaches
 
   return (
     <div className="space-y-4">
@@ -461,51 +461,44 @@ export function ClubPdfImportPanel({ data, isBusy, onImport, onImportComplete }:
                       </p>
 
                       <div className="grid gap-2 sm:grid-cols-2">
-                        <div className="space-y-1">
-                          <Label className="text-xs">Tränare</Label>
-                          <Select
-                            value={
-                              lesson.coachId
-                                ? String(lesson.coachId)
-                                : lesson.coachName?.trim().toLowerCase() === UNKNOWN_COACH_NAME
-                                  ? '__unknown__'
-                                  : undefined
-                            }
-                            onValueChange={(value) => {
-                              if (value === '__unknown__') {
-                                updateLesson(
-                                  lesson.tempId,
-                                  buildUnknownCoachPatch(lesson, data.coaches)
+                        <div className="space-y-2">
+                          <DefaultCoachesEditor
+                            label="Förvalda tränare"
+                            sport={lesson.sport}
+                            coaches={data.coaches}
+                            coachIds={lesson.coachIds ?? []}
+                            disabled={isBusy}
+                            onChange={(coachIds) => {
+                              const coachNames = coachIds
+                                .map(
+                                  (id) => data.coaches.find((coach) => coach.id === id)?.name
                                 )
-                                return
-                              }
-
-                              const coachId = Number(value)
-                              const coach = coachOptions.find((item) => item.id === coachId)
+                                .filter((name): name is string => !!name)
                               updateLesson(lesson.tempId, {
-                                coachId,
-                                coachName: coach?.name ?? lesson.coachName,
+                                coachIds,
+                                coachNames,
                                 status: lesson.resourceId ? 'ready' : 'needs_review',
                               })
                             }}
+                          />
+                          <Button
+                            type="button"
+                            variant="outline"
+                            size="sm"
+                            onClick={() =>
+                              updateLesson(
+                                lesson.tempId,
+                                buildUnknownCoachPatch(lesson, data.coaches)
+                              )
+                            }
                           >
-                            <SelectTrigger className="h-9">
-                              <SelectValue placeholder={lesson.coachName || 'Välj tränare'} />
-                            </SelectTrigger>
-                            <SelectContent>
-                              <SelectItem value="__unknown__">{UNKNOWN_COACH_NAME} (okänd)</SelectItem>
-                              {coachOptions
-                                .filter(
-                                  (coach) =>
-                                    coach.sport === lesson.sport || coach.sport === 'both'
-                                )
-                                .map((coach) => (
-                                  <SelectItem key={coach.id} value={String(coach.id)}>
-                                    {coach.name}
-                                  </SelectItem>
-                                ))}
-                            </SelectContent>
-                          </Select>
+                            Använd {UNKNOWN_COACH_NAME}
+                          </Button>
+                          {lesson.coachNames.length > 0 && (
+                            <p className="text-xs text-muted-foreground">
+                              Från PDF: {lesson.coachNames.join(', ')}
+                            </p>
+                          )}
                         </div>
 
                         <div className="space-y-1">

@@ -11,6 +11,7 @@ import {
 import { addMinutesToTime, buildTimeOptions, DURATION_OPTIONS } from './timeSlots'
 import type { ClubLesson, ClubPayload, LessonSport, LocalLessonDraft } from './clubTypes'
 import { ClubEmptyState } from './clubUi'
+import { DefaultCoachesEditor } from './DefaultCoachesEditor'
 import {
   LessonTimeRange,
   ResourceVenueBadge,
@@ -166,17 +167,12 @@ function LessonEditor({
     sport === 'tennis' ? resource.resource_type === 'court' : resource.resource_type === 'table'
   )
 
-  const coaches = data.coaches.filter(
-    (coach) => coach.sport === sport || coach.sport === 'both'
-  )
-
   const resourceLabel = sport === 'tennis' ? 'Bana' : 'Bord'
   const safeStartTime = startTime || '10:00'
   const safeDuration = durationMinutes > 0 ? durationMinutes : 60
   // Keep Select always controlled (never undefined) to avoid React warnings.
   const NONE = '__none__'
   const courtSelectValue = resourceId > 0 ? String(resourceId) : NONE
-  const coachSelectValue = coachIds[0] ? String(coachIds[0]) : NONE
   const title = groupName.trim() || 'Ny klass'
 
   function resourceDisplayName(resource: (typeof resources)[0]) {
@@ -309,31 +305,13 @@ function LessonEditor({
           )}
         </div>
 
-        <div className="space-y-2">
-          <Label>Välj förvald tränare</Label>
-          {coaches.length === 0 ? (
-            <p className="text-sm text-muted-foreground">Lägg till tränare under Inställningar.</p>
-          ) : (
-            <Select
-              value={coachSelectValue}
-              onValueChange={(value) => {
-                onChange({ coachIds: value === NONE ? [] : [Number(value)] })
-              }}
-            >
-              <SelectTrigger>
-                <SelectValue placeholder="Välj tränare" />
-              </SelectTrigger>
-              <SelectContent>
-                <SelectItem value={NONE}>Ingen tränare</SelectItem>
-                {coaches.map((coach) => (
-                  <SelectItem key={coach.id} value={String(coach.id)}>
-                    {coach.name}
-                  </SelectItem>
-                ))}
-              </SelectContent>
-            </Select>
-          )}
-        </div>
+        <DefaultCoachesEditor
+          sport={sport}
+          coaches={data.coaches}
+          coachIds={coachIds}
+          onChange={(nextCoachIds) => onChange({ coachIds: nextCoachIds })}
+          disabled={isLoading}
+        />
 
         <div className="space-y-2">
           <Label>Spelare i klassen</Label>

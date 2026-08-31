@@ -8,7 +8,7 @@ export type ScheduleImportReviewLesson = {
   startTime: string
   endTime: string
   venue: string
-  coachName: string | null
+  coachNames: string[]
   playerCount: number
   samplePlayers: string[]
   status: string
@@ -59,7 +59,9 @@ function buildUserPrompt(input: ScheduleImportReviewInput): string {
           ? ` spelare[${lesson.playerCount}]: ${lesson.samplePlayers.join(', ')}`
           : ` spelare: ${lesson.playerCount}`
       const warn = lesson.warnings.length ? ` ⚠ ${lesson.warnings.join('; ')}` : ''
-      return `- ${lesson.sport} ${day} ${lesson.startTime}-${lesson.endTime} ${lesson.venue} / ${lesson.coachName || 'ingen tränare'}${players}${warn}`
+      return `- ${lesson.sport} ${day} ${lesson.startTime}-${lesson.endTime} ${lesson.venue} / ${
+        lesson.coachNames.length > 0 ? lesson.coachNames.join(', ') : 'ingen tränare'
+      }${players}${warn}`
     })
 
   return [

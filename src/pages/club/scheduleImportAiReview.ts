@@ -25,7 +25,7 @@ export function buildAiReviewPayload(preview: PdfImportPreview) {
       startTime: lesson.startTime,
       endTime: lesson.endTime,
       venue: lesson.venueRaw,
-      coachName: lesson.coachName,
+      coachNames: lesson.coachNames,
       playerCount: lesson.players.length,
       samplePlayers: lesson.players.slice(0, 3).map((player) => player.name),
       status: lesson.status,
