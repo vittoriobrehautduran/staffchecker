@@ -1,6 +1,5 @@
 import { useMemo, useState } from 'react'
 import { Button } from '@/components/ui/button'
-import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
 import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
 import {
@@ -10,7 +9,6 @@ import {
   SelectTrigger,
   SelectValue,
 } from '@/components/ui/select'
-import { LoadingSpinner } from '@/components/ui/loading-spinner'
 import {
   DropdownMenu,
   DropdownMenuContent,
@@ -25,6 +23,8 @@ import type {
   LessonSport,
 } from '@/pages/club/clubAttendanceTypes'
 import { formatSessionVenue } from '@/pages/club/clubAttendanceTypes'
+import { ClubEmptyState } from '@/pages/club/clubUi'
+import { AttendanceDaySkeleton } from '@/components/ui/page-skeletons'
 
 type Props = {
   payload: DayPayload | null
@@ -107,23 +107,23 @@ function SessionCard({
   )
 
   return (
-    <Card>
-      <CardHeader className="pb-3">
-        <CardTitle className="text-base">
+    <div className="rounded-2xl border border-border/80 bg-background/60 p-4 md:p-5">
+      <div className="mb-5">
+        <h3 className="text-base font-semibold tracking-tight text-foreground">
           {session.startTime}–{session.endTime} · {venue}
-        </CardTitle>
-        <p className="text-sm text-muted-foreground">
+        </h3>
+        <p className="mt-1 text-sm text-muted-foreground">
           {session.className || 'Lektion'} · {session.sport === 'tennis' ? 'Tennis' : 'Bordtennis'}
         </p>
-      </CardHeader>
-      <CardContent className="space-y-5">
+      </div>
+      <div className="space-y-5">
         <section className="space-y-2">
           <Label className="text-sm font-medium">Tränare</Label>
           <div className="flex flex-wrap gap-2">
             {activeCoaches(session).map((coach) => (
               <span
                 key={coach.id}
-                className={`inline-flex items-center gap-1 rounded-full border px-3 py-1 text-sm ${
+                className={`inline-flex min-h-11 items-center gap-1 rounded-full border px-3 py-2 text-sm ${
                   coach.isDayAddition ? 'border-amber-400 bg-amber-50 dark:bg-amber-950/30' : ''
                 }`}
               >
@@ -133,7 +133,7 @@ function SessionCard({
                 )}
                 <button
                   type="button"
-                  className="ml-1 text-muted-foreground hover:text-foreground"
+                  className="ml-1 min-h-8 min-w-8 touch-manipulation text-muted-foreground hover:text-foreground"
                   onClick={() => void removeCoach(coach.coachId)}
                   disabled={isSaving}
                   aria-label={`Ta bort ${coach.name} för dagen`}
@@ -191,31 +191,55 @@ function SessionCard({
               return (
                 <div
                   key={player.id}
-                  className={`flex items-center gap-3 rounded-md border p-2 ${
+                  className={`rounded-md border p-3 ${
                     player.isDayAddition
                       ? 'border-amber-400 bg-amber-50/50 dark:bg-amber-950/20'
                       : ''
                   }`}
                   data-testid={`player-row-${player.id}`}
                 >
-                  <span className="min-w-0 flex-1 text-sm font-medium">
-                    {player.name}
-                    {player.isDayAddition && (
-                      <span className="ml-2 text-xs font-normal text-amber-700 dark:text-amber-300">
-                        Ny för dagen
-                      </span>
-                    )}
-                  </span>
+                  <div className="mb-2 flex items-start justify-between gap-2">
+                    <span className="min-w-0 flex-1 text-base font-medium leading-snug">
+                      {player.name}
+                      {player.isDayAddition && (
+                        <span className="mt-0.5 block text-xs font-normal text-amber-700 dark:text-amber-300">
+                          Ny för dagen
+                        </span>
+                      )}
+                    </span>
+                    <DropdownMenu>
+                      <DropdownMenuTrigger asChild>
+                        <Button
+                          type="button"
+                          variant="ghost"
+                          size="icon"
+                          className="h-11 w-11 shrink-0"
+                          disabled={isSaving}
+                          aria-label={`Alternativ för ${player.name}`}
+                        >
+                          <MoreVertical className="h-5 w-5" />
+                        </Button>
+                      </DropdownMenuTrigger>
+                      <DropdownMenuContent align="end">
+                        <DropdownMenuItem
+                          disabled={isSaving}
+                          onClick={() => void removePlayer(player.id)}
+                        >
+                          Ta bort för idag
+                        </DropdownMenuItem>
+                      </DropdownMenuContent>
+                    </DropdownMenu>
+                  </div>
                   <div
-                    className="flex shrink-0 gap-1"
+                    className="grid grid-cols-3 gap-2"
                     role="group"
                     aria-label={`Närvaro för ${player.name}`}
                   >
                     {(
                       [
-                        ['present', 'Närvarande', 'bg-green-600 text-white'],
-                        ['absent', 'Frånvarande', 'bg-red-600 text-white'],
-                        ['unknown', 'Okänd', 'bg-muted text-muted-foreground'],
+                        ['present', 'Närvarande', 'bg-green-600 text-white border-green-700'],
+                        ['absent', 'Frånvarande', 'bg-red-600 text-white border-red-700'],
+                        ['unknown', 'Okänd', 'bg-muted text-foreground border-border'],
                       ] as const
                     ).map(([value, label, activeClass]) => {
                       const isActive = status === value
@@ -228,42 +252,29 @@ function SessionCard({
                           aria-pressed={isActive}
                           disabled={isSaving}
                           data-testid={`attendance-${player.id}-${value}`}
-                          className={`rounded px-2 py-1 text-xs font-medium transition-colors ${
+                          className={`flex min-h-12 touch-manipulation flex-col items-center justify-center gap-0.5 rounded-lg border px-2 py-2 text-base font-semibold transition-colors active:scale-[0.98] ${
                             isActive
                               ? activeClass
-                              : 'border border-border bg-background hover:bg-muted/60'
+                              : 'border-border bg-background text-muted-foreground hover:bg-muted/60'
                           }`}
                           onClick={() => {
                             if (status !== value) setAttendance(player.id, value)
                           }}
                         >
-                          {value === 'present' ? '✓' : value === 'absent' ? '✗' : '?'}
+                          <span className="text-xl leading-none" aria-hidden>
+                            {value === 'present' ? '✓' : value === 'absent' ? '✗' : '?'}
+                          </span>
+                          <span className="text-[10px] font-medium leading-tight sm:text-xs">
+                            {value === 'present'
+                              ? 'Här'
+                              : value === 'absent'
+                                ? 'Borta'
+                                : 'Okänd'}
+                          </span>
                         </button>
                       )
                     })}
                   </div>
-                  <DropdownMenu>
-                    <DropdownMenuTrigger asChild>
-                      <Button
-                        type="button"
-                        variant="ghost"
-                        size="icon"
-                        className="h-8 w-8 shrink-0"
-                        disabled={isSaving}
-                        aria-label={`Alternativ för ${player.name}`}
-                      >
-                        <MoreVertical className="h-4 w-4" />
-                      </Button>
-                    </DropdownMenuTrigger>
-                    <DropdownMenuContent align="end">
-                      <DropdownMenuItem
-                        disabled={isSaving}
-                        onClick={() => void removePlayer(player.id)}
-                      >
-                        Ta bort för idag
-                      </DropdownMenuItem>
-                    </DropdownMenuContent>
-                  </DropdownMenu>
                 </div>
               )
             })}
@@ -291,8 +302,8 @@ function SessionCard({
             </Button>
           </div>
         </section>
-      </CardContent>
-    </Card>
+      </div>
+    </div>
   )
 }
 
@@ -313,12 +324,7 @@ export function ClubAttendanceDayView({
   const sportLabel = activeSport === 'tennis' ? 'tennis' : 'bordtennis'
 
   if (isLoading && !payload) {
-    return (
-      <div className="flex items-center gap-3 py-8">
-        <LoadingSpinner />
-        <span className="text-sm text-muted-foreground">Laddar dagens lektioner…</span>
-      </div>
-    )
+    return <AttendanceDaySkeleton />
   }
 
   if (!payload) {
@@ -340,24 +346,16 @@ export function ClubAttendanceDayView({
           : 'Lektioner visas inte i närvaro.'
 
     return (
-      <Card>
-        <CardContent className="py-6 space-y-1">
-          <p className="text-sm font-medium">{heading}</p>
-          <p className="text-sm text-muted-foreground">{detail}</p>
-        </CardContent>
-      </Card>
+      <ClubEmptyState title={heading} description={detail} />
     )
   }
 
   if (sortedSessions.length === 0) {
     return (
-      <Card>
-        <CardContent className="py-6">
-          <p className="text-sm text-muted-foreground">
-            Inga {sportLabel}-lektioner schemalagda den här dagen.
-          </p>
-        </CardContent>
-      </Card>
+      <ClubEmptyState
+        title={`Inga ${sportLabel}-lektioner`}
+        description="Inget schemalagt den här dagen för vald sport."
+      />
     )
   }
 

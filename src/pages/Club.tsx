@@ -3,9 +3,7 @@ import { useNavigate } from 'react-router-dom'
 import { useAuth } from '@/contexts/AuthContext'
 import { apiRequest } from '@/services/api'
 import { Button } from '@/components/ui/button'
-import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card'
 import { useToast } from '@/components/ui/use-toast'
-import { LoadingSpinner } from '@/components/ui/loading-spinner'
 import { ChevronDown, ChevronUp, FileUp, Settings2, UserCog } from 'lucide-react'
 import { ClubAttendanceSection } from '@/pages/club/ClubAttendanceSection'
 import { ClubDayPanel } from '@/pages/club/ClubDayPanel'
@@ -26,6 +24,15 @@ import {
   readClubScheduleCache,
   writeClubScheduleCache,
 } from '@/lib/clubScheduleCache'
+import {
+  ClubEmptyState,
+  ClubPageHeader,
+  ClubPageShell,
+  ClubSegmentedControl,
+  ClubSoftPanel,
+  ClubToolbarButton,
+} from '@/pages/club/clubUi'
+import { ClubSchedulePanelSkeleton } from '@/components/ui/page-skeletons'
 
 function newLocalId() {
   return `draft-${Date.now()}-${Math.random().toString(36).slice(2, 9)}`
@@ -33,11 +40,10 @@ function newLocalId() {
 
 function ClubScheduleLoading({ showSlowMessage }: { showSlowMessage: boolean }) {
   return (
-    <div className="flex flex-col items-center justify-center gap-4 py-16">
-      <LoadingSpinner size="lg" />
-      <p className="text-sm font-medium text-foreground">Laddar klubben…</p>
+    <div className="space-y-4" role="status" aria-label="Laddar klubben">
+      <ClubSchedulePanelSkeleton />
       {showSlowMessage && (
-        <p className="max-w-md text-center text-sm text-muted-foreground">
+        <p className="text-center text-sm leading-relaxed text-muted-foreground">
           Hämtar veckoschema, tränare, banor och lektioner. Det kan ta några sekunder om schemat
           är stort.
         </p>
@@ -482,85 +488,82 @@ export default function Club() {
 
   if (!canManageClub) {
     return (
-      <div className="min-h-screen flex-1 bg-background p-4 md:p-6">
-        <div className="container mx-auto max-w-3xl space-y-4">
-          <h1 className="text-2xl font-semibold tracking-tight">Närvaro</h1>
-          <p className="text-sm text-muted-foreground">
-            Markera närvaro för dagens lektioner. Veckoschema och inställningar sköts av
-            klubbens boss.
-          </p>
-          <ClubAttendanceSection isBoss={false} clubName={data?.club.name} />
-        </div>
-      </div>
+      <ClubPageShell>
+        <ClubPageHeader
+          eyebrow="Klubb"
+          title="Närvaro"
+          description="Markera närvaro för dagens lektioner. Veckoschema och inställningar sköts av klubbens boss."
+        />
+        <ClubAttendanceSection isBoss={false} clubName={data?.club.name} />
+      </ClubPageShell>
     )
   }
 
   const activeDayLabel = WEEKDAYS.find((day) => day.value === activeWeekday)?.label || ''
+  const clubTitle = data?.club.name?.trim() || 'Klubbschema'
 
   if (isInitialClubLoad) {
     return (
-      <div className="min-h-screen flex-1 bg-background p-4 md:p-6">
-        <div className="container mx-auto max-w-4xl space-y-6">
-          <div>
-            <h1 className="text-2xl font-semibold tracking-tight">Klubbschema</h1>
-            <p className="mt-1 text-sm text-muted-foreground">Veckoschema och inställningar.</p>
-          </div>
-          <Card>
-            <CardContent className="pt-6">
-              <ClubScheduleLoading showSlowMessage={showSlowLoadHint} />
-            </CardContent>
-          </Card>
-        </div>
-      </div>
+      <ClubPageShell>
+        <ClubPageHeader
+          eyebrow="Klubb"
+          title={clubTitle}
+          description="Veckoschema, närvaro och behörigheter."
+        />
+        <ClubSoftPanel>
+          <ClubScheduleLoading showSlowMessage={showSlowLoadHint} />
+        </ClubSoftPanel>
+      </ClubPageShell>
     )
   }
 
   return (
-    <div className="min-h-screen flex-1 bg-background p-4 md:p-6">
-      <div className="container mx-auto max-w-4xl space-y-6">
-        <div className="flex flex-wrap items-start justify-between gap-3">
-          <div>
-            <h1 className="text-2xl font-semibold tracking-tight">Klubbschema</h1>
-            <p className="mt-1 text-sm text-muted-foreground">
-              {clubMainTab === 'schedule'
-                ? `Planera ${activeSportLabel.toLowerCase()} per veckodag.`
-                : 'Närvaro, historik och ändringar per dag.'}
-            </p>
-          </div>
-          <div className="flex flex-wrap gap-2">
+    <ClubPageShell>
+      <ClubPageHeader
+        eyebrow="Klubb"
+        title={clubTitle}
+        description={
+          clubMainTab === 'schedule'
+            ? `Planera ${activeSportLabel.toLowerCase()} per veckodag — samma lektioner varje vecka.`
+            : 'Närvaro, historik och ändringar för en specifik dag.'
+        }
+        actions={
+          <>
             {clubMainTab === 'schedule' && (
-              <Button
-                type="button"
-                variant="outline"
-                size="sm"
-                className="gap-2"
+              <ClubToolbarButton
+                active={importOpen}
+                aria-expanded={importOpen}
                 onClick={() => setImportOpen((open) => !open)}
               >
                 <FileUp className="h-4 w-4" />
                 Importera PDF
-                {importOpen ? <ChevronUp className="h-4 w-4" /> : <ChevronDown className="h-4 w-4" />}
-              </Button>
+                {importOpen ? (
+                  <ChevronUp className="h-4 w-4" />
+                ) : (
+                  <ChevronDown className="h-4 w-4" />
+                )}
+              </ClubToolbarButton>
             )}
-            <Button
-              type="button"
-              variant={permissionsOpen ? 'secondary' : 'outline'}
-              size="sm"
-              className="gap-2"
+            <ClubToolbarButton
+              active={permissionsOpen}
+              aria-expanded={permissionsOpen}
+              testId="club-permissions-button"
               onClick={() => {
                 setPermissionsOpen((open) => !open)
                 if (!permissionsOpen) setSettingsOpen(false)
               }}
-              data-testid="club-permissions-button"
             >
               <UserCog className="h-4 w-4" />
               Behörigheter
-              {permissionsOpen ? <ChevronUp className="h-4 w-4" /> : <ChevronDown className="h-4 w-4" />}
-            </Button>
-            <Button
-              type="button"
-              variant={settingsOpen ? 'secondary' : 'outline'}
-              size="sm"
-              className="gap-2"
+              {permissionsOpen ? (
+                <ChevronUp className="h-4 w-4" />
+              ) : (
+                <ChevronDown className="h-4 w-4" />
+              )}
+            </ClubToolbarButton>
+            <ClubToolbarButton
+              active={settingsOpen}
+              aria-expanded={settingsOpen}
               onClick={() => {
                 setSettingsOpen((open) => !open)
                 if (!settingsOpen) setPermissionsOpen(false)
@@ -568,32 +571,32 @@ export default function Club() {
             >
               <Settings2 className="h-4 w-4" />
               Inställningar
-              {settingsOpen ? <ChevronUp className="h-4 w-4" /> : <ChevronDown className="h-4 w-4" />}
-            </Button>
-          </div>
-        </div>
+              {settingsOpen ? (
+                <ChevronUp className="h-4 w-4" />
+              ) : (
+                <ChevronDown className="h-4 w-4" />
+              )}
+            </ClubToolbarButton>
+          </>
+        }
+      />
 
-        <div className="flex flex-wrap gap-2 border-b border-border pb-3">
-          <Button
-            type="button"
-            size="sm"
-            variant={clubMainTab === 'schedule' ? 'default' : 'outline'}
-            onClick={() => setClubMainTab('schedule')}
-          >
-            Veckoschema
-          </Button>
-          <Button
-            type="button"
-            size="sm"
-            variant={clubMainTab === 'attendance' ? 'default' : 'outline'}
-            onClick={() => setClubMainTab('attendance')}
-            data-testid="club-tab-attendance"
-          >
-            Närvaro
-          </Button>
-        </div>
+      <ClubSegmentedControl
+        aria-label="Klubbvy"
+        fullWidth
+        value={clubMainTab}
+        onChange={setClubMainTab}
+        options={[
+          { value: 'schedule', label: 'Veckoschema' },
+          { value: 'attendance', label: 'Närvaro', testId: 'club-tab-attendance' },
+        ]}
+      />
 
-        {clubMainTab === 'schedule' && importOpen && data && (
+      {clubMainTab === 'schedule' && importOpen && data && (
+        <ClubSoftPanel
+          title="Importera PDF"
+          description="Läs in tennisskole-schema och granska innan du sparar."
+        >
           <ClubPdfImportPanel
             data={data}
             isBusy={isLoading || isSavingLesson}
@@ -605,135 +608,139 @@ export default function Club() {
             }}
             onImportComplete={loadClubData}
           />
-        )}
+        </ClubSoftPanel>
+      )}
 
-        {permissionsOpen && (
-          <Card>
-            <CardHeader className="pb-3">
-              <CardTitle className="text-base">Behörigheter</CardTitle>
-              <CardDescription>
-                Ge appkonton tillgång till närvaro (tränare) eller hela klubben (boss).
-              </CardDescription>
-            </CardHeader>
-            <CardContent>
-              <ClubPermissionsPanel />
-            </CardContent>
-          </Card>
-        )}
+      {permissionsOpen && (
+        <ClubSoftPanel
+          title="Behörigheter"
+          description="Ge appkonton tillgång till närvaro (tränare) eller hela klubben (boss)."
+        >
+          <ClubPermissionsPanel />
+        </ClubSoftPanel>
+      )}
 
-        {settingsOpen && data && (
-          <ClubSettingsPanel
-            data={data}
-            tennisEnabled={tennisEnabled}
-            bordtennisEnabled={bordtennisEnabled}
-            newCourtName={newCourtName}
-            newTableName={newTableName}
-            newCoachName={newCoachName}
-            newCoachSport={newCoachSport}
-            isSaving={isLoading}
-            onTennisEnabledChange={setTennisEnabled}
-            onBordtennisEnabledChange={setBordtennisEnabled}
-            onNewCourtNameChange={setNewCourtName}
-            onNewTableNameChange={setNewTableName}
-            onNewCoachNameChange={setNewCoachName}
-            onNewCoachSportChange={setNewCoachSport}
-            onSaveSettings={saveSettings}
-            onAddCourt={addCourt}
-            onAddTable={addTable}
-            onAddCoach={addCoach}
-            onRemoveCoach={(coachId) => void removeCoach(coachId)}
-            onClearSchedule={clearClubSchedule}
-          />
-        )}
+      {settingsOpen && data && (
+        <ClubSettingsPanel
+          data={data}
+          tennisEnabled={tennisEnabled}
+          bordtennisEnabled={bordtennisEnabled}
+          newCourtName={newCourtName}
+          newTableName={newTableName}
+          newCoachName={newCoachName}
+          newCoachSport={newCoachSport}
+          isSaving={isLoading}
+          onTennisEnabledChange={setTennisEnabled}
+          onBordtennisEnabledChange={setBordtennisEnabled}
+          onNewCourtNameChange={setNewCourtName}
+          onNewTableNameChange={setNewTableName}
+          onNewCoachNameChange={setNewCoachName}
+          onNewCoachSportChange={setNewCoachSport}
+          onSaveSettings={saveSettings}
+          onAddCourt={addCourt}
+          onAddTable={addTable}
+          onAddCoach={addCoach}
+          onRemoveCoach={(coachId) => void removeCoach(coachId)}
+          onClearSchedule={clearClubSchedule}
+        />
+      )}
 
-        {clubMainTab === 'attendance' && (
-          <ClubAttendanceSection isBoss clubName={data?.club.name} />
-        )}
+      {clubMainTab === 'attendance' && (
+        <ClubAttendanceSection isBoss clubName={data?.club.name} />
+      )}
 
-        {clubMainTab === 'schedule' && (
-        <Card>
-          <CardHeader>
-            <CardTitle className="text-base">Veckoschema</CardTitle>
-            <CardDescription>
-              Välj sport och dag — du ser bara lektioner för vald sport.
-            </CardDescription>
-          </CardHeader>
-          <CardContent className="space-y-4">
-            <div className="flex flex-wrap gap-2 border-b border-border pb-3">
-              {tennisEnabled && (
-                <Button
-                  type="button"
-                  size="sm"
-                  variant={activeSport === 'tennis' ? 'default' : 'outline'}
-                  onClick={() => setActiveSport('tennis')}
-                >
-                  Tennis
+      {clubMainTab === 'schedule' && (
+        <ClubSoftPanel
+          title="Veckoschema"
+          description="Välj sport och dag — du ser bara lektioner för vald sport."
+        >
+          {(tennisEnabled || bordtennisEnabled) && (
+            <div className="mb-5">
+              <ClubSegmentedControl
+                aria-label="Sport"
+                fullWidth
+                value={
+                  activeSport === 'bordtennis' && bordtennisEnabled
+                    ? 'bordtennis'
+                    : tennisEnabled
+                      ? 'tennis'
+                      : activeSport
+                }
+                onChange={setActiveSport}
+                options={[
+                  ...(tennisEnabled
+                    ? [{ value: 'tennis' as const, label: 'Tennis' }]
+                    : []),
+                  ...(bordtennisEnabled
+                    ? [{ value: 'bordtennis' as const, label: 'Bordtennis' }]
+                    : []),
+                ]}
+              />
+            </div>
+          )}
+
+          {!tennisEnabled && !bordtennisEnabled ? (
+            <ClubEmptyState
+              title="Ingen sport är aktiv"
+              description="Öppna Inställningar och aktivera tennis eller bordtennis för att börja planera."
+              action={
+                <Button type="button" onClick={() => setSettingsOpen(true)}>
+                  Öppna inställningar
                 </Button>
-              )}
-              {bordtennisEnabled && (
-                <Button
-                  type="button"
-                  size="sm"
-                  variant={activeSport === 'bordtennis' ? 'default' : 'outline'}
-                  onClick={() => setActiveSport('bordtennis')}
-                >
-                  Bordtennis
-                </Button>
+              }
+            />
+          ) : (
+            <div className="space-y-5">
+              <ClubWeekDateNav
+                selectedDate={scheduleDate}
+                activeWeekday={activeWeekday}
+                onSelectDate={(dateStr) => {
+                  setScheduleDate(dateStr)
+                  setActiveWeekday(weekdayFromDateStr(dateStr))
+                }}
+                onSelectWeekday={(weekday) => {
+                  setActiveWeekday(weekday)
+                  const weekMonday = mondayOfWeek(scheduleDate)
+                  setScheduleDate(addDaysToDateStr(weekMonday, weekday - 1))
+                }}
+              />
+
+              <p className="text-xs leading-relaxed text-muted-foreground">
+                Du redigerar veckomallen för {activeDayLabel.toLowerCase()} — samma lektioner varje
+                vecka. Använd kalendern för att hoppa mellan datum.
+              </p>
+
+              {data && canPlanSchedule ? (
+                <ClubDayPanel
+                  weekdayLabel={activeDayLabel}
+                  sportLabel={activeSportLabel}
+                  data={data}
+                  lessons={lessonsForDay}
+                  drafts={draftsForDay}
+                  isLoading={isLoading}
+                  isSavingLesson={isSavingLesson}
+                  onAddLesson={addLocalLesson}
+                  onUpdateLesson={(lesson, patch) => scheduleLessonSave(lesson, patch)}
+                  onDeleteLesson={deleteLesson}
+                  onUpdateDraft={updateDraft}
+                  onSaveDraft={saveDraftById}
+                  onRemoveDraft={removeDraft}
+                />
+              ) : (
+                <ClubEmptyState
+                  title={`${activeSportLabel} är avstängt`}
+                  description="Slå på sporten under Inställningar för att planera klasser."
+                  action={
+                    <Button type="button" variant="outline" onClick={() => setSettingsOpen(true)}>
+                      Öppna inställningar
+                    </Button>
+                  }
+                />
               )}
             </div>
-
-            {!tennisEnabled && !bordtennisEnabled ? (
-              <p className="text-sm text-muted-foreground">
-                Öppna Inställningar och aktivera tennis eller bordtennis för att börja planera.
-              </p>
-            ) : (
-              <>
-                <ClubWeekDateNav
-                  selectedDate={scheduleDate}
-                  activeWeekday={activeWeekday}
-                  onSelectDate={(dateStr) => {
-                    setScheduleDate(dateStr)
-                    setActiveWeekday(weekdayFromDateStr(dateStr))
-                  }}
-                  onSelectWeekday={(weekday) => {
-                    setActiveWeekday(weekday)
-                    const weekMonday = mondayOfWeek(scheduleDate)
-                    setScheduleDate(addDaysToDateStr(weekMonday, weekday - 1))
-                  }}
-                />
-
-                <p className="text-xs text-muted-foreground">
-                  Du redigerar veckomallen för {activeDayLabel.toLowerCase()} — samma lektioner
-                  varje vecka. Använd kalendern för att hoppa mellan datum.
-                </p>
-
-                {data && canPlanSchedule ? (
-                  <ClubDayPanel
-                    weekdayLabel={activeDayLabel}
-                    sportLabel={activeSportLabel}
-                    data={data}
-                    lessons={lessonsForDay}
-                    drafts={draftsForDay}
-                    isLoading={isLoading}
-                    isSavingLesson={isSavingLesson}
-                    onAddLesson={addLocalLesson}
-                    onUpdateLesson={(lesson, patch) => scheduleLessonSave(lesson, patch)}
-                    onDeleteLesson={deleteLesson}
-                    onUpdateDraft={updateDraft}
-                    onSaveDraft={saveDraftById}
-                    onRemoveDraft={removeDraft}
-                  />
-                ) : (
-                  <p className="text-sm text-muted-foreground">
-                    {activeSportLabel} är inte aktiverat. Slå på det under Inställningar.
-                  </p>
-                )}
-              </>
-            )}
-          </CardContent>
-        </Card>
-        )}
-      </div>
-    </div>
+          )}
+        </ClubSoftPanel>
+      )}
+    </ClubPageShell>
   )
 }

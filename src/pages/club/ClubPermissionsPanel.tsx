@@ -2,8 +2,8 @@ import { useCallback, useEffect, useMemo, useState } from 'react'
 import { apiRequest } from '@/services/api'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
-import { LoadingSpinner } from '@/components/ui/loading-spinner'
 import { useToast } from '@/components/ui/use-toast'
+import { ListPanelSkeleton } from '@/components/ui/page-skeletons'
 
 export type ClubMember = {
   userId: number
@@ -111,12 +111,7 @@ export function ClubPermissionsPanel({ isSaving = false }: Props) {
   }
 
   if (isLoading) {
-    return (
-      <div className="flex items-center gap-3 py-4">
-        <LoadingSpinner />
-        <span className="text-sm text-muted-foreground">Laddar konton…</span>
-      </div>
-    )
+    return <ListPanelSkeleton rows={5} />
   }
 
   if (members.length === 0) {

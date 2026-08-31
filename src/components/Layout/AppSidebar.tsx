@@ -180,6 +180,15 @@ export function AppSidebar({ mobileOpen, onMobileOpenChange }: AppSidebarProps) 
                 >
                   contact@brehautconsulting.com
                 </a>
+                <p className="mt-1.5">
+                  eller ring{' '}
+                  <a
+                    href="tel:+46736463045"
+                    className="font-medium text-primary underline underline-offset-2 hover:opacity-90"
+                  >
+                    0736463045
+                  </a>
+                </p>
               </div>
             </div>
           )}

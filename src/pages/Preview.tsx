@@ -4,7 +4,6 @@ import { useLocation, useNavigate } from 'react-router-dom'
 import { addMonths, format } from 'date-fns'
 import { sv } from 'date-fns/locale'
 import { Button } from '@/components/ui/button'
-import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card'
 import {
   Dialog,
   DialogContent,
@@ -24,6 +23,15 @@ import {
 } from '@/lib/reportMonthCache'
 import { calculateHours } from '@/utils/validation'
 import { ArrowLeft } from 'lucide-react'
+import {
+  ClubEmptyState,
+  ClubPageHeader,
+  ClubPageShell,
+  ClubSegmentedControl,
+  ClubSoftPanel,
+  ClubToolbarButton,
+} from '@/pages/club/clubUi'
+import { PreviewSkeleton } from '@/components/ui/page-skeletons'
 
 type EntryType = 'work' | 'leave' | 'compensation'
 type WorkType = 'cafe' | 'coaching_tennis' | 'coaching_bordtennis' | 'privat_traning' | 'administration' | 'cleaning' | 'annat'
@@ -311,31 +319,23 @@ export default function Preview() {
   }
 
   if (isLoading && !reportData) {
-    return (
-      <div className="min-h-screen flex-1 bg-background p-4 md:p-6">
-        <div className="container mx-auto max-w-4xl">
-          <div className="text-center">Laddar...</div>
-        </div>
-      </div>
-    )
+    return <PreviewSkeleton />
   }
 
   if (!reportData) {
     return (
-      <div className="min-h-screen flex-1 bg-background p-4 md:p-6">
-        <div className="container mx-auto max-w-4xl">
-          <Card>
-            <CardHeader>
-              <CardTitle>Ingen rapport hittades</CardTitle>
-            </CardHeader>
-            <CardContent>
-              <Button onClick={() => navigate('/report')}>
-                Gå till kalender
-              </Button>
-            </CardContent>
-          </Card>
-        </div>
-      </div>
+      <ClubPageShell>
+        <ClubPageHeader eyebrow="Rapport" title="Förhandsvisning" />
+        <ClubEmptyState
+          title="Ingen rapport hittades"
+          description="Gå till kalendern och lägg till timmar för månaden."
+          action={
+            <Button type="button" className="min-h-11" onClick={() => navigate('/report')}>
+              Öppna kalender
+            </Button>
+          }
+        />
+      </ClubPageShell>
     )
   }
 
@@ -403,7 +403,7 @@ export default function Preview() {
   }, 0)
 
   return (
-    <div className="min-h-screen flex-1 bg-background p-4 md:p-6">
+    <ClubPageShell>
       <Dialog open={confirmSubmitOpen} onOpenChange={setConfirmSubmitOpen}>
         <DialogContent className="sm:max-w-md">
           <DialogHeader>
@@ -417,270 +417,321 @@ export default function Preview() {
             <Button
               type="button"
               variant="outline"
+              className="min-h-11"
               onClick={() => setConfirmSubmitOpen(false)}
               disabled={isSubmitting}
             >
               Nej
             </Button>
-            <Button type="button" onClick={() => void handleConfirmSubmit()} disabled={isSubmitting}>
+            <Button
+              type="button"
+              className="min-h-11"
+              onClick={() => void handleConfirmSubmit()}
+              disabled={isSubmitting}
+            >
               Ja, skicka
             </Button>
           </DialogFooter>
         </DialogContent>
       </Dialog>
 
-      <div className="container mx-auto max-w-4xl">
-        <div className="mb-4">
-          <Button
-            variant="ghost"
+      <ClubPageHeader
+        eyebrow="Rapport"
+        title={monthName}
+        description={
+          isRefreshing
+            ? 'Granska innan du skickar. Uppdaterar i bakgrunden…'
+            : 'Granska din rapport innan du skickar den.'
+        }
+        actions={
+          <ClubToolbarButton
             onClick={() => navigate('/report', { state: { activeMonthKey } })}
           >
-            <ArrowLeft className="h-4 w-4 mr-2" />
-            Tillbaka till kalender
-          </Button>
-        </div>
+            <ArrowLeft className="h-4 w-4" />
+            Kalender
+          </ClubToolbarButton>
+        }
+      />
 
-        <Card>
-          <CardHeader>
-            <CardTitle>Förhandsvisning - {monthName}</CardTitle>
-            <CardDescription>
-              Granska din rapport innan du skickar den
-              {isRefreshing && (
-                <span className="block text-xs">Uppdaterar i bakgrunden…</span>
-              )}
-            </CardDescription>
-            <div className="mt-4 flex flex-wrap gap-2">
+      <ClubSegmentedControl
+        aria-label="Rapportperiod"
+        fullWidth
+        value={selectedPeriod}
+        onChange={(period) => {
+          void handleChangePeriod(period)
+        }}
+        options={[
+          { value: 'previous', label: 'Förra månaden' },
+          { value: 'current', label: 'Denna månad' },
+        ]}
+      />
+
+      <ClubSoftPanel
+        title="Poster"
+        description={
+          reportData.status === 'submitted'
+            ? 'Denna månad är redan inskickad.'
+            : `${reportData.entries.length} poster i perioden.`
+        }
+        actions={
+          <span
+            className={
+              reportData.status === 'submitted'
+                ? 'rounded-full bg-primary/15 px-2.5 py-1 text-xs font-medium text-primary'
+                : 'rounded-full bg-muted px-2.5 py-1 text-xs font-medium text-muted-foreground'
+            }
+          >
+            {reportData.status === 'submitted' ? 'Inskickad' : 'Utkast'}
+          </span>
+        }
+      >
+        {sortedDates.length === 0 ? (
+          <ClubEmptyState
+            title="Inga poster denna månad"
+            description="Gå till kalendern för att lägga till timmar."
+            action={
               <Button
                 type="button"
-                variant={selectedPeriod === 'previous' ? 'default' : 'outline'}
-                size="sm"
-                disabled={isLoading || isSubmitting}
-                onClick={() => handleChangePeriod('previous')}
+                className="min-h-11"
+                onClick={() => navigate('/report', { state: { activeMonthKey } })}
               >
-                Förra månaden
+                Öppna kalender
               </Button>
-              <Button
-                type="button"
-                variant={selectedPeriod === 'current' ? 'default' : 'outline'}
-                size="sm"
-                disabled={isLoading || isSubmitting}
-                onClick={() => handleChangePeriod('current')}
-              >
-                Denna månad
-              </Button>
-            </div>
-          </CardHeader>
-          <CardContent className="space-y-6">
-            {sortedDates.length === 0 ? (
-              <p className="text-muted-foreground text-center py-8">
-                Inga poster för denna månad. Gå till kalendern för att lägga till timmar.
-              </p>
-            ) : (
-              <>
-                {sortedDates.map((dateStr) => {
-                  const dateEntries = entriesByDate[dateStr]
-                  const dateWorkEntries = dateEntries.filter(e => e.entry_type === 'work')
-                  const dateLeaveEntries = dateEntries.filter(e => e.entry_type === 'leave')
-                  const dateCompensationEntries = dateEntries.filter(e => e.entry_type === 'compensation')
-                  
-                  const dateTotal = dateEntries.reduce((sum, entry) => {
-                    if (entry.time_from && entry.time_to) {
-                      return sum + calculateHours(entry.time_from.substring(0, 5), entry.time_to.substring(0, 5))
-                    }
-                    return sum
-                  }, 0)
+            }
+          />
+        ) : (
+          <div className="space-y-4">
+            {sortedDates.map((dateStr) => {
+              const dateEntries = entriesByDate[dateStr]
+              const dateWorkEntries = dateEntries.filter((e) => e.entry_type === 'work')
+              const dateLeaveEntries = dateEntries.filter((e) => e.entry_type === 'leave')
+              const dateCompensationEntries = dateEntries.filter(
+                (e) => e.entry_type === 'compensation'
+              )
 
+              const dateTotal = dateEntries.reduce((sum, entry) => {
+                if (entry.time_from && entry.time_to) {
                   return (
-                    <div key={dateStr} className="border-b pb-4 last:border-0">
-                      <div className="flex items-center justify-between mb-2">
-                        <h3 className="font-semibold">
-                          {format(new Date(dateStr), 'EEEE d MMMM yyyy', { locale: sv })}
-                        </h3>
-                        {dateTotal > 0 && (
-                          <span className="text-sm text-muted-foreground">
-                            Totalt: {dateTotal.toFixed(1)} timmar
-                          </span>
-                        )}
-                      </div>
-                      <div className="space-y-4 ml-4">
-                        {/* Work Entries */}
-                        {dateWorkEntries.length > 0 && (
-                          <div>
-                            <h4 className="mb-2 text-sm font-semibold text-primary">Arbete</h4>
-                            <div className="space-y-2">
-                              {dateWorkEntries.map((entry) => {
-                                if (!entry.time_from || !entry.time_to) return null
-                                const hours = calculateHours(entry.time_from.substring(0, 5), entry.time_to.substring(0, 5))
-                                return (
-                                  <div key={entry.id} className="text-sm">
-                                    <span className="font-medium">
-                                      {entry.time_from.substring(0, 5)} - {entry.time_to.substring(0, 5)}
-                                    </span>
-                                    {' '}
-                                    <span className="text-muted-foreground">
-                                      ({hours.toFixed(1)}h) - {entry.work_type && workTypeLabels[entry.work_type]}
-                                      {entry.work_type === 'privat_traning' && (
-                                        <>
-                                          {entry.student_count && (
-                                            <span> ({entry.student_count} {entry.student_count === 1 ? 'elev' : 'elever'})</span>
-                                          )}
-                                          {entry.sport_type && (
-                                            <span> - {entry.sport_type === 'tennis' ? '🎾 Tennis' : '🏓 Bordtennis'}</span>
-                                          )}
-                                        </>
-                                      )}
-                                    </span>
-                                    {entry.work_type === 'annat' && entry.annat_specification && (
-                                      <span className="text-muted-foreground">
-                                        {' '}- {entry.annat_specification}
-                                      </span>
-                                    )}
-                                    {entry.comment && (
-                                      <div className="text-muted-foreground ml-6">
-                                        {entry.comment}
-                                      </div>
-                                    )}
-                                  </div>
-                                )
-                              })}
-                            </div>
-                          </div>
-                        )}
+                    sum +
+                    calculateHours(entry.time_from.substring(0, 5), entry.time_to.substring(0, 5))
+                  )
+                }
+                return sum
+              }, 0)
 
-                        {/* Leave Entries */}
-                        {dateLeaveEntries.length > 0 && (
-                          <div>
-                            <h4 className="mb-2 text-sm font-semibold text-emerald-700 dark:text-emerald-400">Ledighet</h4>
-                            <div className="space-y-2">
-                              {dateLeaveEntries.map((entry) => {
-                                if (entry.is_full_day_leave) {
-                                  return (
-                                    <div key={entry.id} className="text-sm">
-                                      <span className="font-medium">Hela dagen</span>
-                                      {' '}
-                                      <span className="text-muted-foreground">
-                                        - {entry.leave_type && leaveTypeLabels[entry.leave_type]}
-                                      </span>
-                                      {entry.comment && (
-                                        <div className="text-muted-foreground ml-6">
-                                          {entry.comment}
-                                        </div>
-                                      )}
-                                    </div>
-                                  )
-                                }
-                                if (!entry.time_from || !entry.time_to) return null
-                                const hours = calculateHours(entry.time_from.substring(0, 5), entry.time_to.substring(0, 5))
-                                return (
-                                  <div key={entry.id} className="text-sm">
-                                    <span className="font-medium">
-                                      {entry.time_from.substring(0, 5)} - {entry.time_to.substring(0, 5)}
-                                    </span>
-                                    {' '}
-                                    <span className="text-muted-foreground">
-                                      ({hours.toFixed(1)}h) - {entry.leave_type && leaveTypeLabels[entry.leave_type]}
-                                    </span>
-                                    {entry.comment && (
-                                      <div className="text-muted-foreground ml-6">
-                                        {entry.comment}
-                                      </div>
-                                    )}
-                                  </div>
-                                )
-                              })}
-                            </div>
-                          </div>
-                        )}
-
-                        {/* Compensation Entries */}
-                        {dateCompensationEntries.length > 0 && (
-                          <div>
-                            <h4 className="text-sm font-semibold text-orange-700 dark:text-orange-400 mb-2">Ersättning</h4>
-                            <div className="space-y-2">
-                              {dateCompensationEntries.map((entry) => (
-                                <div key={entry.id} className="text-sm">
-                                  <span className="font-medium">
-                                    {entry.compensation_type && compensationTypeLabels[entry.compensation_type]}
-                                  </span>
-                                  {entry.compensation_type === 'milersattning' && entry.mileage_km && (
-                                    <span className="text-muted-foreground ml-2">
-                                      - {entry.mileage_km} km
-                                    </span>
-                                  )}
-                                  {entry.compensation_type === 'annan_ersattning' && (
+              return (
+                <div
+                  key={dateStr}
+                  className="rounded-2xl border border-border/80 bg-background/60 p-4 md:p-5"
+                >
+                  <div className="mb-3 flex flex-wrap items-baseline justify-between gap-2">
+                    <h3 className="text-base font-semibold capitalize tracking-tight">
+                      {format(new Date(dateStr), 'EEEE d MMMM yyyy', { locale: sv })}
+                    </h3>
+                    {dateTotal > 0 && (
+                      <span className="text-sm tabular-nums text-muted-foreground">
+                        {dateTotal.toFixed(1)} timmar
+                      </span>
+                    )}
+                  </div>
+                  <div className="space-y-4">
+                    {dateWorkEntries.length > 0 && (
+                      <div>
+                        <h4 className="mb-2 text-sm font-semibold text-primary">Arbete</h4>
+                        <div className="space-y-2">
+                          {dateWorkEntries.map((entry) => {
+                            if (!entry.time_from || !entry.time_to) return null
+                            const hours = calculateHours(
+                              entry.time_from.substring(0, 5),
+                              entry.time_to.substring(0, 5)
+                            )
+                            return (
+                              <div key={entry.id} className="text-sm leading-relaxed">
+                                <span className="font-medium tabular-nums">
+                                  {entry.time_from.substring(0, 5)} –{' '}
+                                  {entry.time_to.substring(0, 5)}
+                                </span>{' '}
+                                <span className="text-muted-foreground">
+                                  ({hours.toFixed(1)}h) –{' '}
+                                  {entry.work_type && workTypeLabels[entry.work_type]}
+                                  {entry.work_type === 'privat_traning' && (
                                     <>
-                                      {entry.compensation_description && (
-                                        <span className="text-muted-foreground ml-2">
-                                          - {entry.compensation_description}
+                                      {entry.student_count && (
+                                        <span>
+                                          {' '}
+                                          ({entry.student_count}{' '}
+                                          {entry.student_count === 1 ? 'elev' : 'elever'})
                                         </span>
                                       )}
-                                      {entry.compensation_amount && (
-                                        <span className="text-muted-foreground ml-2 font-semibold">
-                                          {entry.compensation_amount} SEK
+                                      {entry.sport_type && (
+                                        <span>
+                                          {' '}
+                                          –{' '}
+                                          {entry.sport_type === 'tennis'
+                                            ? 'Tennis'
+                                            : 'Bordtennis'}
                                         </span>
                                       )}
                                     </>
                                   )}
+                                </span>
+                                {entry.work_type === 'annat' && entry.annat_specification && (
+                                  <span className="text-muted-foreground">
+                                    {' '}
+                                    – {entry.annat_specification}
+                                  </span>
+                                )}
+                                {entry.comment && (
+                                  <div className="mt-0.5 text-muted-foreground">{entry.comment}</div>
+                                )}
+                              </div>
+                            )
+                          })}
+                        </div>
+                      </div>
+                    )}
+
+                    {dateLeaveEntries.length > 0 && (
+                      <div>
+                        <h4 className="mb-2 text-sm font-semibold text-emerald-700 dark:text-emerald-400">
+                          Ledighet
+                        </h4>
+                        <div className="space-y-2">
+                          {dateLeaveEntries.map((entry) => {
+                            if (entry.is_full_day_leave) {
+                              return (
+                                <div key={entry.id} className="text-sm leading-relaxed">
+                                  <span className="font-medium">Hela dagen</span>{' '}
+                                  <span className="text-muted-foreground">
+                                    – {entry.leave_type && leaveTypeLabels[entry.leave_type]}
+                                  </span>
                                   {entry.comment && (
-                                    <div className="text-muted-foreground ml-6">
+                                    <div className="mt-0.5 text-muted-foreground">
                                       {entry.comment}
                                     </div>
                                   )}
                                 </div>
-                              ))}
-                            </div>
-                          </div>
-                        )}
+                              )
+                            }
+                            if (!entry.time_from || !entry.time_to) return null
+                            const hours = calculateHours(
+                              entry.time_from.substring(0, 5),
+                              entry.time_to.substring(0, 5)
+                            )
+                            return (
+                              <div key={entry.id} className="text-sm leading-relaxed">
+                                <span className="font-medium tabular-nums">
+                                  {entry.time_from.substring(0, 5)} –{' '}
+                                  {entry.time_to.substring(0, 5)}
+                                </span>{' '}
+                                <span className="text-muted-foreground">
+                                  ({hours.toFixed(1)}h) –{' '}
+                                  {entry.leave_type && leaveTypeLabels[entry.leave_type]}
+                                </span>
+                                {entry.comment && (
+                                  <div className="mt-0.5 text-muted-foreground">{entry.comment}</div>
+                                )}
+                              </div>
+                            )
+                          })}
+                        </div>
                       </div>
-                    </div>
-                  )
-                })}
+                    )}
 
-                <div className="border-t pt-4 mt-6 space-y-2">
-                  <h3 className="text-lg font-semibold">Totalt för månaden</h3>
-                  <div className="flex items-center justify-between">
-                    <span className="text-base text-primary">Arbetade timmar:</span>
-                    <span className="text-base font-semibold">{totalWorkedHours.toFixed(1)} timmar</span>
-                  </div>
-                  <div className="flex items-center justify-between">
-                    <span className="text-base text-emerald-700 dark:text-emerald-400">Ledighetstimmar:</span>
-                    <span className="text-base font-semibold">{totalLeaveHours.toFixed(1)} timmar</span>
-                  </div>
-                  <div className="flex items-center justify-between">
-                    <span className="text-base text-orange-700 dark:text-orange-400">Ersättning:</span>
-                    <span className="text-base font-semibold">
-                      {totalCompensationEntries} poster
-                      {totalCompensationAmount > 0 ? ` (${totalCompensationAmount.toFixed(2)} SEK)` : ''}
-                    </span>
+                    {dateCompensationEntries.length > 0 && (
+                      <div>
+                        <h4 className="mb-2 text-sm font-semibold text-orange-700 dark:text-orange-400">
+                          Ersättning
+                        </h4>
+                        <div className="space-y-2">
+                          {dateCompensationEntries.map((entry) => (
+                            <div key={entry.id} className="text-sm leading-relaxed">
+                              <span className="font-medium">
+                                {entry.compensation_type &&
+                                  compensationTypeLabels[entry.compensation_type]}
+                              </span>
+                              {entry.compensation_type === 'milersattning' && entry.mileage_km && (
+                                <span className="ml-2 text-muted-foreground">
+                                  – {entry.mileage_km} km
+                                </span>
+                              )}
+                              {entry.compensation_type === 'annan_ersattning' && (
+                                <>
+                                  {entry.compensation_description && (
+                                    <span className="ml-2 text-muted-foreground">
+                                      – {entry.compensation_description}
+                                    </span>
+                                  )}
+                                  {entry.compensation_amount && (
+                                    <span className="ml-2 font-semibold tabular-nums text-muted-foreground">
+                                      {entry.compensation_amount} SEK
+                                    </span>
+                                  )}
+                                </>
+                              )}
+                              {entry.comment && (
+                                <div className="mt-0.5 text-muted-foreground">{entry.comment}</div>
+                              )}
+                            </div>
+                          ))}
+                        </div>
+                      </div>
+                    )}
                   </div>
                 </div>
+              )
+            })}
 
-                <div className="flex gap-4 pt-4">
-                  <Button
-                    onClick={handleSubmitClick}
-                    disabled={isSubmitting || reportData.status === 'submitted'}
-                    className="flex-1"
-                  >
-                    {isSubmitting
-                      ? 'Skickar...'
-                      : reportData.status === 'submitted'
-                      ? 'Rapport redan skickad'
-                      : 'Skicka rapport'}
-                  </Button>
-                  <Button
-                    variant="outline"
-                    onClick={() => navigate('/report', { state: { activeMonthKey } })}
-                    disabled={isSubmitting}
-                  >
-                    Redigera
-                  </Button>
+            <div className="rounded-2xl border border-border/80 bg-muted/30 p-4 md:p-5">
+              <h3 className="mb-3 text-base font-semibold tracking-tight">Totalt för månaden</h3>
+              <dl className="space-y-2 text-sm">
+                <div className="flex items-center justify-between gap-3">
+                  <dt className="text-primary">Arbetade timmar</dt>
+                  <dd className="font-semibold tabular-nums">{totalWorkedHours.toFixed(1)} timmar</dd>
                 </div>
-              </>
-            )}
-          </CardContent>
-        </Card>
-      </div>
-    </div>
+                <div className="flex items-center justify-between gap-3">
+                  <dt className="text-emerald-700 dark:text-emerald-400">Ledighetstimmar</dt>
+                  <dd className="font-semibold tabular-nums">{totalLeaveHours.toFixed(1)} timmar</dd>
+                </div>
+                <div className="flex items-center justify-between gap-3">
+                  <dt className="text-orange-700 dark:text-orange-400">Ersättning</dt>
+                  <dd className="font-semibold tabular-nums">
+                    {totalCompensationEntries} poster
+                    {totalCompensationAmount > 0
+                      ? ` (${totalCompensationAmount.toFixed(2)} SEK)`
+                      : ''}
+                  </dd>
+                </div>
+              </dl>
+            </div>
+
+            <div className="flex flex-col gap-2 pt-1 sm:flex-row">
+              <Button
+                type="button"
+                className="min-h-11 flex-1"
+                onClick={handleSubmitClick}
+                disabled={isSubmitting || reportData.status === 'submitted'}
+              >
+                {isSubmitting
+                  ? 'Skickar…'
+                  : reportData.status === 'submitted'
+                    ? 'Rapport redan skickad'
+                    : 'Skicka rapport'}
+              </Button>
+              <Button
+                type="button"
+                variant="outline"
+                className="min-h-11"
+                onClick={() => navigate('/report', { state: { activeMonthKey } })}
+                disabled={isSubmitting}
+              >
+                Redigera
+              </Button>
+            </div>
+          </div>
+        )}
+      </ClubSoftPanel>
+    </ClubPageShell>
   )
 }
 

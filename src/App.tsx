@@ -1,5 +1,6 @@
 import { useEffect } from 'react'
 import { Routes, Route, Navigate, useLocation, useNavigate } from 'react-router-dom'
+import { wrapReactRouterRouting } from '@sentry/react'
 import { Toaster } from '@/components/ui/toaster'
 import { useAuth } from '@/contexts/AuthContext'
 import ProtectedLayout from '@/components/Layout/ProtectedLayout'
@@ -15,6 +16,8 @@ import EmployeeReports from '@/pages/EmployeeReports'
 import Debug from '@/pages/Debug'
 import PrivacyPolicy from '@/pages/PrivacyPolicy'
 import TermsOfUse from '@/pages/TermsOfUse'
+
+const SentryRoutes = wrapReactRouterRouting(Routes)
 
 function PostAuthNavigation() {
   const { isSignedIn, isLoading } = useAuth()
@@ -45,7 +48,7 @@ function App() {
   return (
     <div className="min-h-screen bg-background">
       <PostAuthNavigation />
-      <Routes>
+      <SentryRoutes>
         <Route path="/login" element={<Login />} />
         <Route path="/register" element={<Register />} />
         <Route path="/verify-email" element={<VerifyEmail />} />
@@ -61,7 +64,7 @@ function App() {
           <Route path="/employee-reports" element={<EmployeeReports />} />
         </Route>
         <Route path="/" element={<Navigate to="/dashboard" replace />} />
-      </Routes>
+      </SentryRoutes>
       <Toaster />
     </div>
   )

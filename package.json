@@ -28,6 +28,8 @@
     "@radix-ui/react-select": "^2.2.6",
     "@radix-ui/react-slot": "^1.2.4",
     "@radix-ui/react-toast": "^1.2.15",
+    "@sentry/aws-serverless": "^10.72.0",
+    "@sentry/react": "^10.72.0",
     "aws-amplify": "^6.0.0",
     "class-variance-authority": "^0.7.1",
     "clsx": "^2.1.1",

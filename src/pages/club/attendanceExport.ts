@@ -87,9 +87,20 @@ export function exportHistoryToPdf(
   toDate: string,
   clubName = 'Klubb'
 ) {
+  const isSingleDay = fromDate === toDate
+  const pageTitle = isSingleDay
+    ? `Närvaro ${fromDate}`
+    : `Närvarohistorik ${fromDate} – ${toDate}`
+  const heading = isSingleDay
+    ? `${clubName} — närvaro`
+    : `${clubName} — närvarohistorik`
+  const meta = isSingleDay
+    ? `${fromDate} · ${sessions.length} lektioner`
+    : `${fromDate} till ${toDate} · ${sessions.length} lektioner`
+
   const lines: string[] = [
     `<!DOCTYPE html><html lang="sv"><head><meta charset="utf-8">`,
-    `<title>Närvarohistorik ${fromDate} – ${toDate}</title>`,
+    `<title>${pageTitle}</title>`,
     `<style>`,
     `body{font-family:system-ui,sans-serif;font-size:12px;margin:24px;color:#111}`,
     `h1{font-size:18px;margin:0 0 4px}`,
@@ -100,8 +111,8 @@ export function exportHistoryToPdf(
     `th,td{border:1px solid #ccc;padding:4px 8px;text-align:left}`,
     `th{background:#f3f3f3}`,
     `</style></head><body>`,
-    `<h1>${clubName} — närvarohistorik</h1>`,
-    `<p class="meta">${fromDate} till ${toDate} · ${sessions.length} lektioner</p>`,
+    `<h1>${heading}</h1>`,
+    `<p class="meta">${meta}</p>`,
   ]
 
   for (const session of sessions) {
@@ -152,4 +163,12 @@ export function exportDayToCsv(
   date: string
 ) {
   exportHistoryToCsv(sessions, date, date)
+}
+
+export function exportDayToPdf(
+  sessions: AttendanceHistorySession[],
+  date: string,
+  clubName = 'Klubb'
+) {
+  exportHistoryToPdf(sessions, date, date, clubName)
 }

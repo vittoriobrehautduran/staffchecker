@@ -1,11 +1,43 @@
 import { build } from 'esbuild'
 import { readdirSync, mkdirSync, existsSync, readFileSync, writeFileSync } from 'fs'
-import { join, dirname } from 'path'
+import { join, dirname, sep } from 'path'
 import { fileURLToPath } from 'url'
 
 const __filename = fileURLToPath(import.meta.url)
 const __dirname = dirname(__filename)
 const projectRoot = join(__dirname, '..')
+const lambdaDir = join(projectRoot, 'lambda')
+const utilsDir = `${lambdaDir}${sep}utils${sep}`
+
+// Wrap each Lambda handler with Sentry during bundling so source files stay unchanged.
+function sentryWrapPlugin() {
+  return {
+    name: 'sentry-wrap-handler',
+    setup(build) {
+      build.onLoad({ filter: /\.ts$/ }, (args) => {
+        if (!args.path.startsWith(lambdaDir)) return null
+        if (args.path.startsWith(utilsDir)) return null
+
+        const contents = readFileSync(args.path, 'utf8')
+        if (!contents.includes('export const handler')) return null
+        if (contents.includes('wrapLambdaHandler')) return null
+
+        let updated = contents
+        if (
+          !updated.includes("from './utils/sentry'") &&
+          !updated.includes('from "./utils/sentry"')
+        ) {
+          updated = `import { wrapLambdaHandler } from './utils/sentry'\n${updated}`
+        }
+
+        updated = updated.replace(/export const handler = /, 'const __handlerImpl = ')
+        updated += '\nexport const handler = wrapLambdaHandler(__handlerImpl)\n'
+
+        return { contents: updated, loader: 'ts' }
+      })
+    },
+  }
+}
 
 // Create output directory
 const outputDir = join(projectRoot, 'dist', 'lambda')
@@ -14,7 +46,6 @@ if (!existsSync(outputDir)) {
 }
 
 // Get all TypeScript files in lambda directory (excluding utils for now)
-const lambdaDir = join(projectRoot, 'lambda')
 const functions = readdirSync(lambdaDir)
   .filter(f => f.endsWith('.ts') && !f.includes('utils'))
 
@@ -37,6 +68,7 @@ for (const func of functions) {
       external: ['aws-sdk', '@aws-sdk/*'],
       sourcemap: false,
       minify: false,
+      plugins: [sentryWrapPlugin()],
       banner: {
         js: '// Bundled Lambda function - do not edit directly\n'
       },

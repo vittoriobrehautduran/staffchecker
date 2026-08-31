@@ -1,6 +1,8 @@
 // API Gateway base URL - set via VITE_API_BASE_URL environment variable
 // Example: https://xxxxx.execute-api.region.amazonaws.com/prod
 // Or custom domain: https://api.yourapp.com
+import { captureException } from '@/lib/sentry'
+
 const API_BASE_URL = import.meta.env.VITE_API_BASE_URL || ''
 
 // Get Cognito ID token from localStorage
@@ -65,6 +67,17 @@ function normalizeEtagHeader(value: string | null): string {
   return value.trim().replace(/^W\//, '').replace(/^"|"$/g, '')
 }
 
+function reportServerError(endpoint: string, status: number, message: string) {
+  if (status < 500) return
+  captureException(new Error(message), {
+    tags: {
+      source: 'api',
+      endpoint,
+      status: String(status),
+    },
+  })
+}
+
 export async function apiConditionalGet<T>(
   endpoint: string,
   ifNoneMatch?: string | null
@@ -109,6 +122,7 @@ export async function apiConditionalGet<T>(
 
   if (!response.ok) {
     const error = await readApiError(response)
+    reportServerError(cleanEndpoint, response.status, error.message || response.statusText)
     throw new Error(error.message || `API-förfrågan misslyckades: ${response.statusText}`)
   }
 
@@ -220,6 +234,11 @@ export async function apiRequest<T>(
         throw new Error('Sessionen har gått ut. Logga in igen.')
       }
 
+      reportServerError(
+        cleanEndpoint,
+        response.status,
+        error.message || response.statusText
+      )
       throw new Error(error.message || `API-förfrågan misslyckades: ${response.statusText}`)
     }
 

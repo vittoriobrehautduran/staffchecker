@@ -1,5 +1,4 @@
 import { Button } from '@/components/ui/button'
-import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
 import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
 import {
@@ -11,6 +10,7 @@ import {
 } from '@/components/ui/select'
 import { buildTimeOptions, DURATION_OPTIONS } from './timeSlots'
 import type { ClubLesson, ClubPayload, LessonSport, LocalLessonDraft } from './clubTypes'
+import { ClubEmptyState } from './clubUi'
 
 const TIME_OPTIONS = buildTimeOptions(20)
 
@@ -53,10 +53,15 @@ export function ClubDayPanel({
   return (
     <div className="space-y-4">
       {sortedLessons.length === 0 && drafts.length === 0 && (
-        <p className="text-sm text-muted-foreground">
-          Inga {sportLabel.toLowerCase()}-klasser på {weekdayLabel.toLowerCase()} ännu. Lägg till
-          en klass manuellt nedan.
-        </p>
+        <ClubEmptyState
+          title={`Inga ${sportLabel.toLowerCase()}-klasser`}
+          description={`Inget schemalagt på ${weekdayLabel.toLowerCase()} ännu. Lägg till en klass för att komma igång.`}
+          action={
+            <Button type="button" onClick={onAddLesson} disabled={isLoading} className="min-h-11">
+              Lägg till klass
+            </Button>
+          }
+        />
       )}
 
       {sortedLessons.map((lesson) => (
@@ -96,15 +101,17 @@ export function ClubDayPanel({
         />
       ))}
 
-      <Button
-        type="button"
-        variant="secondary"
-        className="w-full"
-        disabled={isLoading}
-        onClick={onAddLesson}
-      >
-        + Lägg till klass
-      </Button>
+      {(sortedLessons.length > 0 || drafts.length > 0) && (
+        <Button
+          type="button"
+          variant="secondary"
+          className="min-h-11 w-full"
+          disabled={isLoading}
+          onClick={onAddLesson}
+        >
+          + Lägg till klass
+        </Button>
+      )}
     </div>
   )
 }
@@ -174,14 +181,30 @@ function LessonEditor({
   }
 
   return (
-    <Card className={isDraft ? 'border-dashed' : undefined}>
-      <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-        <CardTitle className="text-base">{title}</CardTitle>
-        <Button type="button" variant="ghost" size="sm" onClick={onDelete} disabled={isLoading}>
+    <div
+      className={`rounded-2xl border bg-background/60 p-4 md:p-5 ${
+        isDraft ? 'border-dashed border-primary/40' : 'border-border/80'
+      }`}
+    >
+      <div className="mb-4 flex flex-row items-start justify-between gap-3">
+        <div>
+          <p className="text-xs font-medium uppercase tracking-wide text-muted-foreground">
+            {isDraft ? 'Utkast' : 'Klass'}
+          </p>
+          <h3 className="text-base font-semibold tracking-tight text-foreground">{title}</h3>
+        </div>
+        <Button
+          type="button"
+          variant="ghost"
+          size="sm"
+          className="min-h-11 shrink-0 text-muted-foreground"
+          onClick={onDelete}
+          disabled={isLoading}
+        >
           Ta bort
         </Button>
-      </CardHeader>
-      <CardContent className="space-y-4">
+      </div>
+      <div className="space-y-4">
         <div className="space-y-2">
           <Label htmlFor={`class-name-${isDraft ? 'draft' : 'saved'}-${safeStartTime}`}>
             Klassnamn
@@ -191,6 +214,7 @@ function LessonEditor({
             placeholder="t.ex. Juniorer 10–12, Nybörjare A"
             value={groupName}
             onChange={(event) => onChange({ className: event.target.value })}
+            className="min-h-11"
           />
         </div>
 
@@ -327,13 +351,14 @@ function LessonEditor({
         {isDraft && onSaveDraft && (
           <Button
             type="button"
+            className="min-h-11"
             onClick={onSaveDraft}
             disabled={isLoading || isSavingLesson || resourceId <= 0}
           >
             Spara klass
           </Button>
         )}
-      </CardContent>
-    </Card>
+      </div>
+    </div>
   )
 }
