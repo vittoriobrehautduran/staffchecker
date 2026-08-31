@@ -32,7 +32,7 @@ export default function Admin() {
   const [isReverting, setIsReverting] = useState(false)
   const [deleteUserEmail, setDeleteUserEmail] = useState('')
   const [isDeletingUser, setIsDeletingUser] = useState(false)
-  const [cleanupRetentionDays, setCleanupRetentionDays] = useState('60')
+  const [cleanupRetentionDays, setCleanupRetentionDays] = useState('180')
   const [cleanupPreview, setCleanupPreview] = useState<CleanupPreview | null>(null)
   const [cleanupConfirmPhrase, setCleanupConfirmPhrase] = useState('')
   const [isLoadingCleanupPreview, setIsLoadingCleanupPreview] = useState(false)
@@ -490,7 +490,7 @@ export default function Admin() {
               <p>
                 <strong>Automatisk rensning:</strong> Lambda <code>scheduled-club-cleanup</code>{' '}
                 kan köras via EventBridge (t.ex. varje natt) och rensar enligt{' '}
-                <code>clubs.retention_days</code> (standard 60). Manuell rensning ovan används
+                <code>clubs.retention_days</code> (standard 180, en termin). Manuell rensning ovan används
                 vid behov.
               </p>
             </div>

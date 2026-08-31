@@ -3,6 +3,9 @@ import { getClubIdBySlug } from './club-membership'
 
 export const CLEANUP_CONFIRM_PHRASE = 'RADERA GAMMAL NARVARO'
 
+// One tennis term/season (~6 months). Used as DB default and code fallback.
+export const DEFAULT_CLUB_RETENTION_DAYS = 180
+
 function todayDateStr(): string {
   return new Date().toISOString().slice(0, 10)
 }
@@ -84,7 +87,7 @@ export async function getClubCleanupPreview(
       ? Math.max(0, Math.floor(retentionDays))
       : undefined
   const effectiveRetention =
-    safeRetentionInput != null ? safeRetentionInput : Math.max(1, club.retention_days ?? 60)
+    safeRetentionInput != null ? safeRetentionInput : Math.max(1, club.retention_days ?? DEFAULT_CLUB_RETENTION_DAYS)
   const deleteAll = effectiveRetention === 0
   const cutoffDate = deleteAll ? '9999-12-31' : cutoffDateFromRetentionDays(effectiveRetention)
   const counts = await countRows(clubId, cutoffDate)

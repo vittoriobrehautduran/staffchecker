@@ -1,7 +1,7 @@
 import { ScheduledEvent } from 'aws-lambda'
 import { runScheduledCleanupForAllClubs } from './utils/club-cleanup'
 
-// EventBridge cron: runs retention cleanup for all clubs (uses clubs.retention_days).
+// EventBridge cron: runs retention cleanup for all clubs (uses clubs.retention_days, default 180).
 export const handler = async (_event: ScheduledEvent) => {
   try {
     const results = await runScheduledCleanupForAllClubs()

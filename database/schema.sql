@@ -75,7 +75,7 @@ CREATE TABLE IF NOT EXISTS clubs (
   tennis_courts_count INTEGER NOT NULL DEFAULT 0 CHECK (tennis_courts_count >= 0),
   bordtennis_tables_count INTEGER NOT NULL DEFAULT 0 CHECK (bordtennis_tables_count >= 0),
   default_slot_duration_minutes INTEGER NOT NULL DEFAULT 60 CHECK (default_slot_duration_minutes > 0),
-  retention_days INTEGER NOT NULL DEFAULT 60 CHECK (retention_days > 0),
+  retention_days INTEGER NOT NULL DEFAULT 180 CHECK (retention_days > 0),
   created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
   updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
   CONSTRAINT clubs_slug_key UNIQUE (slug)
