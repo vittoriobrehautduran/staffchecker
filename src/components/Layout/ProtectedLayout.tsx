@@ -5,13 +5,37 @@ import { LoadingOverlay } from '@/components/ui/loading-spinner'
 import { Button } from '@/components/ui/button'
 import { AppSidebar } from './AppSidebar'
 import { Menu } from 'lucide-react'
+import { cn } from '@/lib/utils'
 
-// Signed-in shell: collapsible drawer on small screens, fixed sidebar from md up.
+const DESKTOP_SIDEBAR_COLLAPSED_KEY = 'staffcheck-sidebar-collapsed'
+
+function readDesktopSidebarCollapsed(): boolean {
+  try {
+    return localStorage.getItem(DESKTOP_SIDEBAR_COLLAPSED_KEY) === '1'
+  } catch {
+    return false
+  }
+}
+
+// Signed-in shell: drawer on small screens, full or icon rail from md up.
 export default function ProtectedLayout() {
   const { isSignedIn, isLoading } = useAuth()
   const [mobileNavOpen, setMobileNavOpen] = useState(false)
+  const [desktopCollapsed, setDesktopCollapsed] = useState(readDesktopSidebarCollapsed)
 
   const closeMobileNav = useCallback(() => setMobileNavOpen(false), [])
+
+  const toggleDesktopCollapsed = useCallback(() => {
+    setDesktopCollapsed((prev) => {
+      const next = !prev
+      try {
+        localStorage.setItem(DESKTOP_SIDEBAR_COLLAPSED_KEY, next ? '1' : '0')
+      } catch {
+        // Private mode still toggles for this visit.
+      }
+      return next
+    })
+  }, [])
 
   useEffect(() => {
     if (!mobileNavOpen) return
@@ -50,7 +74,13 @@ export default function ProtectedLayout() {
   }
 
   return (
-    <div className="relative min-h-screen bg-background text-foreground md:h-screen md:max-h-screen md:overflow-hidden">
+    // Document scrolls on all sizes. Avoid md:h-screen + overflow-hidden —
+    // that nested scrollport fights Android Chrome when the URL bar shows/hides
+    // (especially tablet landscape on the närvaro page).
+    <div
+      data-testid="app-shell"
+      className="relative min-h-dvh bg-background text-foreground"
+    >
       {mobileNavOpen && (
         <button
           type="button"
@@ -60,10 +90,22 @@ export default function ProtectedLayout() {
         />
       )}
 
-      <AppSidebar mobileOpen={mobileNavOpen} onMobileOpenChange={setMobileNavOpen} />
+      <AppSidebar
+        mobileOpen={mobileNavOpen}
+        onMobileOpenChange={setMobileNavOpen}
+        desktopCollapsed={desktopCollapsed}
+        onDesktopCollapsedToggle={toggleDesktopCollapsed}
+      />
 
-      {/* Sidebar is fixed; this column scrolls while the rail stays put (md+). */}
-      <div className="flex min-h-screen min-w-0 flex-col md:ml-56 md:h-screen md:min-h-0 md:overflow-y-auto">
+      {/* Sidebar is fixed; the page (document) scrolls while the rail stays put. */}
+      <div
+        data-testid="app-main-column"
+        className={cn(
+          'flex min-h-dvh min-w-0 flex-col',
+          'md:transition-[margin] md:duration-200 md:ease-out',
+          desktopCollapsed ? 'md:ml-16' : 'md:ml-56'
+        )}
+      >
         <header className="sticky top-0 z-30 flex h-12 shrink-0 items-center gap-2 border-b border-border bg-background/95 px-2 backdrop-blur supports-[backdrop-filter]:bg-background/80 md:hidden">
           <Button
             type="button"

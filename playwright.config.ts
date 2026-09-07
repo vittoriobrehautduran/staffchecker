@@ -19,6 +19,19 @@ export default defineConfig({
     {
       name: 'chromium',
       use: { ...devices['Desktop Chrome'] },
+      testIgnore: /tablet-landscape.*\.spec\.ts/,
+    },
+    // Tablet landscape (~md breakpoint): catches the nested h-screen scroll trap
+    // that stuck Android Chrome on närvaro. Not a full Android WebView substitute.
+    {
+      name: 'tablet-landscape',
+      use: {
+        browserName: 'chromium',
+        viewport: { width: 1024, height: 600 },
+        hasTouch: true,
+        isMobile: true,
+      },
+      testMatch: /tablet-landscape.*\.spec\.ts/,
     },
   ],
   webServer: process.env.PLAYWRIGHT_SKIP_WEBSERVER
