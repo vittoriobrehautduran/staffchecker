@@ -8,9 +8,16 @@ import {
   SelectTrigger,
   SelectValue,
 } from '@/components/ui/select'
-import { buildTimeOptions, DURATION_OPTIONS } from './timeSlots'
+import { addMinutesToTime, buildTimeOptions, DURATION_OPTIONS } from './timeSlots'
 import type { ClubLesson, ClubPayload, LessonSport, LocalLessonDraft } from './clubTypes'
 import { ClubEmptyState } from './clubUi'
+import { DefaultCoachesEditor } from './DefaultCoachesEditor'
+import {
+  LessonTimeRange,
+  ResourceVenueBadge,
+  resourceVenueCardClassName,
+} from './resourceVenueStyles'
+import { cn } from '@/lib/utils'
 
 const TIME_OPTIONS = buildTimeOptions(20)
 
@@ -160,17 +167,12 @@ function LessonEditor({
     sport === 'tennis' ? resource.resource_type === 'court' : resource.resource_type === 'table'
   )
 
-  const coaches = data.coaches.filter(
-    (coach) => coach.sport === sport || coach.sport === 'both'
-  )
-
   const resourceLabel = sport === 'tennis' ? 'Bana' : 'Bord'
   const safeStartTime = startTime || '10:00'
   const safeDuration = durationMinutes > 0 ? durationMinutes : 60
   // Keep Select always controlled (never undefined) to avoid React warnings.
   const NONE = '__none__'
   const courtSelectValue = resourceId > 0 ? String(resourceId) : NONE
-  const coachSelectValue = coachIds[0] ? String(coachIds[0]) : NONE
   const title = groupName.trim() || 'Ny klass'
 
   function resourceDisplayName(resource: (typeof resources)[0]) {
@@ -180,18 +182,37 @@ function LessonEditor({
     return `${resourceLabel} ${resource.resource_number}`
   }
 
+  const selectedResource =
+    resourceId > 0 ? resources.find((resource) => resource.id === resourceId) : undefined
+  const venueResourceNumber = selectedResource?.resource_number ?? 0
+  const endTime = addMinutesToTime(safeStartTime, safeDuration)
+
   return (
     <div
-      className={`rounded-2xl border bg-background/60 p-4 md:p-5 ${
-        isDraft ? 'border-dashed border-primary/40' : 'border-border/80'
-      }`}
+      className={cn(
+        resourceVenueCardClassName(venueResourceNumber, 'p-4 md:p-5'),
+        isDraft && 'border-dashed border-primary/40'
+      )}
     >
       <div className="mb-4 flex flex-row items-start justify-between gap-3">
-        <div>
-          <p className="text-xs font-medium uppercase tracking-wide text-muted-foreground">
-            {isDraft ? 'Utkast' : 'Klass'}
-          </p>
-          <h3 className="text-base font-semibold tracking-tight text-foreground">{title}</h3>
+        <div className="min-w-0 space-y-2">
+          {selectedResource ? (
+            <ResourceVenueBadge
+              name={resourceDisplayName(selectedResource)}
+              resourceNumber={selectedResource.resource_number}
+            />
+          ) : (
+            <p className="text-xs font-medium uppercase tracking-wide text-muted-foreground">
+              {isDraft ? 'Utkast' : 'Klass'} — välj {resourceLabel.toLowerCase()}
+            </p>
+          )}
+          <LessonTimeRange startTime={safeStartTime} endTime={endTime} />
+          <div>
+            <p className="text-xs font-medium uppercase tracking-wide text-muted-foreground">
+              {isDraft ? 'Utkast' : 'Klass'}
+            </p>
+            <h3 className="text-base font-semibold tracking-tight text-foreground">{title}</h3>
+          </div>
         </div>
         <Button
           type="button"
@@ -284,31 +305,13 @@ function LessonEditor({
           )}
         </div>
 
-        <div className="space-y-2">
-          <Label>Välj förvald tränare</Label>
-          {coaches.length === 0 ? (
-            <p className="text-sm text-muted-foreground">Lägg till tränare under Inställningar.</p>
-          ) : (
-            <Select
-              value={coachSelectValue}
-              onValueChange={(value) => {
-                onChange({ coachIds: value === NONE ? [] : [Number(value)] })
-              }}
-            >
-              <SelectTrigger>
-                <SelectValue placeholder="Välj tränare" />
-              </SelectTrigger>
-              <SelectContent>
-                <SelectItem value={NONE}>Ingen tränare</SelectItem>
-                {coaches.map((coach) => (
-                  <SelectItem key={coach.id} value={String(coach.id)}>
-                    {coach.name}
-                  </SelectItem>
-                ))}
-              </SelectContent>
-            </Select>
-          )}
-        </div>
+        <DefaultCoachesEditor
+          sport={sport}
+          coaches={data.coaches}
+          coachIds={coachIds}
+          onChange={(nextCoachIds) => onChange({ coachIds: nextCoachIds })}
+          disabled={isLoading}
+        />
 
         <div className="space-y-2">
           <Label>Spelare i klassen</Label>

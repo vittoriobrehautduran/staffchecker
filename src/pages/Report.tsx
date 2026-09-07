@@ -2,14 +2,19 @@ import { useState, useRef, useEffect, useMemo } from 'react'
 import { useAuth } from '@/contexts/AuthContext'
 import { useLocation, useNavigate } from 'react-router-dom'
 import { format, startOfMonth, endOfMonth, eachDayOfInterval, addMonths } from 'date-fns'
+import { sv } from 'date-fns/locale'
 import Calendar from 'react-calendar'
 import 'react-calendar/dist/Calendar.css'
 import './Report.css'
 import { Button } from '@/components/ui/button'
-import { Eye } from 'lucide-react'
+import { Bell, Eye, Loader2, X } from 'lucide-react'
 import { DateModal } from '@/components/Calendar/DateModal'
 import { useToast } from '@/components/ui/use-toast'
 import { apiRequest } from '@/services/api'
+import {
+  ClubPageHeader,
+  ClubSoftPanel,
+} from '@/pages/club/clubUi'
 import {
   buildClosureDayMap,
   closureTypeDisplayLabel,
@@ -59,6 +64,8 @@ type ReportLocationState = {
   activeMonthKey?: string
 }
 
+const SUBMIT_REMINDER_STORAGE_KEY = 'kalender-submit-reminder-dismissed'
+
 // Parse "yyyy-MM" safely and fall back to current month if invalid.
 function formatClosureDateLabel(dateStr: string): string {
   const [year, month, day] = dateStr.split('-').map(Number)
@@ -106,10 +113,15 @@ export default function Report() {
     lovRanges: [],
   })
   const [isLoadingEntries, setIsLoadingEntries] = useState(false)
-  const [showNotification, setShowNotification] = useState(true)
+  const [reminderDismissed, setReminderDismissed] = useState(() => {
+    try {
+      return sessionStorage.getItem(SUBMIT_REMINDER_STORAGE_KEY) === '1'
+    } catch {
+      return false
+    }
+  })
   const loadingRef = useRef(false)
   const lastLoadedMonthRef = useRef<string | null>(null)
-  const notificationTimeoutsRef = useRef<NodeJS.Timeout[]>([])
   const [compactHourLabels, setCompactHourLabels] = useState(
     () => typeof window !== 'undefined' && window.matchMedia('(max-width: 640px)').matches
   )
@@ -240,33 +252,14 @@ export default function Report() {
     }
   }, [monthEntries, selectedDate, isModalOpen])
 
-  useEffect(() => {
-    if (isLoadingEntries || !isSignedIn) {
-      setShowNotification(false)
-      notificationTimeoutsRef.current.forEach(timeout => clearTimeout(timeout))
-      notificationTimeoutsRef.current = []
-      return
+  const dismissSubmitReminder = () => {
+    setReminderDismissed(true)
+    try {
+      sessionStorage.setItem(SUBMIT_REMINDER_STORAGE_KEY, '1')
+    } catch {
+      // Private mode still dismisses for this visit.
     }
-
-    const cycle = () => {
-      setShowNotification(true)
-      const hideTimeout = setTimeout(() => {
-        setShowNotification(false)
-        const showTimeout = setTimeout(() => {
-          cycle()
-        }, 30000)
-        notificationTimeoutsRef.current.push(showTimeout)
-      }, 10000)
-      notificationTimeoutsRef.current.push(hideTimeout)
-    }
-
-    cycle()
-
-    return () => {
-      notificationTimeoutsRef.current.forEach(timeout => clearTimeout(timeout))
-      notificationTimeoutsRef.current = []
-    }
-  }, [isLoadingEntries, isSignedIn])
+  }
 
   const handleDateClick = (value: any) => {
     // Handle single date selection (not range)
@@ -509,124 +502,131 @@ export default function Report() {
 
   const minDate = startOfMonth(addMonths(today, -6))
   const maxDate = endOfMonth(addMonths(today, 1))
+  const monthLabel = format(currentDate, 'MMMM yyyy', { locale: sv })
 
   return (
-    <div className="flex min-h-screen flex-1 flex-col bg-background">
-      <div className="flex-shrink-0 border-b border-border bg-card/30 px-3 py-4 sm:px-6 sm:py-5">
-        <div className="mx-auto flex max-w-7xl items-center justify-between gap-3 sm:gap-6">
-          <div className="min-w-0 flex-1">
-            <h1 className="truncate text-2xl font-semibold tracking-tight text-foreground sm:text-3xl">
-              Timrapport
-            </h1>
-            <p className="mt-1 hidden text-xs text-muted-foreground sm:block sm:text-sm">
-              Klicka på ett datum för att lägga till eller redigera timmar
-            </p>
-          </div>
-          <Button
-            variant="default"
-            onClick={() =>
-              navigate('/preview', {
-                state: {
-                  reportMonthKey: format(currentDate, 'yyyy-MM'),
-                },
-              })
-            }
-            className="h-9 flex-shrink-0 px-3 text-xs shadow-sm transition-shadow hover:shadow-md sm:h-10 sm:px-4 sm:text-sm"
-          >
-            <Eye className="mr-1.5 h-4 w-4 opacity-90 sm:mr-2" aria-hidden />
-            <span className="hidden sm:inline">Förhandsvisa</span>
-            <span className="sm:hidden">Förhandsgranska</span>
-          </Button>
-        </div>
-      </div>
-
-      <div className="relative h-[48px] shrink-0 border-b border-border sm:h-[52px]">
+    <div className="min-h-screen flex-1 bg-background">
+      <div className="relative overflow-hidden">
         <div
-          className={`absolute inset-0 z-10 flex h-full items-center gap-3 px-3 transition-opacity duration-300 sm:px-6 ${
-            isLoadingEntries ? 'opacity-100' : 'pointer-events-none opacity-0'
-          }`}
-        >
-          <div className="rounded-md border border-primary/25 bg-primary/10 px-3 py-2 sm:px-4">
-            <div className="flex items-center gap-3 text-sm font-medium text-foreground sm:text-base">
-              <div className="relative h-4 w-4 shrink-0 sm:h-5 sm:w-5">
-                <div className="absolute inset-0 rounded-full border-2 border-primary/30" />
-                <div className="absolute inset-0 animate-spin rounded-full border-2 border-transparent border-t-primary" />
-              </div>
-              <span>Laddar dina timmar, vänta en stund...</span>
-            </div>
-          </div>
-        </div>
-
-        {!isLoadingEntries && (
-          <div
-            className={`absolute inset-0 z-10 flex h-full items-center justify-center px-3 transition-opacity duration-500 sm:px-6 ${
-              showNotification ? 'opacity-100' : 'pointer-events-none opacity-0'
-            }`}
-          >
-            <p className="rounded-md border border-amber-500/25 bg-amber-500/10 px-4 py-2 text-center text-sm font-medium text-amber-950 dark:text-amber-100 sm:text-base">
-              Glöm inte att lämna in rapporten i slutet av månaden
-            </p>
-          </div>
-        )}
-      </div>
-
-      <div className="flex flex-1 justify-center px-1 py-3 sm:px-4 sm:py-6 md:px-6 lg:py-8">
-        <div className="flex w-full max-w-7xl flex-col rounded-xl border border-border bg-card p-2 shadow-lg shadow-black/20 sm:rounded-2xl sm:p-5 md:p-8">
-          <Calendar
-            onChange={handleDateClick}
-            value={selectedDate}
-            onActiveStartDateChange={handleActiveStartDateChange}
-            activeStartDate={currentDate}
-            minDate={minDate}
-            maxDate={maxDate}
-            locale="sv-SE"
-            tileContent={tileContent}
-            tileClassName={tileClassName}
-            className="report-dashboard-calendar w-full border-0"
-            showWeekNumbers={true}
+          aria-hidden
+          className="pointer-events-none absolute inset-x-0 top-0 h-56 bg-gradient-to-b from-primary/[0.07] via-transparent to-transparent"
+        />
+        <div className="relative mx-auto w-full max-w-7xl space-y-6 px-4 py-6 md:space-y-8 md:px-6 md:py-8">
+          <ClubPageHeader
+            eyebrow="Rapport"
+            title="Kalender"
+            description={`Klicka på ett datum i ${monthLabel} för att lägga till eller redigera timmar.`}
+            actions={
+              <Button
+                type="button"
+                className="min-h-11 w-full sm:w-auto"
+                onClick={() =>
+                  navigate('/preview', {
+                    state: {
+                      reportMonthKey: format(currentDate, 'yyyy-MM'),
+                    },
+                  })
+                }
+              >
+                <Eye className="mr-2 h-4 w-4" aria-hidden />
+                Förhandsvisa
+              </Button>
+            }
           />
 
-          {monthClosureSummaries.length > 0 && (
-            <div className="mt-4 space-y-2 border-t border-border pt-4">
-              <p className="text-xs font-semibold text-muted-foreground">Denna månad</p>
-              <ul className="space-y-1.5 text-sm">
-                {monthClosureSummaries.map((entry) => (
-                  <li
-                    key={`${entry.type}-${entry.fromDate}-${entry.toDate}-${entry.label}`}
-                    className="flex flex-wrap items-baseline gap-x-2"
-                  >
-                    <span
-                      className={`shrink-0 rounded px-1.5 py-0.5 text-[10px] font-medium ${
-                        entry.type === 'lov'
-                          ? 'bg-amber-500/15 text-amber-900 dark:text-amber-100'
-                          : 'bg-rose-500/15 text-rose-900 dark:text-rose-100'
-                      }`}
-                    >
-                      {closureTypeDisplayLabel(entry.type)}
-                    </span>
-                    <span className="font-medium">{entry.label}</span>
-                    <span className="text-muted-foreground">
-                      {entry.fromDate === entry.toDate
-                        ? formatClosureDateLabel(entry.fromDate)
-                        : `${formatClosureDateLabel(entry.fromDate)} – ${formatClosureDateLabel(entry.toDate)}`}
-                    </span>
-                  </li>
-                ))}
-              </ul>
-            </div>
+          {isLoadingEntries && (
+            <p
+              className="-mt-2 flex items-center gap-2 text-sm text-muted-foreground"
+              aria-live="polite"
+            >
+              <Loader2 className="h-4 w-4 animate-spin" aria-hidden />
+              Laddar dina timmar…
+            </p>
           )}
+
+          {!reminderDismissed &&
+            Object.values(monthEntries)[0]?.reportStatus !== 'submitted' && (
+              <div
+                role="status"
+                className="flex items-start gap-3 rounded-xl border border-amber-500/25 bg-amber-500/[0.08] px-3 py-3 sm:px-4"
+              >
+                <Bell
+                  className="mt-0.5 h-4 w-4 shrink-0 text-amber-800 dark:text-amber-200"
+                  aria-hidden
+                />
+                <p className="min-w-0 flex-1 text-sm leading-relaxed text-foreground">
+                  Glöm inte att lämna in rapporten i slutet av månaden.
+                </p>
+                <button
+                  type="button"
+                  aria-label="Stäng påminnelse"
+                  onClick={dismissSubmitReminder}
+                  className="inline-flex h-11 w-11 shrink-0 items-center justify-center rounded-lg text-muted-foreground transition-colors hover:bg-amber-500/15 hover:text-foreground"
+                >
+                  <X className="h-4 w-4" aria-hidden />
+                </button>
+              </div>
+            )}
+
+          <ClubSoftPanel className="p-2 md:p-6">
+            <Calendar
+              onChange={handleDateClick}
+              value={selectedDate}
+              onActiveStartDateChange={handleActiveStartDateChange}
+              activeStartDate={currentDate}
+              minDate={minDate}
+              maxDate={maxDate}
+              locale="sv-SE"
+              tileContent={tileContent}
+              tileClassName={tileClassName}
+              className="report-dashboard-calendar w-full border-0"
+              showWeekNumbers={true}
+            />
+
+            {monthClosureSummaries.length > 0 && (
+              <div className="mt-5 space-y-3 border-t border-border/80 pt-5">
+                <h2 className="text-sm font-semibold tracking-tight text-foreground">
+                  Klubbstängt denna månad
+                </h2>
+                <ul className="space-y-2 text-sm">
+                  {monthClosureSummaries.map((entry) => (
+                    <li
+                      key={`${entry.type}-${entry.fromDate}-${entry.toDate}-${entry.label}`}
+                      className="flex flex-wrap items-center gap-x-2 gap-y-1"
+                    >
+                      <span
+                        className={`shrink-0 rounded-full px-2 py-0.5 text-[11px] font-medium ${
+                          entry.type === 'lov'
+                            ? 'bg-amber-500/15 text-amber-900 dark:text-amber-100'
+                            : 'bg-rose-500/15 text-rose-900 dark:text-rose-100'
+                        }`}
+                      >
+                        {closureTypeDisplayLabel(entry.type)}
+                      </span>
+                      <span className="font-medium text-foreground">{entry.label}</span>
+                      <span className="text-muted-foreground">
+                        {entry.fromDate === entry.toDate
+                          ? formatClosureDateLabel(entry.fromDate)
+                          : `${formatClosureDateLabel(entry.fromDate)} – ${formatClosureDateLabel(entry.toDate)}`}
+                      </span>
+                    </li>
+                  ))}
+                </ul>
+              </div>
+            )}
+          </ClubSoftPanel>
+
+          <DateModal
+            open={isModalOpen}
+            onOpenChange={setIsModalOpen}
+            date={selectedDate}
+            entries={entries}
+            onEntrySaved={handleEntrySaved}
+            onEntryDeleted={handleEntryDeleted}
+            reportStatus={reportStatus}
+          />
         </div>
       </div>
-
-      <DateModal
-        open={isModalOpen}
-        onOpenChange={setIsModalOpen}
-        date={selectedDate}
-        entries={entries}
-        onEntrySaved={handleEntrySaved}
-        onEntryDeleted={handleEntryDeleted}
-        reportStatus={reportStatus}
-      />
     </div>
   )
 }

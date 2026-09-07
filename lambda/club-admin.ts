@@ -513,35 +513,94 @@ async function resolveResourceIdForImport(
 async function resolveCoachIdsForImport(
   clubId: number,
   sport: LessonSport,
-  coachId: number,
-  coachName: string | undefined,
+  input: {
+    coachIds?: number[]
+    coachNames?: string[]
+    coachId?: number
+    coachName?: string
+  },
   createMissingCoaches: boolean,
   caches: ImportCaches
 ): Promise<number[]> {
-  if (coachId > 0) return [coachId]
+  const resolved: number[] = []
+  const seen = new Set<number>()
 
-  if (coachName && createMissingCoaches) {
-    const trimmed = coachName.trim()
-    if (looksLikePhoneNumber(trimmed)) {
-      return [await resolveUnknownCoachId(clubId, sport, caches)]
-    }
-
-    const normalized = trimmed.toLowerCase()
-    const existing = caches.coachByName.get(normalized)
-    if (existing) return [existing]
-
-    const inserted = (await sql`
-      INSERT INTO club_coaches (club_id, name, sport)
-      VALUES (${clubId}, ${trimmed}, ${sport})
-      RETURNING id
-    `) as { id: number }[]
-
-    const newId = inserted[0].id
-    caches.coachByName.set(normalized, newId)
-    return [newId]
+  const coachIds = Array.isArray(input.coachIds)
+    ? (input.coachIds as unknown[]).map((id) => Number(id)).filter((id) => id > 0)
+    : []
+  if (coachIds.length === 0 && input.coachId) {
+    coachIds.push(Number(input.coachId))
   }
 
-  return [await resolveUnknownCoachId(clubId, sport, caches)]
+  for (const coachId of coachIds) {
+    if (!seen.has(coachId)) {
+      seen.add(coachId)
+      resolved.push(coachId)
+    }
+  }
+
+  const coachNames = Array.isArray(input.coachNames)
+    ? (input.coachNames as unknown[]).map((name) => String(name).trim()).filter((name) => name.length > 0)
+    : []
+  if (coachNames.length === 0 && input.coachName) {
+    coachNames.push(String(input.coachName).trim())
+  }
+
+  for (const coachName of coachNames) {
+    const coachId = await resolveCoachIdForImportByName(
+      clubId,
+      sport,
+      coachName,
+      createMissingCoaches,
+      caches
+    )
+    if (coachId > 0 && !seen.has(coachId)) {
+      seen.add(coachId)
+      resolved.push(coachId)
+    }
+  }
+
+  if (resolved.length === 0) {
+    return [await resolveUnknownCoachId(clubId, sport, caches)]
+  }
+
+  return resolved
+}
+
+async function resolveCoachIdForImportByName(
+  clubId: number,
+  sport: LessonSport,
+  coachName: string,
+  createMissingCoaches: boolean,
+  caches: ImportCaches
+): Promise<number> {
+  const trimmed = coachName.trim()
+  if (!trimmed) return 0
+
+  if (looksLikePhoneNumber(trimmed)) {
+    return resolveUnknownCoachId(clubId, sport, caches)
+  }
+
+  const normalized = trimmed.toLowerCase()
+  const existing = caches.coachByName.get(normalized)
+  if (existing) return existing
+
+  if (!createMissingCoaches) {
+    if (normalized === 'unknown') {
+      return resolveUnknownCoachId(clubId, sport, caches)
+    }
+    return 0
+  }
+
+  const inserted = (await sql`
+    INSERT INTO club_coaches (club_id, name, sport)
+    VALUES (${clubId}, ${trimmed}, ${sport})
+    RETURNING id
+  `) as { id: number }[]
+
+  const newId = inserted[0].id
+  caches.coachByName.set(normalized, newId)
+  return newId
 }
 
 async function bulkDeleteLessonsForSport(clubId: number, sport: LessonSport) {
@@ -1476,7 +1535,12 @@ export const handler = async (
           startTime: String(lesson.startTime || ''),
           endTime: String(lesson.endTime || ''),
           venue: String(lesson.venue || ''),
-          coachName: lesson.coachName != null ? String(lesson.coachName) : null,
+          coachNames:
+            Array.isArray(lesson.coachNames) && lesson.coachNames.length > 0
+              ? (lesson.coachNames as unknown[]).map((name) => String(name))
+              : lesson.coachName != null
+                ? [String(lesson.coachName)]
+                : [],
           playerCount: Number(lesson.playerCount) || 0,
           samplePlayers,
           status: String(lesson.status || ''),
@@ -1559,6 +1623,8 @@ export const handler = async (
           resourceId?: number
           resourceNumber?: number
           venueRaw?: string
+          coachIds?: number[]
+          coachNames?: string[]
           coachId?: number
           coachName?: string
           playerNames?: string[]
@@ -1606,8 +1672,12 @@ export const handler = async (
         const coachIds = await resolveCoachIdsForImport(
           clubId,
           sport,
-          Number(lesson.coachId ?? 0),
-          lesson.coachName ? String(lesson.coachName) : undefined,
+          {
+            coachIds: Array.isArray(lesson.coachIds) ? lesson.coachIds : undefined,
+            coachNames: Array.isArray(lesson.coachNames) ? lesson.coachNames : undefined,
+            coachId: lesson.coachId,
+            coachName: lesson.coachName ? String(lesson.coachName) : undefined,
+          },
           createMissingCoaches,
           importCaches
         )

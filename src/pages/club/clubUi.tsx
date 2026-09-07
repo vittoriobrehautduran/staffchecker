@@ -11,15 +11,15 @@ type ClubPageShellProps = {
 
 export function ClubPageShell({ children, className }: ClubPageShellProps) {
   return (
-    <div className={cn('min-h-screen flex-1 bg-background', className)}>
-      <div className="relative overflow-hidden">
-        <div
-          aria-hidden
-          className="pointer-events-none absolute inset-x-0 top-0 h-56 bg-gradient-to-b from-primary/[0.07] via-transparent to-transparent"
-        />
-        <div className="container relative mx-auto max-w-4xl space-y-6 px-4 py-6 md:space-y-8 md:px-6 md:py-8">
-          {children}
-        </div>
+    // No min-h-screen / overflow-hidden here — those trapped scroll inside the
+    // old md:h-screen app shell and made Android tablet landscape feel stuck.
+    <div className={cn('relative flex-1 bg-background', className)}>
+      <div
+        aria-hidden
+        className="pointer-events-none absolute inset-x-0 top-0 h-56 bg-gradient-to-b from-primary/[0.07] via-transparent to-transparent"
+      />
+      <div className="container relative mx-auto max-w-4xl space-y-6 px-4 py-6 md:space-y-8 md:px-6 md:py-8">
+        {children}
       </div>
     </div>
   )

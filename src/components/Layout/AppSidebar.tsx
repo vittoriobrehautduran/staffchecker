@@ -10,36 +10,60 @@ import {
   DropdownMenuSeparator,
   DropdownMenuTrigger,
 } from '@/components/ui/dropdown-menu'
-import { Calendar, CircleHelp, ClipboardList, Eye, FileText, LayoutDashboard, LogOut, Settings, Shield, Users, X } from 'lucide-react'
+import { Calendar, CircleHelp, ClipboardList, Eye, FileText, LayoutDashboard, LogOut, PanelLeftClose, PanelLeftOpen, Settings, Shield, Users, X } from 'lucide-react'
 import { SettingsDialog } from './SettingsDialog'
 
 type AppSidebarProps = {
   mobileOpen: boolean
   onMobileOpenChange: (open: boolean) => void
+  desktopCollapsed: boolean
+  onDesktopCollapsedToggle: () => void
 }
 
 // Left rail navigation: teal accent bar on the active item (Netlify-style).
-function sidebarItemClass(active: boolean) {
+function sidebarItemClass(active: boolean, collapsed: boolean) {
   return cn(
     'relative flex items-center gap-3 rounded-r-lg py-2.5 pl-3 pr-2 text-sm font-medium transition-colors',
     'border-l-[3px] border-transparent',
+    collapsed && 'md:justify-center md:gap-0 md:px-2',
     active
       ? 'border-primary bg-primary/10 text-foreground'
       : 'text-muted-foreground hover:bg-muted/50 hover:text-foreground'
   )
 }
 
-export function AppSidebar({ mobileOpen, onMobileOpenChange }: AppSidebarProps) {
+export function AppSidebar({
+  mobileOpen,
+  onMobileOpenChange,
+  desktopCollapsed,
+  onDesktopCollapsedToggle,
+}: AppSidebarProps) {
   const { user, signOut } = useAuth()
   const navigate = useNavigate()
   const location = useLocation()
   const [isSettingsOpen, setIsSettingsOpen] = useState(false)
   const [isSupportOpen, setIsSupportOpen] = useState(false)
+  const [isDesktop, setIsDesktop] = useState(
+    () => typeof window !== 'undefined' && window.matchMedia('(min-width: 768px)').matches
+  )
   const supportRootRef = useRef<HTMLDivElement>(null)
+  const iconRail = desktopCollapsed && isDesktop
+
+  useEffect(() => {
+    const mq = window.matchMedia('(min-width: 768px)')
+    const apply = () => setIsDesktop(mq.matches)
+    apply()
+    mq.addEventListener('change', apply)
+    return () => mq.removeEventListener('change', apply)
+  }, [])
 
   useEffect(() => {
     onMobileOpenChange(false)
   }, [location.pathname, onMobileOpenChange])
+
+  useEffect(() => {
+    setIsSupportOpen(false)
+  }, [desktopCollapsed])
 
   // Close support on outside tap/click. Deferred so the same gesture that opened it does not close it.
   useEffect(() => {
@@ -70,27 +94,50 @@ export function AppSidebar({ mobileOpen, onMobileOpenChange }: AppSidebarProps) 
     navigate('/login', { replace: true })
   }
 
+  const navLabelClass = desktopCollapsed ? 'md:sr-only' : undefined
+
   return (
     <aside
       id="app-sidebar"
       className={cn(
-        'fixed left-0 top-0 z-50 flex h-screen max-h-dvh w-56 flex-col overflow-x-visible overflow-y-auto border-y-0 border-l-0 border-r border-border bg-card shadow-sm',
+        'fixed left-0 top-0 z-50 flex h-dvh max-h-dvh flex-col overflow-visible border-y-0 border-l-0 border-r border-border bg-card shadow-sm',
+        'w-56 transition-[width,transform] duration-200 ease-out',
+        desktopCollapsed && 'md:w-16',
         'rounded-r-xl md:rounded-r-2xl',
-        'transition-transform duration-200 ease-out',
         mobileOpen ? 'translate-x-0' : '-translate-x-full md:translate-x-0',
         !mobileOpen && 'pointer-events-none md:pointer-events-auto'
       )}
     >
-      <div className="flex h-14 items-center gap-2 border-b border-border px-3 md:px-4">
+      <div
+        className={cn(
+          'flex h-14 items-center gap-2 border-b border-border px-3 md:px-4',
+          desktopCollapsed && 'md:h-auto md:flex-col md:gap-2 md:px-2 md:py-3'
+        )}
+      >
         <img
           src="/logo.jpg"
           alt=""
           className="h-9 w-9 shrink-0 rounded-lg object-contain ring-1 ring-border"
         />
-        <div className="min-w-0 flex-1">
+        <div className={cn('min-w-0 flex-1', desktopCollapsed && 'md:hidden')}>
           <p className="truncate text-sm font-semibold tracking-tight text-foreground">Staffcheck</p>
           <p className="truncate text-[11px] text-muted-foreground">Timrapportering</p>
         </div>
+        <Button
+          type="button"
+          variant="ghost"
+          size="icon"
+          className="hidden shrink-0 md:inline-flex"
+          aria-pressed={desktopCollapsed}
+          aria-label={desktopCollapsed ? 'Visa sidomeny' : 'Fäll ihop sidomeny'}
+          onClick={onDesktopCollapsedToggle}
+        >
+          {desktopCollapsed ? (
+            <PanelLeftOpen className="h-5 w-5" />
+          ) : (
+            <PanelLeftClose className="h-5 w-5" />
+          )}
+        </Button>
         <Button
           type="button"
           variant="ghost"
@@ -107,38 +154,63 @@ export function AppSidebar({ mobileOpen, onMobileOpenChange }: AppSidebarProps) 
         className="flex min-h-0 flex-1 flex-col gap-0.5 overflow-x-visible overflow-y-auto p-2 pt-4"
         aria-label="Huvudnavigering"
       >
-        <NavLink to="/dashboard" end className={({ isActive }) => sidebarItemClass(isActive)}>
+        <NavLink
+          to="/dashboard"
+          end
+          title={iconRail ? 'Översikt' : undefined}
+          className={({ isActive }) => sidebarItemClass(isActive, desktopCollapsed)}
+        >
           <LayoutDashboard className="h-5 w-5 shrink-0 opacity-90" aria-hidden />
-          <span>Översikt</span>
+          <span className={navLabelClass}>Översikt</span>
         </NavLink>
-        <NavLink to="/report" end className={({ isActive }) => sidebarItemClass(isActive)}>
+        <NavLink
+          to="/report"
+          end
+          title={iconRail ? 'Kalender' : undefined}
+          className={({ isActive }) => sidebarItemClass(isActive, desktopCollapsed)}
+        >
           <Calendar className="h-5 w-5 shrink-0 opacity-90" aria-hidden />
-          <span>Kalender</span>
+          <span className={navLabelClass}>Kalender</span>
         </NavLink>
-        <NavLink to="/preview" className={({ isActive }) => sidebarItemClass(isActive)}>
+        <NavLink
+          to="/preview"
+          title={iconRail ? 'Förhandsvisa' : undefined}
+          className={({ isActive }) => sidebarItemClass(isActive, desktopCollapsed)}
+        >
           <Eye className="h-5 w-5 shrink-0 opacity-90" aria-hidden />
-          <span>Förhandsvisa</span>
+          <span className={navLabelClass}>Förhandsvisa</span>
         </NavLink>
         {user?.hasClubAccess && (
           <NavLink
             to="/club"
-            className={({ isActive }) => sidebarItemClass(isActive)}
+            title={iconRail ? (user.hasClubBossAccess ? 'Klubbschema' : 'Närvaro') : undefined}
+            className={({ isActive }) => sidebarItemClass(isActive, desktopCollapsed)}
             data-testid="nav-club"
           >
             <Users className="h-5 w-5 shrink-0 opacity-90" aria-hidden />
-            <span>{user.hasClubBossAccess ? 'Klubbschema' : 'Närvaro'}</span>
+            <span className={navLabelClass}>
+              {user.hasClubBossAccess ? 'Klubbschema' : 'Närvaro'}
+            </span>
           </NavLink>
         )}
         {user?.hasEmployeeReportsAccess && (
-          <NavLink to="/employee-reports" className={({ isActive }) => sidebarItemClass(isActive)}>
+          <NavLink
+            to="/employee-reports"
+            title={iconRail ? 'Personal' : undefined}
+            className={({ isActive }) => sidebarItemClass(isActive, desktopCollapsed)}
+          >
             <ClipboardList className="h-5 w-5 shrink-0 opacity-90" aria-hidden />
-            <span>Personal</span>
+            <span className={navLabelClass}>Personal</span>
           </NavLink>
         )}
         {user?.isAdmin && (
-          <NavLink to="/admin" className={({ isActive }) => sidebarItemClass(isActive)}>
+          <NavLink
+            to="/admin"
+            title={iconRail ? 'Admin' : undefined}
+            className={({ isActive }) => sidebarItemClass(isActive, desktopCollapsed)}
+          >
             <Shield className="h-5 w-5 shrink-0 opacity-90" aria-hidden />
-            <span>Admin</span>
+            <span className={navLabelClass}>Admin</span>
           </NavLink>
         )}
 
@@ -148,8 +220,10 @@ export function AppSidebar({ mobileOpen, onMobileOpenChange }: AppSidebarProps) 
             className={cn(
               'relative flex w-full items-center gap-2.5 rounded-r-lg border-l-[3px] border-transparent py-2 pl-3 pr-2 text-left text-[11px] font-medium leading-tight text-muted-foreground transition-colors',
               'hover:bg-muted/50 hover:text-foreground',
+              desktopCollapsed && 'md:justify-center md:gap-0 md:px-2',
               isSupportOpen && 'bg-muted/40 text-foreground'
             )}
+            title={iconRail ? 'Support' : undefined}
             aria-expanded={isSupportOpen}
             aria-controls="sidebar-support-panel"
             id="sidebar-support-trigger"
@@ -159,11 +233,18 @@ export function AppSidebar({ mobileOpen, onMobileOpenChange }: AppSidebarProps) 
             }}
           >
             <CircleHelp className="h-4 w-4 shrink-0 opacity-90" aria-hidden />
-            <span>Support</span>
+            <span className={navLabelClass}>Support</span>
           </button>
 
           {isSupportOpen && (
-            <div className="absolute bottom-full left-0 right-0 z-[60] pb-1">
+            <div
+              className={cn(
+                'absolute z-[60]',
+                iconRail
+                  ? 'bottom-0 left-full ml-2 w-56'
+                  : 'bottom-full left-0 right-0 pb-1'
+              )}
+            >
               <div
                 id="sidebar-support-panel"
                 role="region"
@@ -200,18 +281,26 @@ export function AppSidebar({ mobileOpen, onMobileOpenChange }: AppSidebarProps) 
           <DropdownMenuTrigger asChild>
             <button
               type="button"
-              className="flex w-full items-center gap-3 rounded-lg px-3 py-2 text-left transition-colors hover:bg-muted/50"
+              title={iconRail ? user?.name || 'Konto' : undefined}
+              className={cn(
+                'flex w-full items-center gap-3 rounded-lg px-3 py-2 text-left transition-colors hover:bg-muted/50',
+                desktopCollapsed && 'md:justify-center md:px-1'
+              )}
             >
               <div className="flex h-8 w-8 shrink-0 items-center justify-center rounded-full bg-primary text-xs font-semibold text-primary-foreground">
                 {user?.name?.charAt(0).toUpperCase() || 'U'}
               </div>
-              <div className="min-w-0 flex-1">
+              <div className={cn('min-w-0 flex-1', desktopCollapsed && 'md:hidden')}>
                 <p className="truncate text-sm font-medium text-foreground">{user?.name || 'Användare'}</p>
                 <p className="truncate text-xs text-muted-foreground">Konto</p>
               </div>
             </button>
           </DropdownMenuTrigger>
-          <DropdownMenuContent align="start" side="top" className="w-56">
+          <DropdownMenuContent
+            align="start"
+            side={iconRail ? 'right' : 'top'}
+            className="w-56"
+          >
             <DropdownMenuItem onClick={() => setIsSettingsOpen(true)}>
               <Settings className="mr-2 h-4 w-4" />
               Inställningar
