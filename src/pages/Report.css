@@ -440,10 +440,12 @@
 
 .report-dashboard-calendar.react-calendar .react-calendar__tile {
   -webkit-tap-highlight-color: transparent;
-  touch-action: manipulation;
+  /* pan-y: a swipe on a day tile must scroll the page. manipulation can eat
+     the gesture on Android Chrome (calendar fills most of a 12" tablet). */
+  touch-action: pan-y;
 }
 
 .report-dashboard-calendar.react-calendar .react-calendar__navigation button {
   -webkit-tap-highlight-color: transparent;
-  touch-action: manipulation;
+  touch-action: pan-y;
 }

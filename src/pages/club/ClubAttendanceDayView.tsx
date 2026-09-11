@@ -256,7 +256,7 @@ function SessionCard({
                           aria-pressed={isActive}
                           disabled={isSaving}
                           data-testid={`attendance-${player.id}-${value}`}
-                          className={`flex min-h-12 touch-manipulation flex-col items-center justify-center gap-0.5 rounded-lg border px-2 py-2 text-base font-semibold transition-colors active:scale-[0.98] ${
+                          className={`flex min-h-12 touch-pan-y flex-col items-center justify-center gap-0.5 rounded-lg border px-2 py-2 text-base font-semibold transition-colors active:scale-[0.98] ${
                             isActive
                               ? activeClass
                               : 'border-border bg-background text-muted-foreground hover:bg-muted/60'

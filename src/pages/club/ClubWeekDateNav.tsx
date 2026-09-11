@@ -151,7 +151,7 @@ export function ClubWeekDateNav({
                 onSelectDate(day.dateStr)
               }}
               className={cn(
-                'flex min-h-[4.25rem] touch-manipulation flex-col items-center justify-center rounded-xl border px-1 py-2 text-center transition-colors duration-150',
+                'flex min-h-[4.25rem] touch-pan-y flex-col items-center justify-center rounded-xl border px-1 py-2 text-center transition-colors duration-150',
                 isSelectedDate || isActiveWeekday
                   ? 'border-primary bg-primary text-primary-foreground shadow-sm'
                   : 'border-border/80 bg-background hover:bg-muted/60'

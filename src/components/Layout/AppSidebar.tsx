@@ -100,7 +100,9 @@ export function AppSidebar({
     <aside
       id="app-sidebar"
       className={cn(
-        'fixed left-0 top-0 z-50 flex h-dvh max-h-dvh flex-col overflow-visible border-y-0 border-l-0 border-r border-border bg-card shadow-sm',
+        // inset-y-0 instead of h-dvh: height follows the visual viewport without
+        // recalculating mid-scroll when Android Chrome hides the URL bar.
+        'fixed inset-y-0 left-0 z-50 flex flex-col overflow-visible border-y-0 border-l-0 border-r border-border bg-card shadow-sm',
         'w-56 transition-[width,transform] duration-200 ease-out',
         desktopCollapsed && 'md:w-16',
         'rounded-r-xl md:rounded-r-2xl',
@@ -151,7 +153,7 @@ export function AppSidebar({
       </div>
 
       <nav
-        className="flex min-h-0 flex-1 flex-col gap-0.5 overflow-x-visible overflow-y-auto p-2 pt-4"
+        className="flex min-h-0 flex-1 flex-col gap-0.5 overflow-x-visible overflow-y-auto overscroll-y-contain p-2 pt-4"
         aria-label="Huvudnavigering"
       >
         <NavLink

@@ -46,7 +46,7 @@ function PostAuthNavigation() {
 
 function App() {
   return (
-    <div className="min-h-screen bg-background">
+    <div className="min-h-svh bg-background">
       <PostAuthNavigation />
       <SentryRoutes>
         <Route path="/login" element={<Login />} />
