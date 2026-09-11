@@ -77,9 +77,11 @@ export default function ProtectedLayout() {
     // Document scrolls on all sizes. Avoid md:h-screen + overflow-hidden —
     // that nested scrollport fights Android Chrome when the URL bar shows/hides
     // (especially tablet landscape on the närvaro page).
+    // min-h-svh (not dvh): dvh resizes mid-scroll as Chrome chrome hides, which
+    // can drop the touch gesture on MediaTek 90Hz tablets (Acer ATB1225E).
     <div
       data-testid="app-shell"
-      className="relative min-h-dvh bg-background text-foreground"
+      className="relative min-h-svh bg-background text-foreground"
     >
       {mobileNavOpen && (
         <button
@@ -101,7 +103,7 @@ export default function ProtectedLayout() {
       <div
         data-testid="app-main-column"
         className={cn(
-          'flex min-h-dvh min-w-0 flex-col',
+          'flex min-h-svh min-w-0 flex-col touch-pan-y',
           'md:transition-[margin] md:duration-200 md:ease-out',
           desktopCollapsed ? 'md:ml-16' : 'md:ml-56'
         )}

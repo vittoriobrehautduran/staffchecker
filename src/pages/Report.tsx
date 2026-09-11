@@ -505,8 +505,8 @@ export default function Report() {
   const monthLabel = format(currentDate, 'MMMM yyyy', { locale: sv })
 
   return (
-    <div className="min-h-screen flex-1 bg-background">
-      <div className="relative overflow-hidden">
+    <div className="min-h-svh flex-1 bg-background">
+      <div className="relative">
         <div
           aria-hidden
           className="pointer-events-none absolute inset-x-0 top-0 h-56 bg-gradient-to-b from-primary/[0.07] via-transparent to-transparent"

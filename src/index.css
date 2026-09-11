@@ -67,9 +67,16 @@
     font-size: 16px;
   }
   
-  /* Smooth scrolling */
+  /* Smooth scroll only with a mouse. On Android Chrome (especially 90Hz
+     tablets) it fights the URL-bar hide animation and the page can feel stuck. */
   html {
-    scroll-behavior: smooth;
+    scroll-behavior: auto;
+  }
+
+  @media (hover: hover) and (pointer: fine) {
+    html {
+      scroll-behavior: smooth;
+    }
   }
   
   /* Better focus styles */
